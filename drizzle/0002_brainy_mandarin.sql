@@ -5,6 +5,7 @@ CREATE TABLE "carts" (
 	"drop_id" uuid NOT NULL,
 	"customer_id" uuid,
 	"items" jsonb DEFAULT '{}'::jsonb NOT NULL,
+	"revision" integer DEFAULT 1 NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
@@ -33,6 +34,7 @@ CREATE TABLE "order_items" (
 CREATE TABLE "orders" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"number" text NOT NULL,
+	"checkout_id" uuid NOT NULL,
 	"drop_id" uuid NOT NULL,
 	"drop_sequence" integer NOT NULL,
 	"customer_id" uuid NOT NULL,
@@ -62,6 +64,7 @@ CREATE TABLE "orders" (
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "orders_number_unique" UNIQUE("number"),
+	CONSTRAINT "orders_checkoutId_unique" UNIQUE("checkout_id"),
 	CONSTRAINT "orders_stripePaymentIntentId_unique" UNIQUE("stripe_payment_intent_id")
 );
 --> statement-breakpoint

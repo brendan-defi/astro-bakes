@@ -5,13 +5,11 @@
  * Idempotent: catalogue rows upsert by slug, settings are only inserted if
  * missing (so admin edits survive a re-seed).
  *
- *   pnpm db:seed
+ *   pnpm db:seed   (src/db/seed-cli.ts)
  */
-import { Pool } from "pg";
-import { drizzle } from "drizzle-orm/node-postgres";
 import { eq } from "drizzle-orm";
+import type { Db } from "./index";
 import * as schema from "./schema";
-import { withVerifyFull } from "./url";
 
 const JST = (iso: string) => new Date(iso + "+09:00");
 
@@ -96,11 +94,7 @@ const DROPS = [
   },
 ];
 
-async function main() {
-  const url = process.env.DATABASE_URL_UNPOOLED;
-  if (!url) throw new Error("DATABASE_URL_UNPOOLED is not set. Run `npx vercel env pull`.");
-  const pool = new Pool({ connectionString: withVerifyFull(url), max: 1 });
-  const db = drizzle(pool, { schema, casing: "snake_case" });
+export async function seed(db: Db) {
   const now = new Date();
 
   for (const s of SETTINGS) await db.insert(schema.settings).values(s).onConflictDoNothing();
@@ -165,11 +159,5 @@ async function main() {
     drops: DROPS.length,
     customers: 1,
   };
-  console.log("Seeded:", counts);
-  await pool.end();
+  return counts;
 }
-
-main().catch((e) => {
-  console.error(e);
-  process.exit(1);
-});

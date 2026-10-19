@@ -10,7 +10,7 @@ import { fmtCountdown, fmtDate, fmtDateTime, yen } from "@/lib/format";
 import { getStrings, type Strings } from "@/lib/i18n";
 import { useCart, type CartLine } from "@/lib/cart";
 import { lookupPostal, normalisePostal, type PostalHit } from "@/lib/postal";
-import { clearHold, readHold, startHold } from "@/lib/hold";
+import { clearHold, readHold, startHold, type Hold } from "@/lib/hold";
 import { ArrowLeftIcon, CardIcon, CheckIcon, ClockIcon, StarShape, TruckIcon, WarningIcon } from "./icons";
 import { Logo } from "./Logo";
 import { Stepper } from "./Stepper";
@@ -99,7 +99,8 @@ export function Checkout({ locale, drop: dropIn, lineUrl }: { locale: Locale; dr
         return;
       }
       setChanges(null);
-      startHold(res.expiresAt ?? undefined);
+      setServerExpired(false);
+      startHold({ expires: res.expiresAt ?? undefined, checkoutId: res.checkoutId, revision: res.revision });
       go("signin");
     } finally {
       setBusy(false);
@@ -108,17 +109,19 @@ export function Checkout({ locale, drop: dropIn, lineUrl }: { locale: Locale; dr
 
   // ---- hold countdown (D8) ----
   const [now, setNow] = useState(() => Date.now());
-  const [holdExpires, setHoldExpires] = useState<number | null>(null);
+  const [hold, setHold] = useState<Hold | null>(null);
+  // Set when the server rejects the reservation, independent of what the local clock says.
+  const [serverExpired, setServerExpired] = useState(false);
   useEffect(() => {
     if (!inCheckout) return;
-    let exp = readHold();
-    if (!exp || exp < Date.now()) exp = startHold();
-    setHoldExpires(exp);
+    let h = readHold();
+    if (!h || h.expires < Date.now()) h = startHold();
+    setHold(h);
     const id = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(id);
   }, [inCheckout]);
-  const holdLeft = holdExpires ? holdExpires - now : null;
-  const holdExpired = inCheckout && holdLeft != null && holdLeft <= 0;
+  const holdLeft = hold != null ? hold.expires - now : null;
+  const holdExpired = inCheckout && (serverExpired || (holdLeft != null && holdLeft <= 0));
 
   // ---- sign in ----
   const [email, setEmail] = useState("");
@@ -163,8 +166,16 @@ export function Checkout({ locale, drop: dropIn, lineUrl }: { locale: Locale; dr
     setBusy(true);
     setNotice(null);
     try {
+      const h = readHold();
+      if (!h?.checkoutId || h.revision == null) {
+        // Deep-linked into the flow without a server hold: nothing is reserved to buy.
+        setServerExpired(true);
+        return;
+      }
       const res = await placeOrderAction({
         dropId: drop.id,
+        checkoutId: h.checkoutId,
+        revision: h.revision,
         email: email || sampleCustomer.email, // sign-in is still mocked; the typed email stands in for the account (PRD 2.2)
         locale,
         delivery: addr,
@@ -172,7 +183,9 @@ export function Checkout({ locale, drop: dropIn, lineUrl }: { locale: Locale; dr
         paymentMethod: pay,
       });
       if (!res.ok) {
-        if (res.error === "hold_expired") { clearHold(); setHoldExpires(0); }
+        if (res.error === "hold_expired") { clearHold(); setServerExpired(true); }
+        else if (res.error === "changed") { clearHold(); setNotice(t.cartChanged); go("cart"); }
+        else if (res.error === "limit") { clearHold(); setNotice(t.limitReached(res.already, res.name, res.max)); go("cart"); }
         else { setNotice(t.orderFailed); setTouched(true); go("delivery"); }
         return;
       }
@@ -279,7 +292,7 @@ export function Checkout({ locale, drop: dropIn, lineUrl }: { locale: Locale; dr
                 <div className="alert-title"><WarningIcon /><div className={`display`} style={{ fontSize: 18, lineHeight: 1.15 }}>{t.holdExpiredTitle}</div></div>
                 <div className="small w7" style={{ fontSize: 14 }}>{t.holdExpiredBody}</div>
               </div>
-              <button type="button" className="btn btn-primary btn-block" onClick={() => { clearHold(); setHoldExpires(null); go("cart"); }}>{t.backToCart}</button>
+              <button type="button" className="btn btn-primary btn-block" onClick={() => { clearHold(); setHold(null); setServerExpired(false); go("cart"); }}>{t.backToCart}</button>
             </>
           ) : (
             <>

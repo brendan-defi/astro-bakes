@@ -19,7 +19,16 @@ pnpm test          # Vitest: src/**/*.test.ts(x), jsdom for the cart provider
 pnpm test:watch
 ```
 
-Regression tests cover the drop state machine and `getHome()` (timeline, draft visibility, demo overrides) and the cart provider (clamping to injected stock and prices, restoring a saved cart, switching drops, production gating). CI runs type-check and tests on every pull request (`.github/workflows/ci.yml`).
+Unit tests cover the drop state machine and `getHome()` (timeline, draft visibility, demo overrides), the cart provider (clamping to injected stock and prices, restoring a saved cart, switching drops, production gating) and the pure checkout rules.
+
+Integration tests (`src/lib/checkout.integration.test.ts`) run the real write path against Postgres: holds and availability, concurrent order submission, reservation changes between tabs, the per-customer limit across orders, finishing a held checkout after the drop closes, and customer records never being overwritten. They need `TEST_DATABASE_URL` and skip without it:
+
+```sh
+docker run -d --name astro-test-pg -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=astro_test -p 5433:5432 postgres:16
+TEST_DATABASE_URL=postgres://postgres:postgres@localhost:5433/astro_test pnpm test
+```
+
+CI runs type-check and all tests against a Postgres service on every pull request (`.github/workflows/ci.yml`).
 
 ## Database
 

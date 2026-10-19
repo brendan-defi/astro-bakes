@@ -237,6 +237,8 @@ export const carts = pgTable("carts", {
   customerId: uuid().references(() => customers.id, { onDelete: "set null" }),
   /** { [boxSlug]: qty } */
   items: jsonb().$type<Record<string, number>>().notNull().default(sql`'{}'::jsonb`),
+  /** Bumped every time the holds are replaced; an order submission must quote the revision it was shown. */
+  revision: integer().notNull().default(1),
   ...timestamps,
 });
 
@@ -267,6 +269,8 @@ export const orders = pgTable(
     id: uuid().primaryKey().defaultRandom(),
     /** Human-readable: AB-003-017 = drop 3, 17th order. */
     number: text().notNull().unique(),
+    /** The cart this order was placed from; unique, so one checkout can never produce two orders. */
+    checkoutId: uuid().notNull().unique(),
     dropId: uuid()
       .notNull()
       .references(() => drops.id, { onDelete: "restrict" }),

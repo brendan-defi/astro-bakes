@@ -219,6 +219,8 @@ const en = {
   checkoutClosedBody: "Boxes go on sale when the next drop opens. Get a heads-up by email on the homepage.",
   dropJustClosed: "This drop just closed, so we can't start your checkout.",
   orderFailed: "We couldn't place your order and nothing was charged. Check your details and try again.",
+  cartChanged: "Your cart was changed in another tab. Check it over, then continue.",
+  limitReached: (already: number, name: string, max: number) => `You've already ordered ${already} × ${name} in this drop. The limit is ${max} of each box per person.`,
   // ---- scheduled / closed / no-drop homepage (design-ref/DROP-STATES.md) ----
   dropN: (n: number) => `Drop ${String(n).padStart(2, "0")}`,
   tickerOpens: (n: number, when: string) => `DROP ${String(n).padStart(2, "0")} OPENS ${when}`,

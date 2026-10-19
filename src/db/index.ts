@@ -24,4 +24,11 @@ export function getDb() {
   return db;
 }
 
+/** Tests only: release the pool so the process can exit. */
+export async function closeDb() {
+  const current = db;
+  db = null;
+  if (current) await current.$client.end();
+}
+
 export type Db = ReturnType<typeof getDb>;

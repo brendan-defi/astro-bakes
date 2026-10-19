@@ -10,7 +10,7 @@
     "typecheck": "tsc --noEmit",
     "db:generate": "dotenv -e .env.local -- drizzle-kit generate",
     "db:migrate": "dotenv -e .env.local -- drizzle-kit migrate",
-    "db:seed": "dotenv -e .env.local -- tsx src/db/seed.ts",
+    "db:seed": "dotenv -e .env.local -- tsx src/db/seed-cli.ts",
     "db:studio": "dotenv -e .env.local -- drizzle-kit studio",
     "test": "vitest run",
     "test:watch": "vitest"

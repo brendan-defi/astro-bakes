@@ -4,8 +4,10 @@ import { isLocale } from "@/lib/i18n";
 import { getHome } from "@/lib/data";
 import { demoEnabled } from "@/lib/demo";
 import { loadCatalogue, loadDrops, loadSettings } from "@/lib/drops";
+import { heldCheckout } from "@/lib/checkout";
 import { Checkout, type CheckoutDrop } from "@/components/Checkout";
 import { CartProvider } from "@/lib/cart";
+import { cartIdFromCookie } from "@/lib/cart-cookie";
 
 type Query = Record<string, string | string[] | undefined>;
 
@@ -14,21 +16,22 @@ export default async function CheckoutPage({ params, searchParams }: { params: P
   if (!isLocale(locale)) notFound();
   const q = await searchParams;
   const one = (k: string) => (Array.isArray(q[k]) ? q[k][0] : q[k]);
-  // Same resolution as the homepage, so the checkout sells the drop the customer just saw.
-  const [drops, catalogue, settings] = await Promise.all([loadDrops(locale), loadCatalogue(locale), loadSettings()]);
+  const [drops, catalogue, settings, held] = await Promise.all([loadDrops(locale), loadCatalogue(locale), loadSettings(), heldCheckout(await cartIdFromCookie())]);
+  // A checkout with unexpired holds can finish even after the drop closed (PRD 3.8);
+  // otherwise sell the drop the homepage shows, which is only the open one.
   const overrides = demoEnabled ? { state: one("state") } : {};
   const home = getHome(overrides, { drops, catalogue, settings });
-  const open = home.state === "open" ? home.drop : null;
-  const drop: CheckoutDrop | null = open && {
-    id: open.id,
-    number: open.number,
-    name: open.name,
-    closeAt: open.closeAt.toISOString(),
-    shipAt: open.shipAt.toISOString(),
-    arriveAt: open.arriveAt.toISOString(),
+  const selling = held ? (drops.find((d) => d.id === held.dropSlug) ?? null) : home.state === "open" ? home.drop : null;
+  const drop: CheckoutDrop | null = selling && {
+    id: selling.id,
+    number: selling.number,
+    name: selling.name,
+    closeAt: selling.closeAt.toISOString(),
+    shipAt: selling.shipAt.toISOString(),
+    arriveAt: selling.arriveAt.toISOString(),
   };
   return (
-    <CartProvider dropId={open?.id ?? "none"} boxes={open?.boxes ?? []} shippingFee={settings.shippingFee}>
+    <CartProvider dropId={selling?.id ?? "none"} boxes={selling?.boxes ?? []} shippingFee={settings.shippingFee}>
       <Suspense>
         <Checkout locale={locale} drop={drop} lineUrl={settings.lineUrl} />
       </Suspense>
