@@ -43,6 +43,7 @@
   .heroText { grid-area: text; gap: 20px; }
   .heroVisual { grid-area: visual; }
   .heroActions { grid-area: actions; gap: 8px; }
+  .heroStates { grid-template-areas: "text visual"; }
   .eyebrowSticker { font-size: 16px; padding: 5px 14px; }
   .h1 { text-shadow: 4px 4px 0 var(--white); }
   .h1 .outlined { text-shadow: 5px 5px 0 var(--ink), -2px -2px 0 var(--ink), 2px -2px 0 var(--ink), -2px 2px 0 var(--ink); }
@@ -58,6 +59,48 @@
   .bubble { right: -4%; bottom: 12%; border-radius: 20px 20px 20px 4px; box-shadow: 4px 4px 0 var(--ink); padding: 8px 16px; font-size: 17px; max-width: 44%; }
 }
 
+/* ===== Hero: scheduled / closed / no-drop (design-ref/DROP-STATES.md) ===== */
+.eyebrowWhite { background: var(--white); }
+.eyebrowAqua { background: var(--aqua); }
+.detail { align-self: stretch; display: flex; flex-direction: column; gap: 12px; margin-top: 4px; }
+.countdown { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.countLabel { font-size: 15px; letter-spacing: 0.06em; }
+.tiles { display: flex; gap: 10px; }
+.tile { min-width: 86px; text-align: center; background: var(--white); border: var(--border); border-radius: 16px; box-shadow: 4px 4px 0 var(--ink); padding: 6px 12px; }
+.tileL { transform: rotate(-2deg); }
+.tileR { transform: rotate(2deg); }
+.tileNum { font-family: var(--font-display), sans-serif; font-size: 40px; line-height: 1; }
+.tileLabel { font-size: 12px; font-weight: 900; text-transform: uppercase; }
+.heroText .tickets { align-self: stretch; margin-top: 4px; }
+.ticketWhite { background: var(--white); transform: rotate(-1.5deg); }
+.ticketButter { background: var(--butter); transform: rotate(1.5deg); }
+.orderCard { align-self: stretch; display: flex; align-items: center; gap: 14px; background: var(--white); border: var(--border); border-radius: 20px; box-shadow: 0 5px 0 var(--ink); padding: 14px 16px; text-decoration: none; }
+.orderCard:hover { color: var(--ink); }
+.orderIcon { flex: none; width: 44px; height: 44px; border-radius: var(--radius-pill); border: var(--border); background: var(--aqua); display: flex; align-items: center; justify-content: center; }
+.orderBody { flex: 1 1 auto; min-width: 0; }
+.orderMain { display: block; font-weight: 900; font-size: 17px; line-height: 1.3; }
+.orderSub { display: block; font-size: 14px; font-weight: 700; }
+.orderView { flex: none; font-family: var(--font-display), sans-serif; font-size: 16px; }
+.betweenCard { align-self: stretch; background: var(--white); border: var(--border); border-radius: 18px; box-shadow: 4px 4px 0 var(--ink); padding: 14px 16px; transform: rotate(-1deg); margin-top: 4px; }
+.betweenCard .eyebrow { font-size: 13px; }
+.betweenBody { font-weight: 900; font-size: 17px; line-height: 1.35; }
+.heroForm { align-self: stretch; display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
+.heroFormRow { display: flex; flex-wrap: wrap; gap: 10px; }
+.heroFormRow :global(.input) { flex: 1 1 200px; width: auto; height: 58px; border-radius: 16px; }
+.heroBtn { flex: 1 1 auto; min-height: 60px; padding: 0 26px; font-size: 19px; }
+.heroFine { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; font-size: 13px; font-weight: 700; }
+.heroFine a { font-weight: 900; }
+.onList { align-self: stretch; display: flex; align-items: center; gap: 12px; min-height: 52px; background: var(--ok-green-bg); border: var(--border); border-radius: 16px; padding: 8px 14px; font-weight: 900; cursor: pointer; }
+.onList input { flex: none; width: 22px; height: 22px; accent-color: var(--ink); margin: 0; }
+.heroText .notifyDone { align-self: stretch; margin-top: 6px; }
+.onListText { font-weight: 900; }
+
+/* ===== Boxes as a menu (not open) ===== */
+.boxTag { position: absolute; top: 14px; left: 14px; background: var(--white); border: var(--border-thin); border-radius: var(--radius-pill); padding: 2px 12px; font-size: 13px; font-weight: 900; transform: rotate(-3deg); }
+.boxTagButter { background: var(--butter); }
+.menuFoot { margin-top: auto; padding-top: 10px; border-top: 2px dashed var(--ink); display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 900; }
+.menuFoot svg { flex: none; }
+
 /* ===== Boxes ===== */
 .boxes { padding: 30px var(--gutter) 48px; }
 .boxesInner { display: flex; flex-direction: column; gap: 26px; }
@@ -66,7 +109,7 @@
 .boxGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); gap: 30px 24px; }
 .box { position: relative; display: flex; flex-direction: column; box-shadow: 6px 6px 0 var(--ink); }
 .boxPhoto {
-  height: 190px; border-radius: 25px 25px 0 0; border-bottom: var(--border);
+  position: relative; height: 190px; border-radius: 25px 25px 0 0; border-bottom: var(--border);
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
   font-size: 13px; font-weight: 900;
 }
@@ -147,7 +190,7 @@
   .stepTitle { font-size: 26px; }
   .stepBody { font-size: 15px; margin-top: 6px; }
   .chips { gap: 10px; margin-top: 10px; }
-  .chips .chip { padding: 5px 16px; font-size: 15px; }
+  .chips :global(.chip) { padding: 5px 16px; font-size: 15px; }
 }
 
 /* ===== Story ===== */
@@ -220,7 +263,7 @@
   .notifySub { font-size: 19px; }
   .notifyForm { gap: 10px; margin-top: 4px; }
   .notifyRow { flex-direction: row; flex-wrap: wrap; }
-  .notifyRow .input { flex: 1 1 220px; width: auto; height: 60px; }
+  .notifyRow :global(.input) { flex: 1 1 220px; width: auto; height: 60px; }
   .notifyBtn { min-height: 60px; padding: 0 26px; }
   .consent { margin-top: 6px; }
   .lineCard { flex: 1 1 300px; flex-direction: row; align-items: center; gap: 18px; border-radius: 24px; box-shadow: 6px 6px 0 var(--ink); padding: 22px; transform: rotate(2deg); }

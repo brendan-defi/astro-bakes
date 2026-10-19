@@ -2,14 +2,15 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { drop, type Locale } from "@/lib/data";
+import { anonymousViewer, type Locale, type Viewer } from "@/lib/data";
 import { getStrings } from "@/lib/i18n";
 import { useCart } from "@/lib/cart";
 import { CartIcon } from "./icons";
 import { Logo } from "./Logo";
 import styles from "./Nav.module.css";
 
-export function Nav({ locale }: { locale: Locale }) {
+/** Global nav (PRD 1.6). The cart button only exists while a drop is open. */
+export function Nav({ locale, showCart = false, viewer = anonymousViewer }: { locale: Locale; showCart?: boolean; viewer?: Viewer }) {
   const t = getStrings(locale);
   const { count, hydrated } = useCart();
   const pathname = usePathname();
@@ -28,13 +29,18 @@ export function Nav({ locale }: { locale: Locale }) {
               </Link>
             ))}
           </div>
-          {drop.state === "open" && (
+          {showCart && (
             <Link href={`/${locale}/checkout`} aria-label={t.cart} className={styles.cart}>
               <CartIcon />
               {hydrated && count > 0 && <span key={count} className={styles.badge}>{count}</span>}
             </Link>
           )}
-          <Link href="#top" className={styles.signIn}>{t.signIn}</Link>
+          {viewer.signedIn ? (
+            // TODO: link to the account page (PRD 2.3) once it exists
+            <Link href="#top" aria-label={t.yourAccount} className={styles.avatar}>{viewer.initial}</Link>
+          ) : (
+            <Link href="#top" className={styles.signIn}>{t.signIn}</Link>
+          )}
         </div>
       </div>
       <span className="sr-only">{other}</span>

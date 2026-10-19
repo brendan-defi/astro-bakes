@@ -1,46 +1,21 @@
-"use client";
-
-import { useState, type FormEvent } from "react";
-import { settings, type Locale } from "@/lib/data";
+import { anonymousViewer, settings, type Locale, type Viewer } from "@/lib/data";
 import { getStrings } from "@/lib/i18n";
-import { CheckIcon } from "./icons";
+import { NotifyForm } from "./NotifyForm";
 import s from "./home.module.css";
 
-export function Notify({ locale }: { locale: Locale }) {
+/** Notify-me capture (PRD 1.5). Signed-in, opted-in viewers see their preference instead. */
+export function Notify({ locale, viewer = anonymousViewer }: { locale: Locale; viewer?: Viewer }) {
   const t = getStrings(locale);
-  const [email, setEmail] = useState("");
-  const [done, setDone] = useState<string | null>(null);
-
-  function submit(e: FormEvent) {
-    e.preventDefault();
-    if (!email) return;
-    // TODO: POST /api/subscribe → Subscriber(email, locale, source=homepage, consented_at)
-    setDone(email);
-  }
-
   return (
     <section id="notify" className={s.notify}>
       <div className={`container ${s.notifyInner}`}>
         <div className={s.notifyText}>
           <h2 className="display h2">{t.notifyTitle}</h2>
           <p className={s.notifySub}>{t.notifySub}</p>
-          {done ? (
-            <div className={s.notifyDone} role="status">
-              <span className={s.ok}><CheckIcon strokeWidth={3} /></span>
-              <div>
-                <div className="w9">{t.notifyDone}</div>
-                <div className="small w7">{t.notifyDoneSub(done)}</div>
-              </div>
-            </div>
+          {viewer.signedIn && viewer.optedIn ? (
+            <div className={s.onListText} role="status">{t.onListAccount}</div>
           ) : (
-            <form className={s.notifyForm} onSubmit={submit}>
-              <label htmlFor="notify-email" className="label">{t.emailAddress}</label>
-              <div className={s.notifyRow}>
-                <input id="notify-email" type="email" required placeholder="you@example.com" className="input" value={email} onChange={(e) => setEmail(e.target.value)} />
-                <button type="submit" className={`btn btn-primary ${s.notifyBtn}`}>{t.notifyCta}</button>
-              </div>
-              <p className={s.consent}>{t.notifyConsent}</p>
-            </form>
+            <NotifyForm locale={locale} id="notify-email" variant="section" label={t.emailAddress} button={t.notifyCta} consent={t.notifyConsent} />
           )}
         </div>
         <div className={s.lineCard}>

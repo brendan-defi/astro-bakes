@@ -1,14 +1,31 @@
-import { drop } from "@/lib/data";
-import { daysUntil, fmtTickerDate } from "@/lib/format";
+import type { HomeData, Locale } from "@/lib/data";
+import { daysUntil, fmtTickerDate, fmtTickerDateTime, fmtTickerDay } from "@/lib/format";
 import { getStrings } from "@/lib/i18n";
-import type { Locale } from "@/lib/data";
 import styles from "./Ticker.module.css";
 
-export function Ticker({ locale }: { locale: Locale }) {
+/** Drop status ticker; copy per state from design-ref/DROP-STATES.md. */
+export function Ticker({ locale, home }: { locale: Locale; home: HomeData }) {
   const t = getStrings(locale);
-  const days = daysUntil(drop.closeAt);
-  const ship = fmtTickerDate(drop.shipAt);
-  const items = [t.tickerOpen(drop.number), t.tickerCloses(days), t.tickerArea, t.tickerShips(ship)];
+  const { state, drop, nextDrop } = home;
+  let items: string[];
+  let status: string;
+  if (state === "open" && drop) {
+    const days = daysUntil(drop.closeAt);
+    const ship = fmtTickerDate(drop.shipAt);
+    items = [t.tickerOpen(drop.number), t.tickerCloses(days), t.tickerArea, t.tickerShips(ship)];
+    status = t.tickerStatus(drop.number, days, ship);
+  } else {
+    if (state === "scheduled" && drop) {
+      items = [t.tickerOpens(drop.number, fmtTickerDateTime(drop.openAt)), t.tickerArea, t.tickerShips(fmtTickerDate(drop.shipAt)), t.tickerNotified];
+    } else if (state === "closed" && drop) {
+      items = [t.tickerClosed(drop.number), t.tickerShips(fmtTickerDay(drop.shipAt))];
+      if (nextDrop) items.push(t.tickerNextDrop(fmtTickerDay(nextDrop.openAt)));
+      items.push(t.tickerArea);
+    } else {
+      items = [t.tickerBetween, t.tickerNextSoon, t.tickerArea, t.tickerNotified];
+    }
+    status = items.join(". ") + ".";
+  }
   const Group = () => (
     <>
       {[0, 1].map((rep) =>
@@ -22,7 +39,7 @@ export function Ticker({ locale }: { locale: Locale }) {
     </>
   );
   return (
-    <div role="status" aria-label={t.tickerStatus(drop.number, days, fmtTickerDate(drop.shipAt))} className={styles.ticker}>
+    <div role="status" aria-label={status} className={styles.ticker}>
       <div aria-hidden className={styles.track}>
         <div className={styles.group}><Group /></div>
         <div className={styles.group}><Group /></div>

@@ -126,7 +126,7 @@
 .resendBtn:disabled { opacity: 0.5; }
 .expires { font-size: 13px; font-weight: 700; }
 @media (min-width: 900px) {
-  .form .btn-primary { align-self: flex-start; }
+  .form :global(.btn-primary) { align-self: flex-start; }
   .inline { font-size: 15px; align-items: center; }
   .inline svg { margin-top: 0; }
   .codeRow { flex-direction: row; flex-wrap: wrap; gap: 12px; }
@@ -140,7 +140,7 @@
 /* ===== Delivery ===== */
 .fields { display: flex; flex-direction: column; gap: 14px; }
 .postalRow { display: flex; gap: 8px; }
-.postalRow .input { flex: 1 1 auto; min-width: 0; }
+.postalRow :global(.input) { flex: 1 1 auto; min-width: 0; }
 .lookupBtn { flex: none; min-height: 54px; padding: 0 16px; border: var(--border); border-radius: var(--radius-input); background: var(--lilac); color: var(--ink); font: inherit; font-weight: 900; }
 .autofill { display: flex; flex-direction: column; gap: 8px; background: var(--lilac-soft); border: 2px dashed var(--ink); border-radius: var(--radius-input); padding: 12px 14px; }
 .autofill .k { font-size: 12px; font-weight: 900; }
@@ -154,7 +154,7 @@
 .inputError { border-color: #c0392b; }
 @media (min-width: 900px) {
   .fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)); gap: 16px; }
-  .fields .field { gap: 6px; }
+  .fields :global(.field) { gap: 6px; }
   .form14 { gap: 18px; }
   .autofill { justify-content: center; gap: 6px; padding: 10px 16px; }
   .autofill .addr { font-size: 18px; line-height: 1.3; }

@@ -1,50 +1,43 @@
-"use client";
-
-import { boxes, type Box, type Locale } from "@/lib/data";
-import { yen } from "@/lib/format";
+import type { Box, Drop, HomeData, Locale } from "@/lib/data";
+import { fmtDateTime, yen } from "@/lib/format";
 import { getStrings, type Strings } from "@/lib/i18n";
-import { maxFor, useCart } from "@/lib/cart";
-import { CameraIcon, StarburstShape } from "./icons";
-import { Stepper } from "./Stepper";
+import { CameraIcon, ClockIcon } from "./icons";
+import { BoxCard } from "./BoxCard";
 import s from "./home.module.css";
 
-export function Boxes({ locale }: { locale: Locale }) {
+/** Boxes: the ordering UI while open, otherwise the menu (PRD 1.3). */
+export function Boxes({ locale, home }: { locale: Locale; home: HomeData }) {
   const t = getStrings(locale);
+  const { state, drop, nextDrop, boxes } = home;
+  const open = state === "open";
+  // The drop these boxes belong to, when one is coming up.
+  const upcoming = state === "scheduled" ? drop : state === "closed" ? nextDrop : null;
+  const title = open ? t.inThisDrop : upcoming ? t.comingIn(t.dropN(upcoming.number)) : t.theMenu;
+  const sub = open || upcoming ? t.boxesSub : t.menuSub;
   return (
     <section id="boxes" className={s.boxes}>
       <div className={`container ${s.boxesInner}`}>
         <div className={s.boxesHead}>
-          <h2 className="display h2">{t.inThisDrop}</h2>
-          <p className={s.boxesSub}>{t.boxesSub}</p>
+          <h2 className="display h2">{title}</h2>
+          <p className={s.boxesSub}>{sub}</p>
         </div>
         <div className={s.boxGrid}>
-          {boxes.map((b) => <BoxCard key={b.id} box={b} t={t} />)}
+          {boxes.map((b) => open ? <BoxCard key={b.id} box={b} locale={locale} /> : <MenuCard key={b.id} box={b} upcoming={upcoming} locale={locale} t={t} />)}
         </div>
       </div>
     </section>
   );
 }
 
-function BoxCard({ box, t }: { box: Box; t: Strings }) {
-  const cart = useCart();
-  const qty = cart.qty[box.id] ?? 0;
-  const soldOut = box.left === 0;
+/** Box card when no drop is open: no stepper, no stock, just when ordering opens. */
+function MenuCard({ box, upcoming, locale, t }: { box: Box; upcoming: Drop | null; locale: Locale; t: Strings }) {
   return (
     <article className={`card ${s.box}`} style={{ transform: `rotate(${box.tilt})` }}>
       <div className={s.boxPhoto} style={{ background: box.tint }}>
         <CameraIcon />
         <span>{t.productPhoto} — {box.name}</span>
+        <span className={`${s.boxTag} ${upcoming ? s.boxTagButter : ""}`}>{upcoming ? t.inNextDrop : t.backNextDrop}</span>
       </div>
-      {!soldOut && (
-        <div className={s.burst} aria-hidden>
-          <StarburstShape />
-          <div className={s.burstText}>
-            <span className={s.burstNum}>{box.left}</span>
-            <span className={s.burstLabel}>{t.left}</span>
-          </div>
-        </div>
-      )}
-      {soldOut && <div className={s.stamp}>{t.soldOut}</div>}
       <div className={s.boxBody}>
         <div className={s.boxTitleRow}>
           <h3 className={`display ${s.boxName}`}>{box.name}</h3>
@@ -56,15 +49,10 @@ function BoxCard({ box, t }: { box: Box; t: Strings }) {
           <span className={s.lab}>{t.contains}</span>
           {box.allergens.map((a) => <span key={a} className="chip-sm">{a}</span>)}
         </div>
-        {!soldOut ? (
-          <div className={s.boxFoot}>
-            <span className={s.howMany}>{t.howMany}</span>
-            <span className="sr-only">{box.left} {t.left}</span>
-            <Stepper qty={qty} max={maxFor(box)} onInc={() => cart.inc(box.id)} onDec={() => cart.dec(box.id)} labels={{ inc: t.addOne, dec: t.removeOne }} />
-          </div>
-        ) : (
-          <div className={s.soldNote}>{t.soldOutThisDrop} <a href="#notify">{t.headsUpNextTime}</a></div>
-        )}
+        <div className={s.menuFoot}>
+          <ClockIcon size={18} />
+          {upcoming ? t.orderFrom(fmtDateTime(upcoming.openAt, locale)) : t.orderingOpensNext}
+        </div>
       </div>
     </article>
   );
