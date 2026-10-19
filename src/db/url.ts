@@ -6,6 +6,7 @@
  */
 export function withVerifyFull(url: string): string {
   const u = new URL(url);
-  u.searchParams.set("sslmode", "verify-full");
+  // A URL with no sslmode (local Postgres in tests) is left alone.
+  if (u.searchParams.has("sslmode")) u.searchParams.set("sslmode", "verify-full");
   return u.toString();
 }

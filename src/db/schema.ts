@@ -36,6 +36,18 @@ export const dropStateEnum = pgEnum("drop_state", [
   "cancelled",
 ]);
 
+/** Order lifecycle (PRD 5.2b). */
+export const orderStateEnum = pgEnum("order_state", [
+  "pending_payment",
+  "paid",
+  "packed",
+  "shipped",
+  "complete",
+  "expired",
+  "cancelled",
+]);
+export const paymentMethodEnum = pgEnum("payment_method", ["card", "paypay"]);
+
 const timestamps = {
   createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
@@ -214,18 +226,145 @@ export const settings = pgTable("settings", {
   updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
 });
 
+// ---------------------------------------------------------------- Checkout and orders
+
+/** A checkout in progress, identified by an httpOnly cookie. Holds the cart as the browser sent it (PRD 3.3). */
+export const carts = pgTable("carts", {
+  id: uuid().primaryKey().defaultRandom(),
+  dropId: uuid()
+    .notNull()
+    .references(() => drops.id, { onDelete: "cascade" }),
+  customerId: uuid().references(() => customers.id, { onDelete: "set null" }),
+  /** { [boxSlug]: qty } */
+  items: jsonb().$type<Record<string, number>>().notNull().default(sql`'{}'::jsonb`),
+  /** Bumped every time the holds are replaced; an order submission must quote the revision it was shown. */
+  revision: integer().notNull().default(1),
+  ...timestamps,
+});
+
+/**
+ * A reservation taken when checkout starts (D8). Active while expires_at is in
+ * the future; consumed on payment, ignored once expired. remaining = cap − sold − active holds.
+ */
+export const inventoryHolds = pgTable(
+  "inventory_holds",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    dropBoxId: uuid()
+      .notNull()
+      .references(() => dropBoxes.id, { onDelete: "cascade" }),
+    cartId: uuid().references(() => carts.id, { onDelete: "cascade" }),
+    orderId: uuid().references(() => orders.id, { onDelete: "set null" }),
+    qty: integer().notNull(),
+    expiresAt: timestamp({ withTimezone: true }).notNull(),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("inventory_holds_drop_box_idx").on(t.dropBoxId, t.expiresAt), index("inventory_holds_cart_idx").on(t.cartId)],
+);
+
+/** An order (PRD 5.1, 5.2b). Delivery details are a snapshot taken at checkout (D20, D21); money is tax-inclusive JPY (D18). */
+export const orders = pgTable(
+  "orders",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    /** Human-readable: AB-003-017 = drop 3, 17th order. */
+    number: text().notNull().unique(),
+    /** The cart this order was placed from; unique, so one checkout can never produce two orders. */
+    checkoutId: uuid().notNull().unique(),
+    dropId: uuid()
+      .notNull()
+      .references(() => drops.id, { onDelete: "restrict" }),
+    dropSequence: integer().notNull(),
+    customerId: uuid()
+      .notNull()
+      .references(() => customers.id, { onDelete: "restrict" }),
+    state: orderStateEnum().notNull().default("pending_payment"),
+    locale: localeEnum().notNull().default("en"),
+    shipToName: text().notNull(),
+    phone: text().notNull(),
+    postalCode: text().notNull(),
+    prefecture: text().notNull(),
+    city: text().notNull(),
+    town: text(),
+    line1: text().notNull(),
+    line2: text(),
+    wardCode: text(),
+    /** One optional message per order, printed on a card (D11). */
+    giftMessage: text(),
+    subtotal: integer().notNull(),
+    shippingFee: integer().notNull(),
+    total: integer().notNull(),
+    stripePaymentIntentId: text().unique(),
+    paymentMethodType: paymentMethodEnum(),
+    paidAt: timestamp({ withTimezone: true }),
+    cancelledAt: timestamp({ withTimezone: true }),
+    packedAt: timestamp({ withTimezone: true }),
+    shippedAt: timestamp({ withTimezone: true }),
+    trackingNumber: text(),
+    notes: text(),
+    ...timestamps,
+  },
+  (t) => [
+    uniqueIndex("orders_drop_sequence_idx").on(t.dropId, t.dropSequence),
+    index("orders_customer_idx").on(t.customerId),
+    index("orders_drop_state_idx").on(t.dropId, t.state),
+  ],
+);
+
+/** A line on an order, with the box name and price as they were at the time. */
+export const orderItems = pgTable(
+  "order_items",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    orderId: uuid()
+      .notNull()
+      .references(() => orders.id, { onDelete: "cascade" }),
+    dropBoxId: uuid()
+      .notNull()
+      .references(() => dropBoxes.id, { onDelete: "restrict" }),
+    boxId: uuid()
+      .notNull()
+      .references(() => boxes.id, { onDelete: "restrict" }),
+    nameEn: text().notNull(),
+    nameJa: text(),
+    qty: integer().notNull(),
+    unitPrice: integer().notNull(),
+  },
+  (t) => [index("order_items_order_idx").on(t.orderId)],
+);
+
 // ---------------------------------------------------------------- Relations
 
-export const customersRelations = relations(customers, ({ one }) => ({
+export const customersRelations = relations(customers, ({ one, many }) => ({
   address: one(addresses, { fields: [customers.id], references: [addresses.customerId] }),
+  orders: many(orders),
 }));
 export const addressesRelations = relations(addresses, ({ one }) => ({
   customer: one(customers, { fields: [addresses.customerId], references: [customers.id] }),
 }));
-export const dropsRelations = relations(drops, ({ many }) => ({ dropBoxes: many(dropBoxes) }));
-export const dropBoxesRelations = relations(dropBoxes, ({ one }) => ({
+export const dropsRelations = relations(drops, ({ many }) => ({ dropBoxes: many(dropBoxes), orders: many(orders) }));
+export const dropBoxesRelations = relations(dropBoxes, ({ one, many }) => ({
   drop: one(drops, { fields: [dropBoxes.dropId], references: [drops.id] }),
   box: one(boxes, { fields: [dropBoxes.boxId], references: [boxes.id] }),
+  holds: many(inventoryHolds),
+}));
+export const cartsRelations = relations(carts, ({ one, many }) => ({
+  drop: one(drops, { fields: [carts.dropId], references: [drops.id] }),
+  holds: many(inventoryHolds),
+}));
+export const inventoryHoldsRelations = relations(inventoryHolds, ({ one }) => ({
+  dropBox: one(dropBoxes, { fields: [inventoryHolds.dropBoxId], references: [dropBoxes.id] }),
+  cart: one(carts, { fields: [inventoryHolds.cartId], references: [carts.id] }),
+  order: one(orders, { fields: [inventoryHolds.orderId], references: [orders.id] }),
+}));
+export const ordersRelations = relations(orders, ({ one, many }) => ({
+  drop: one(drops, { fields: [orders.dropId], references: [drops.id] }),
+  customer: one(customers, { fields: [orders.customerId], references: [customers.id] }),
+  items: many(orderItems),
+}));
+export const orderItemsRelations = relations(orderItems, ({ one }) => ({
+  order: one(orders, { fields: [orderItems.orderId], references: [orders.id] }),
+  dropBox: one(dropBoxes, { fields: [orderItems.dropBoxId], references: [dropBoxes.id] }),
 }));
 export const boxesRelations = relations(boxes, ({ many }) => ({ dropBoxes: many(dropBoxes), boxItems: many(boxItems) }));
 export const boxItemsRelations = relations(boxItems, ({ one }) => ({
@@ -241,3 +380,7 @@ export type SubscriberRow = typeof subscribers.$inferSelect;
 export type DropRow = typeof drops.$inferSelect;
 export type BoxRow = typeof boxes.$inferSelect;
 export type DropBoxRow = typeof dropBoxes.$inferSelect;
+export type CartRow = typeof carts.$inferSelect;
+export type InventoryHoldRow = typeof inventoryHolds.$inferSelect;
+export type OrderRow = typeof orders.$inferSelect;
+export type OrderItemRow = typeof orderItems.$inferSelect;

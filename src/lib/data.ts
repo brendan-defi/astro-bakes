@@ -181,7 +181,9 @@ export const sampleViewer: Viewer = {
  * ship_at (standing in for the admin's tracking import), shipped → complete a
  * few days after arrival. Admin-only states (draft, cancelled) pass through.
  */
-export function effectiveState(d: Drop, now: Date): DropState {
+export type DropTimeline = Pick<Drop, "state" | "openAt" | "closeAt" | "shipAt" | "arriveAt">;
+
+export function effectiveState(d: DropTimeline, now: Date): DropState {
   const afterShip = (): DropState => (now.getTime() >= d.arriveAt.getTime() + 3 * DAY ? "complete" : "shipped");
   const afterOpen = (): DropState => (now < d.closeAt ? "open" : now < d.shipAt ? "closed" : afterShip());
   switch (d.state) {

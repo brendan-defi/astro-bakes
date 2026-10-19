@@ -3,13 +3,15 @@
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { boxes, drop, sampleCustomer, sampleOrderNumber, settings, type Box, type Locale } from "@/lib/data";
+import { sampleCustomer, type Box, type Locale } from "@/lib/data";
+import { placeOrderAction, startCheckoutAction } from "@/app/[locale]/checkout/actions";
 import { demoEnabled } from "@/lib/demo";
 import { fmtCountdown, fmtDate, fmtDateTime, yen } from "@/lib/format";
 import { getStrings, type Strings } from "@/lib/i18n";
 import { useCart, type CartLine } from "@/lib/cart";
 import { lookupPostal, normalisePostal, type PostalHit } from "@/lib/postal";
-import { clearHold, readHold, startHold } from "@/lib/hold";
+import { clearHold, readHold, startHold, type Hold } from "@/lib/hold";
+import { reservationStatus, reservedLines, totals, type Reservation } from "@/lib/reservation";
 import { ArrowLeftIcon, CardIcon, CheckIcon, ClockIcon, StarShape, TruckIcon, WarningIcon } from "./icons";
 import { Logo } from "./Logo";
 import { Stepper } from "./Stepper";
@@ -24,7 +26,10 @@ const PREV: Partial<Record<Step, Step>> = { signin: "cart", code: "signin", deli
 type Change = { kind: "gone"; box: Box; from: number } | { kind: "cut"; box: Box; from: number; to: number; left: number };
 
 interface Address { name: string; phone: string; postal: string; line1: string; line2: string }
-interface PlacedOrder { number: string; lines: { name: string; qty: number; lineTotal: number | null }[]; subtotal: number; total: number | null; email: string; address: Address; hit: PostalHit; gift: string | null }
+interface PlacedOrder { number: string; lines: { name: string; qty: number; lineTotal: number }[]; subtotal: number; total: number; email: string; address: Address; hit: PostalHit; gift: string | null }
+
+/** The open drop being sold, from the server. Dates are ISO strings so the page can pass them to this client component. */
+export interface CheckoutDrop { id: string; number: number; name: string; closeAt: string; shipAt: string; arriveAt: string }
 
 const ORDER_KEY = "ab-last-order";
 
@@ -35,8 +40,10 @@ function rich(template: (arg: string) => string, arg: string) {
 }
 const plural = (name: string) => (name.endsWith("Box") ? `${name}es` : name);
 
-export function Checkout({ locale }: { locale: Locale }) {
+export function Checkout({ locale, drop: dropIn, lineUrl, held }: { locale: Locale; drop: CheckoutDrop | null; lineUrl: string; held: Reservation | null }) {
   const t = getStrings(locale);
+  // Dates for the summary; when no drop is open the cart step shows a closed notice instead.
+  const drop = dropIn && { ...dropIn, closeAt: new Date(dropIn.closeAt), shipAt: new Date(dropIn.shipAt), arriveAt: new Date(dropIn.arriveAt) };
   const cart = useCart();
   const router = useRouter();
   const pathname = usePathname();
@@ -50,50 +57,90 @@ export function Checkout({ locale }: { locale: Locale }) {
   const home = `/${locale}`;
 
   const go = useCallback((to: Step) => {
-    router.push(to === "cart" ? pathname : `${pathname}?step=${to}`);
+    // Keep the demo switches (?state=, ?demo=) across steps; they decide which drop the server sells outside production.
+    const params = new URLSearchParams(sp.toString());
+    if (to === "cart") params.delete("step");
+    else params.set("step", to);
+    const qs = params.toString();
+    router.push(qs ? `${pathname}?${qs}` : pathname);
     window.scrollTo({ top: 0 });
-  }, [router, pathname]);
+  }, [router, pathname, sp]);
 
-  // ---- inventory re-check (PRD 3.3 / 3.8) ----
+  // ---- inventory re-check + hold (PRD 3.3 / 3.8, D8) ----
   const [leftOverride, setLeftOverride] = useState<Record<string, number>>({});
   const [changes, setChanges] = useState<Change[] | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
   const leftFor = (b: Box) => leftOverride[b.id] ?? b.left;
   const maxFor = (b: Box) => Math.min(leftFor(b), b.maxPerCustomer);
 
-  function onCheckout() {
-    // Simulated server response for the re-check. Real build: POST /api/checkout → hold + Order(pending_payment).
-    const inventory: Record<string, number> = demo === "soldout" ? { "cookie-box": 2, "banana-bread": 0 } : {};
-    const found: Change[] = [];
-    for (const line of cart.lines) {
-      const left = inventory[line.box.id] ?? line.box.left;
-      if (left === 0) { found.push({ kind: "gone", box: line.box, from: line.qty }); cart.set(line.box.id, 0); }
-      else if (line.qty > left) { found.push({ kind: "cut", box: line.box, from: line.qty, to: left, left }); cart.set(line.box.id, left); }
+  async function onCheckout() {
+    if (!drop || busy) return;
+    setBusy(true);
+    setNotice(null);
+    try {
+      const res = await startCheckoutAction({ dropId: drop.id, items: cart.qty, flags: { state: sp.get("state"), demo } });
+      if (!res.ok) {
+        setNotice(res.error === "drop_closed" ? t.dropJustClosed : t.emptyTitle);
+        return;
+      }
+      setLeftOverride(res.left);
+      if (res.changes.length) {
+        const byId = new Map(cart.lines.map((l) => [l.box.id, l.box]));
+        const found: Change[] = [];
+        for (const c of res.changes) {
+          const box = byId.get(c.box);
+          if (!box) continue;
+          found.push(c.kind === "gone" ? { kind: "gone", box, from: c.from } : { kind: "cut", box, from: c.from, to: c.to, left: c.left });
+          cart.set(box.id, c.kind === "gone" ? 0 : c.to);
+        }
+        setChanges(found);
+        window.scrollTo({ top: 0, behavior: "smooth" });
+        return;
+      }
+      setChanges(null);
+      setServerExpired(false);
+      startHold({ expires: res.expiresAt ?? undefined, checkoutId: res.checkoutId, revision: res.revision });
+      go("signin");
+    } finally {
+      setBusy(false);
     }
-    if (found.length) {
-      setLeftOverride(inventory);
-      setChanges(found);
-      window.scrollTo({ top: 0, behavior: "smooth" });
-      return;
-    }
-    setChanges(null);
-    startHold();
-    go("signin");
   }
 
   // ---- hold countdown (D8) ----
   const [now, setNow] = useState(() => Date.now());
-  const [holdExpires, setHoldExpires] = useState<number | null>(null);
+  const [hold, setHold] = useState<Hold | null>(null);
+  // Set when the server rejects the reservation, independent of what the local clock says.
+  const [serverExpired, setServerExpired] = useState(false);
   useEffect(() => {
     if (!inCheckout) return;
-    let exp = readHold();
-    if (!exp || exp < Date.now()) exp = startHold();
-    setHoldExpires(exp);
+    let h = readHold();
+    const status = reservationStatus(h, held);
+    if (status === "stale") {
+      // Another tab took or replaced the browser's reservation: this tab must review the cart (PRD 3.3).
+      clearHold();
+      setHold(null);
+      setNotice(t.cartChanged);
+      go("cart");
+      return;
+    }
+    if (status === "none" && h?.checkoutId) {
+      // This tab reserved, but the server no longer holds anything: expired or already ordered.
+      clearHold();
+      setHold(null);
+      setServerExpired(true);
+      return;
+    }
+    if (status === "ok" && held) h = startHold({ ...h, expires: held.expiresAt });
+    else if (!h || h.expires < Date.now()) h = startHold();
+    setHold(h);
     const id = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(id);
-  }, [inCheckout]);
-  const holdLeft = holdExpires ? holdExpires - now : null;
-  const holdExpired = inCheckout && holdLeft != null && holdLeft <= 0;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inCheckout, held]);
+  const holdLeft = hold != null ? hold.expires - now : null;
+  const holdExpired = inCheckout && (serverExpired || (holdLeft != null && holdLeft <= 0));
 
   // ---- sign in ----
   const [email, setEmail] = useState("");
@@ -133,30 +180,57 @@ export function Checkout({ locale }: { locale: Locale }) {
     try { const raw = window.sessionStorage.getItem(ORDER_KEY); if (raw) setPlaced(JSON.parse(raw)); } catch {}
   }, [step, placed]);
 
-  function placeOrder() {
-    if (!hit) return;
-    const order: PlacedOrder = {
-      number: sampleOrderNumber,
-      lines: cart.lines.map((l) => ({ name: l.box.name, qty: l.qty, lineTotal: l.lineTotal })),
-      subtotal: cart.subtotal, total: cart.total, email: email || sampleCustomer.email,
-      address: addr, hit, gift: gift ? giftMsg : null,
-    };
-    // Real build: order becomes paid only on the Stripe webhook (3.5).
-    try { window.sessionStorage.setItem(ORDER_KEY, JSON.stringify(order)); } catch {}
-    setPlaced(order);
-    clearHold();
-    cart.clear();
-    go("done");
+  async function placeOrder() {
+    if (!hit || !drop || busy) return;
+    setBusy(true);
+    setNotice(null);
+    try {
+      const h = readHold();
+      if (!h?.checkoutId || h.revision == null) {
+        // Deep-linked into the flow without a server hold: nothing is reserved to buy.
+        setServerExpired(true);
+        return;
+      }
+      const res = await placeOrderAction({
+        dropId: drop.id,
+        checkoutId: h.checkoutId,
+        revision: h.revision,
+        email: email || sampleCustomer.email, // sign-in is still mocked; the typed email stands in for the account (PRD 2.2)
+        locale,
+        delivery: addr,
+        gift: gift ? giftMsg : null,
+        paymentMethod: pay,
+      });
+      if (!res.ok) {
+        if (res.error === "hold_expired") { clearHold(); setServerExpired(true); }
+        else if (res.error === "changed") { clearHold(); setNotice(t.cartChanged); go("cart"); }
+        else if (res.error === "drop_closed") { clearHold(); setNotice(t.dropUnavailable); go("cart"); }
+        else if (res.error === "limit") { clearHold(); setNotice(t.limitReached(res.already, res.name, res.max)); go("cart"); }
+        else { setNotice(t.orderFailed); setTouched(true); go("delivery"); }
+        return;
+      }
+      const order: PlacedOrder = { ...res.order, address: addr, hit, gift: gift ? giftMsg : null };
+      try { window.sessionStorage.setItem(ORDER_KEY, JSON.stringify(order)); } catch {}
+      setPlaced(order);
+      clearHold();
+      cart.clear();
+      go("done");
+    } finally {
+      setBusy(false);
+    }
   }
 
   // ---- derived ----
-  const shipLine = t.shipsArrives(fmtDate(drop.shipAt, locale), fmtDate(drop.arriveAt, locale));
-  const shipLineYamato = t.shipsByYamato(fmtDate(drop.shipAt, locale), fmtDate(drop.arriveAt, locale));
+  const shipLine = drop ? t.shipsArrives(fmtDate(drop.shipAt, locale), fmtDate(drop.arriveAt, locale)) : "";
+  const shipLineYamato = drop ? t.shipsByYamato(fmtDate(drop.shipAt, locale), fmtDate(drop.arriveAt, locale)) : "";
   const feeLabel = yen(cart.shippingFee, "¥[fee]");
-  const summaryLines = step === "done" && placed ? placed.lines : cart.lines.map((l) => ({ name: l.box.name, qty: l.qty, lineTotal: l.lineTotal }));
-  const summarySubtotal = step === "done" && placed ? placed.subtotal : cart.subtotal;
+  // In the checkout steps the summary is the server's reservation (what placeOrder will buy); the cart step edits the local cart.
+  const buyingLines = inCheckout && held ? reservedLines(held.items, cart.boxes) : cart.lines;
+  const buying = { lines: buyingLines, ...totals(buyingLines, cart.shippingFee) };
+  const summaryLines = step === "done" && placed ? placed.lines : buying.lines.map((l) => ({ name: l.box.name, qty: l.qty, lineTotal: l.lineTotal }));
+  const summarySubtotal = step === "done" && placed ? placed.subtotal : buying.subtotal;
   const summaryCount = summaryLines.reduce((n, l) => n + l.qty, 0);
-  const summaryTotal = step === "done" && placed ? placed.total : cart.total;
+  const summaryTotal = step === "done" && placed ? placed.total : buying.total;
   const totalLabel = yen(summaryTotal, "¥[total]");
   const placeLabel = pay === "card" ? t.placeOrderCard(totalLabel) : t.placeOrderPaypay;
   const backLabel = { signin: t.backToBoxes, code: t.useDifferentEmail, delivery: t.back, pay: t.backToDelivery }[step as "signin"] ?? t.back;
@@ -182,7 +256,7 @@ export function Checkout({ locale }: { locale: Locale }) {
     </div>
   );
 
-  const cancelNote = (
+  const cancelNote = drop && (
     <div className="note">
       <span className="w9">{t.cancelling}</span> {t.cancelPolicy(fmtDateTime(drop.closeAt, locale))}{" "}
       <a href={`${home}/legal/tokushoho`} className="w9">{t.tokushoho}</a>
@@ -195,7 +269,7 @@ export function Checkout({ locale }: { locale: Locale }) {
         <div className="w9">{t.lineNudgeTitle}</div>
         <div className="small w7">{t.lineNudgeSub}</div>
       </div>
-      <a href={settings.lineUrl} className={s.lineNudgeBtn}>{t.addFriend}</a>
+      <a href={lineUrl} className={s.lineNudgeBtn}>{t.addFriend}</a>
     </div>
   );
 
@@ -221,7 +295,7 @@ export function Checkout({ locale }: { locale: Locale }) {
       {(step === "signin" || step === "code" || step === "delivery") && (
         <div className={s.pinned}>
           <div style={{ minWidth: 0 }}>
-            <div className={s.l1}>{t.boxCount(cart.count)} · {yen(cart.subtotal)} <span className={s.sub13}>{t.plusShipping}</span></div>
+            <div className={s.l1}>{t.boxCount(buying.count)} · {yen(buying.subtotal)} <span className={s.sub13}>{t.plusShipping}</span></div>
             <div className={s.l2}>{shipLine}</div>
           </div>
           <TruckIcon />
@@ -241,13 +315,13 @@ export function Checkout({ locale }: { locale: Locale }) {
                 <div className="alert-title"><WarningIcon /><div className={`display`} style={{ fontSize: 18, lineHeight: 1.15 }}>{t.holdExpiredTitle}</div></div>
                 <div className="small w7" style={{ fontSize: 14 }}>{t.holdExpiredBody}</div>
               </div>
-              <button type="button" className="btn btn-primary btn-block" onClick={() => { clearHold(); setHoldExpires(null); go("cart"); }}>{t.backToCart}</button>
+              <button type="button" className="btn btn-primary btn-block" onClick={() => { clearHold(); setHold(null); setServerExpired(false); go("cart"); }}>{t.backToCart}</button>
             </>
           ) : (
             <>
               {/* ---- Cart ---- */}
               {isCart && (
-                <CartStep t={t} cart={cart} changes={changes} maxFor={maxFor} shipLineYamato={shipLineYamato} feeLabel={feeLabel} totalLabel={totalLabel} onCheckout={onCheckout} home={home} demo={demo} />
+                <CartStep t={t} cart={cart} changes={changes} maxFor={maxFor} shipLineYamato={shipLineYamato} feeLabel={feeLabel} totalLabel={totalLabel} onCheckout={onCheckout} home={home} demo={demo} closed={!drop} notice={notice} busy={busy} />
               )}
 
               {/* ---- Sign in ---- */}
@@ -374,13 +448,13 @@ export function Checkout({ locale }: { locale: Locale }) {
                   <div className={s.mobileOnly}>
                     <section aria-label={t.yourOrder} className={`${s.section} ${s.sectionRaised}`}>
                       <div className={s.sectionTitle}>{t.yourOrder}</div>
-                      {cart.lines.map((l) => (
+                      {buying.lines.map((l) => (
                         <div key={l.box.id} className={s.tr}>
                           <span>{l.box.name} <span className="w9">× {l.qty}</span> <span className={s.sub12}>({yen(l.box.price)} {t.each})</span></span>
                           <span className={s.v} style={{ whiteSpace: "nowrap" }}>{yen(l.lineTotal)}</span>
                         </div>
                       ))}
-                      <div className={`${s.tr}`} style={{ borderTop: "2px dashed var(--ink)", paddingTop: 8, marginTop: 2 }}><span>{t.subtotal}</span><span className={s.v}>{yen(cart.subtotal)}</span></div>
+                      <div className={`${s.tr}`} style={{ borderTop: "2px dashed var(--ink)", paddingTop: 8, marginTop: 2 }}><span>{t.subtotal}</span><span className={s.v}>{yen(buying.subtotal)}</span></div>
                       <div className={s.tr}><span>{t.shipping}</span><span className={s.v}>{feeLabel}</span></div>
                       <div className={`${s.tr} ${s.trTotal}`} style={{ borderTop: 0, paddingTop: 0, marginTop: 0 }}><span className={s.k}>{t.total} <span className={s.sub12}>{t.taxIncl}</span></span><span className={s.v}>{totalLabel}</span></div>
                     </section>
@@ -410,7 +484,7 @@ export function Checkout({ locale }: { locale: Locale }) {
 
                   <div className={s.mobileOnly}>
                     {cancelNote}
-                    <button type="button" onClick={placeOrder} className="btn btn-primary btn-block" style={{ minHeight: 64 }}>{placeLabel}</button>
+                    <button type="button" onClick={placeOrder} disabled={busy} className="btn btn-primary btn-block" style={{ minHeight: 64 }}>{placeLabel}</button>
                     {agree}
                   </div>
                 </div>
@@ -427,7 +501,7 @@ export function Checkout({ locale }: { locale: Locale }) {
                     </div>
                     <div className={s.doneText}>
                       <h1 className={`display ${s.doneTitle}`}>{t.youreIn}</h1>
-                      <p className={s.doneBody}>{t.confirmed(placed?.number ?? sampleOrderNumber, doneEmail)}</p>
+                      <p className={s.doneBody}>{t.confirmed(placed?.number ?? "AB-···-···", doneEmail)}</p>
                     </div>
                   </section>
 
@@ -442,10 +516,10 @@ export function Checkout({ locale }: { locale: Locale }) {
                     <h2 className={`display ${s.h2}`}>{t.whatNext}</h2>
                     <ol className={s.nextList}>
                       {[
-                        { bg: "var(--pink)", date: fmtDate(drop.closeAt, locale), m: t.next1, d: t.dropCloses, sub: t.next1Sub },
+                        { bg: "var(--pink)", date: drop ? fmtDate(drop.closeAt, locale) : null, m: t.next1, d: t.dropCloses, sub: t.next1Sub },
                         { bg: "var(--butter)", date: null, m: t.next2, d: `${t.bakeDay}`, d2: t.allAtOnce, sub: t.next2Sub },
-                        { bg: "var(--aqua)", date: fmtDate(drop.shipAt, locale), m: t.next3, d: t.shipsByYamatoShort, sub: t.next3Sub },
-                        { bg: "var(--lilac)", date: fmtDate(drop.arriveAt, locale), m: t.next4, d: t.arrivesShort, sub: t.next4Sub(doneName) },
+                        { bg: "var(--aqua)", date: drop ? fmtDate(drop.shipAt, locale) : null, m: t.next3, d: t.shipsByYamatoShort, sub: t.next3Sub },
+                        { bg: "var(--lilac)", date: drop ? fmtDate(drop.arriveAt, locale) : null, m: t.next4, d: t.arrivesShort, sub: t.next4Sub(doneName) },
                       ].map((it, i) => (
                         <li key={i} className={s.nextItem}>
                           <span className={s.nextDot} style={{ background: it.bg }} />
@@ -487,16 +561,16 @@ export function Checkout({ locale }: { locale: Locale }) {
             <div className={s.summaryStrip}><TruckIcon size={20} />{shipLine}</div>
           </section>
 
-          {isCart && (
+          {isCart && drop && (
             <div className={s.asideBlock}>
-              <button type="button" onClick={onCheckout} disabled={cart.count === 0} className="btn btn-primary btn-block" style={{ minHeight: 64, fontSize: 22 }}>{t.checkout}</button>
+              <button type="button" onClick={onCheckout} disabled={cart.count === 0 || busy} className="btn btn-primary btn-block" style={{ minHeight: 64, fontSize: 22 }}>{t.checkout}</button>
               <p className={s.asideNote}>{t.holdNote}</p>
             </div>
           )}
           {step === "pay" && !holdExpired && (
             <div className={s.asideBlock} style={{ gap: 14 }}>
               {cancelNote}
-              <button type="button" onClick={placeOrder} className="btn btn-primary btn-block" style={{ minHeight: 66 }}>{placeLabel}</button>
+              <button type="button" onClick={placeOrder} disabled={busy} className="btn btn-primary btn-block" style={{ minHeight: 66 }}>{placeLabel}</button>
               {agree}
             </div>
           )}
@@ -514,16 +588,32 @@ export function Checkout({ locale }: { locale: Locale }) {
 }
 
 /* ---------------- Cart step ---------------- */
-function CartStep({ t, cart, changes, maxFor, shipLineYamato, feeLabel, totalLabel, onCheckout, home, demo }: {
+function CartStep({ t, cart, changes, maxFor, shipLineYamato, feeLabel, totalLabel, onCheckout, home, demo, closed, notice, busy }: {
   t: Strings; cart: ReturnType<typeof useCart>; changes: Change[] | null; maxFor: (b: Box) => number;
   shipLineYamato: string; feeLabel: string; totalLabel: string; onCheckout: () => void; home: string; demo: string | null;
+  closed: boolean; notice: string | null; busy: boolean;
 }) {
   const gone = changes?.filter((c): c is Extract<Change, { kind: "gone" }> => c.kind === "gone") ?? [];
   const rows: CartLine[] = cart.lines;
   const empty = cart.hydrated && rows.length === 0 && gone.length === 0;
+  if (closed) {
+    // No drop is open (PRD 5.2a: new checkouts blocked), so there is nothing to sell.
+    return (
+      <div className="stack" style={{ gap: 18 }}>
+        <h1 className={`display ${s.h1}`}>{t.yourBoxes}</h1>
+        <div className={s.empty}>
+          <div className="display" style={{ fontSize: 22 }}>{t.checkoutClosedTitle}</div>
+          <p className="w7" style={{ fontSize: 14 }}>{t.checkoutClosedBody}</p>
+          <Link href={`${home}#notify`} className="btn btn-secondary raised">{t.backToShop}</Link>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="stack" style={{ gap: 18 }}>
       <h1 className={`display ${s.h1}`}>{t.yourBoxes}</h1>
+
+      {notice && <div role="alert" className="note">{notice}</div>}
 
       {changes && changes.length > 0 && (
         <div role="alert" className="alert">
@@ -597,7 +687,7 @@ function CartStep({ t, cart, changes, maxFor, shipLineYamato, feeLabel, totalLab
           <div className={`${s.tr} ${s.trTotal}`}><span className={s.k}>{t.total} <span className={s.sub12}>{t.taxIncl}</span></span><span className={s.v}>{totalLabel}</span></div>
         </div>
         <InfoStrip><span>{shipLineYamato}</span></InfoStrip>
-        <button type="button" onClick={onCheckout} disabled={cart.count === 0} className="btn btn-primary btn-block" style={{ minHeight: 62, fontSize: 21 }}>{t.checkout}</button>
+        <button type="button" onClick={onCheckout} disabled={cart.count === 0 || busy} className="btn btn-primary btn-block" style={{ minHeight: 62, fontSize: 21 }}>{t.checkout}</button>
         <p className={s.primaryNote}>{t.holdNote}</p>
       </div>
     </div>

@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { anonymousViewer, type Locale, type Viewer } from "@/lib/data";
 import { getStrings } from "@/lib/i18n";
 import { useCart } from "@/lib/cart";
+import { useDemoQuery } from "@/lib/demo-query";
 import { CartIcon } from "./icons";
 import { Logo } from "./Logo";
 import styles from "./Nav.module.css";
@@ -14,6 +15,7 @@ export function Nav({ locale, showCart = false, viewer = anonymousViewer }: { lo
   const t = getStrings(locale);
   const { count, hydrated } = useCart();
   const pathname = usePathname();
+  const demoQuery = useDemoQuery();
   const other: Locale = locale === "en" ? "ja" : "en";
   const swap = (to: Locale) => pathname.replace(/^\/(en|ja)/, `/${to}`);
   return (
@@ -30,7 +32,7 @@ export function Nav({ locale, showCart = false, viewer = anonymousViewer }: { lo
             ))}
           </div>
           {showCart && (
-            <Link href={`/${locale}/checkout`} aria-label={t.cart} className={styles.cart}>
+            <Link href={`/${locale}/checkout${demoQuery}`} aria-label={t.cart} className={styles.cart}>
               <CartIcon />
               {hydrated && count > 0 && <span key={count} className={styles.badge}>{count}</span>}
             </Link>

@@ -1,7 +1,8 @@
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq, gt, sql } from "drizzle-orm";
 import { getDb } from "@/db";
-import { boxes as boxesTable, dropBoxes as dropBoxesTable, drops as dropsTable, settings as settingsTable, type BoxRow, type DropBoxRow } from "@/db/schema";
+import { boxes as boxesTable, dropBoxes as dropBoxesTable, drops as dropsTable, inventoryHolds, settings as settingsTable, type BoxRow, type DropBoxRow } from "@/db/schema";
 import { settings as defaultSettings, type Box, type Drop, type Locale, type Settings } from "./data";
+import { isUuid } from "./uuid";
 
 /**
  * Server-side reads for the homepage (PRD 1.1, 1.3): drops with their boxes,
@@ -22,7 +23,18 @@ const PALETTE = [
 /** JA copy falls back to EN until it exists (D2). */
 const pick = (locale: Locale, en: string | null, ja: string | null) => (locale === "ja" && ja) || en || "";
 
-function toBox(box: BoxRow, locale: Locale, i: number, inDrop?: Pick<DropBoxRow, "cap" | "soldQty" | "maxPerCustomer" | "price">): Box {
+/** Quantity under unexpired holds per drop box, leaving out the viewer's own cart so their reservation isn't counted against them. */
+async function activeHolds(excludeCartId: string | null): Promise<Map<string, number>> {
+  const exclude = isUuid(excludeCartId) ? excludeCartId : null;
+  const rows = await getDb()
+    .select({ dropBoxId: inventoryHolds.dropBoxId, qty: sql<number>`coalesce(sum(${inventoryHolds.qty}), 0)::int` })
+    .from(inventoryHolds)
+    .where(and(gt(inventoryHolds.expiresAt, new Date()), sql`${inventoryHolds.cartId} is distinct from ${exclude}::uuid`))
+    .groupBy(inventoryHolds.dropBoxId);
+  return new Map(rows.map((r) => [r.dropBoxId, r.qty]));
+}
+
+function toBox(box: BoxRow, locale: Locale, i: number, inDrop?: Pick<DropBoxRow, "cap" | "soldQty" | "maxPerCustomer" | "price">, held = 0): Box {
   const p = PALETTE[i % PALETTE.length];
   return {
     id: box.slug,
@@ -31,20 +43,23 @@ function toBox(box: BoxRow, locale: Locale, i: number, inDrop?: Pick<DropBoxRow,
     contents: pick(locale, box.contentsEn, box.contentsJa),
     allergens: box.allergens,
     price: inDrop?.price ?? box.price,
-    // remaining = cap − sold − active holds (D8); holds arrive with the checkout wiring
-    left: inDrop ? Math.max(0, inDrop.cap - inDrop.soldQty) : box.defaultCap,
+    // remaining = cap − sold − active holds (D8, D6)
+    left: inDrop ? Math.max(0, inDrop.cap - inDrop.soldQty - held) : box.defaultCap,
     maxPerCustomer: inDrop?.maxPerCustomer ?? box.defaultMaxPerCustomer,
     tint: p.tint,
     tilt: p.tilt,
   };
 }
 
-/** Every drop, oldest first, with its boxes. Arrival is ship date + 1 (D21). */
-export async function loadDrops(locale: Locale): Promise<Drop[]> {
-  const rows = await getDb().query.drops.findMany({
-    orderBy: [asc(dropsTable.openAt)],
-    with: { dropBoxes: { orderBy: [asc(dropBoxesTable.sort)], with: { box: true } } },
-  });
+/** Every drop, oldest first, with its boxes. Arrival is ship date + 1 (D21). `excludeCartId` is the viewer's own checkout. */
+export async function loadDrops(locale: Locale, excludeCartId: string | null = null): Promise<Drop[]> {
+  const [rows, held] = await Promise.all([
+    getDb().query.drops.findMany({
+      orderBy: [asc(dropsTable.openAt)],
+      with: { dropBoxes: { orderBy: [asc(dropBoxesTable.sort)], with: { box: true } } },
+    }),
+    activeHolds(excludeCartId),
+  ]);
   return rows.map((d) => ({
     id: d.slug,
     number: d.number,
@@ -54,7 +69,7 @@ export async function loadDrops(locale: Locale): Promise<Drop[]> {
     closeAt: d.closeAt,
     shipAt: d.shipAt,
     arriveAt: new Date(d.shipAt.getTime() + DAY),
-    boxes: d.dropBoxes.map((db, i) => toBox(db.box, locale, i, db)),
+    boxes: d.dropBoxes.map((db, i) => toBox(db.box, locale, i, db, held.get(db.id) ?? 0)),
   }));
 }
 
