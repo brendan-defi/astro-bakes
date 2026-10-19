@@ -15,6 +15,13 @@
       "when": 1792381014388,
       "tag": "0001_dizzy_shatterstar",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792387777578,
+      "tag": "0002_living_abomination",
+      "breakpoints": true
     }
   ]
 }
