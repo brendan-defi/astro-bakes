@@ -1,0 +1,17 @@
+.logo {
+  display: inline-flex; align-items: center;
+  background: var(--white);
+  border: var(--border);
+  border-radius: 50%;
+  box-shadow: 3px 3px 0 var(--ink);
+  transform: rotate(-4deg);
+  text-decoration: none;
+  flex: none;
+}
+.face { color: var(--purple-logo); line-height: 1; white-space: nowrap; }
+.sm { height: 46px; padding: 0 16px 4px; }
+.sm .face { font-size: 22px; }
+.md { height: 54px; padding: 0 22px 5px; box-shadow: 4px 4px 0 var(--ink); }
+.md .face { font-size: 26px; }
+.lg { height: 60px; padding: 0 24px 5px; box-shadow: 4px 4px 0 var(--ink); }
+.lg .face { font-size: 30px; }

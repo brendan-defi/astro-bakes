@@ -1,0 +1,396 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Astro Bakes — checkout, desktop</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Titan+One&family=Pacifico&family=Zen+Maru+Gothic:wght@500;700;900&display=swap">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="min-height: 820px; background: #FFF5FA; color: #2A1B5E; font-family: 'Zen Maru Gothic', 'Hiragino Maru Gothic ProN', system-ui, sans-serif; font-weight: 500; font-size: 17px; line-height: 1.6">
+
+<!-- TOP BAR -->
+<header style="background: #CDB4FF; border-bottom: 2.5px solid #2A1B5E; padding: 16px 40px">
+<div style="max-width: 1120px; margin: 0 auto; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px 28px">
+<a href="FunDesktop.dc.html" aria-label="Astro Bakes home" style="display: flex; align-items: center; height: 54px; padding: 0 22px 5px; background: #FFFFFF; border: 2.5px solid #2A1B5E; border-radius: 50%; box-shadow: 4px 4px 0 #2A1B5E; transform: rotate(-4deg); text-decoration: none">
+<span style="font-family: 'Pacifico', cursive; font-size: 26px; line-height: 1; color: #B14FE0; white-space: nowrap">Astro Bakes</span>
+</a>
+<sc-if value="{{showSteps}}" hint-placeholder-val="{{false}}">
+<ol aria-label="Checkout steps" style="list-style: none; margin: 0; padding: 0; display: flex; align-items: center; gap: 14px">
+<li style="display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 900"><span style="flex: none; width: 34px; height: 34px; box-sizing: border-box; border-radius: 999px; border: 2.5px solid #2A1B5E; background: {{s1.bg}}; color: {{s1.fg}}; display: flex; align-items: center; justify-content: center; font-family: 'Titan One', sans-serif; font-size: 15px">1</span>Sign in</li>
+<li aria-hidden="true" style="width: 36px; border-top: 2.5px dashed #2A1B5E"></li>
+<li style="display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 900"><span style="flex: none; width: 34px; height: 34px; box-sizing: border-box; border-radius: 999px; border: 2.5px solid #2A1B5E; background: {{s2.bg}}; color: {{s2.fg}}; display: flex; align-items: center; justify-content: center; font-family: 'Titan One', sans-serif; font-size: 15px">2</span>Delivery</li>
+<li aria-hidden="true" style="width: 36px; border-top: 2.5px dashed #2A1B5E"></li>
+<li style="display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 900"><span style="flex: none; width: 34px; height: 34px; box-sizing: border-box; border-radius: 999px; border: 2.5px solid #2A1B5E; background: {{s3.bg}}; color: {{s3.fg}}; display: flex; align-items: center; justify-content: center; font-family: 'Titan One', sans-serif; font-size: 15px">3</span>Pay</li>
+</ol>
+</sc-if>
+<sc-if value="{{showHold}}" hint-placeholder-val="{{false}}">
+<div style="display: flex; align-items: center; gap: 6px; background: #FFE066; border: 2.5px solid #2A1B5E; border-radius: 999px; padding: 6px 14px; font-size: 14px; font-weight: 900">
+<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg>
+Boxes held for 9:52</div>
+</sc-if>
+<sc-if value="{{isCart}}" hint-placeholder-val="{{true}}">
+<a href="FunDesktop.dc.html" style="display: flex; align-items: center; gap: 8px; min-height: 48px; padding: 0 20px; background: #FFFFFF; border: 2.5px solid #2A1B5E; border-radius: 999px; box-sizing: border-box; font-size: 15px; font-weight: 900; text-decoration: none">
+<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"></path></svg>
+Keep shopping</a>
+</sc-if>
+<sc-if value="{{isDone}}" hint-placeholder-val="{{false}}">
+<a href="FunDesktop.dc.html" style="display: flex; align-items: center; min-height: 48px; padding: 0 20px; background: #FFFFFF; border: 2.5px solid #2A1B5E; border-radius: 999px; box-sizing: border-box; font-size: 15px; font-weight: 900; text-decoration: none">Back to the shop</a>
+</sc-if>
+</div>
+</header>
+
+<div style="max-width: 1120px; margin: 0 auto; padding: 40px 40px 72px; display: flex; flex-wrap: wrap; gap: 40px; align-items: flex-start">
+
+<!-- ============ LEFT COLUMN ============ -->
+<div style="flex: 1.6 1 520px; min-width: 0; display: flex; flex-direction: column; gap: 22px">
+
+<sc-if value="{{hasBack}}" hint-placeholder-val="{{false}}">
+<button type="button" onClick="{{back}}" style="align-self: flex-start; display: flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 16px 0 10px; border: 2px solid #2A1B5E; border-radius: 999px; background: #FFFFFF; color: #2A1B5E; font: inherit; font-size: 15px; font-weight: 900; cursor: pointer">
+<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"></path></svg>
+{{backLabel}}</button>
+</sc-if>
+
+<!-- CART -->
+<sc-if value="{{isCart}}" hint-placeholder-val="{{true}}">
+<div style="display: flex; flex-direction: column; gap: 20px">
+<h1 style="margin: 0; font-family: 'Titan One', sans-serif; font-weight: 400; font-size: 52px; line-height: 1.02">Your boxes</h1>
+<sc-if value="{{showRecheck}}" hint-placeholder-val="{{false}}">
+<div role="alert" style="display: flex; gap: 16px; align-items: flex-start; background: #FFE066; border: 2.5px solid #2A1B5E; border-radius: 22px; box-shadow: 5px 5px 0 #2A1B5E; padding: 18px 20px">
+<svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none; margin-top: 2px"><path d="M12 3l10 18H2z"></path><path d="M12 10v5"></path><path d="M12 18h.01"></path></svg>
+<div style="display: flex; flex-direction: column; gap: 8px">
+<div style="font-family: 'Titan One', sans-serif; font-size: 22px; line-height: 1.15">A few boxes sold out while you were shopping</div>
+<ul style="margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 4px; font-size: 16px; font-weight: 700">
+<li><span style="font-weight: 900">Nebula Banana Bread</span> sold out, so we've taken it out of your cart.</li>
+<li>Only 2 <span style="font-weight: 900">4 Cookie Boxes</span> were left, so we've changed yours from 3 to 2.</li>
+</ul>
+<div style="font-size: 15px; font-weight: 700">Everything below is still available. Check it over, then carry on.</div>
+</div>
+</div>
+</sc-if>
+<div style="display: flex; flex-direction: column; gap: 16px">
+<sc-for list="{{items}}" as="it" hint-placeholder-count="2">
+<div style="display: flex; gap: 18px; align-items: center; background: #FFFFFF; border: 2.5px solid #2A1B5E; border-radius: 24px; box-shadow: 5px 5px 0 #2A1B5E; padding: 16px">
+<div style="flex: none; width: 104px; height: 104px; box-sizing: border-box; border-radius: 18px; border: 2px solid #2A1B5E; background: {{it.tint}}; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 900">Photo</div>
+<div style="flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 4px">
+<div style="font-family: 'Titan One', sans-serif; font-size: 22px; line-height: 1.15">{{it.name}}</div>
+<div style="font-size: 15px; font-weight: 700">{{it.unitLabel}} each <span style="font-size: 12px">税込</span></div>
+</div>
+<div style="flex: none; display: flex; align-items: center; gap: 6px">
+<button type="button" aria-label="Remove one" onClick="{{it.dec}}" disabled="{{it.atMin}}" style="width: 48px; height: 48px; border: 2.5px solid #2A1B5E; border-radius: 999px; background: #FFFFFF; color: #2A1B5E; box-shadow: 0 3px 0 #2A1B5E; font-family: 'Titan One', sans-serif; font-size: 24px; line-height: 1; cursor: pointer">−</button>
+<span aria-live="polite" style="min-width: 36px; text-align: center; font-family: 'Titan One', sans-serif; font-size: 24px">{{it.qty}}</span>
+<button type="button" aria-label="Add one" onClick="{{it.inc}}" disabled="{{it.atMax}}" style="width: 48px; height: 48px; border: 2.5px solid #2A1B5E; border-radius: 999px; background: #7DE8E4; color: #2A1B5E; box-shadow: 0 3px 0 #2A1B5E; font-family: 'Titan One', sans-serif; font-size: 24px; line-height: 1; cursor: pointer">+</button>
+</div>
+<div style="flex: none; min-width: 90px; text-align: right; font-family: 'Titan One', sans-serif; font-size: 22px">{{it.lineLabel}}</div>
+</div>
+</sc-for>
+<sc-if value="{{showRecheck}}" hint-placeholder-val="{{false}}">
+<div style="display: flex; gap: 18px; align-items: center; background: #F3EEF8; border: 2.5px dashed #2A1B5E; border-radius: 24px; padding: 16px">
+<div style="flex: none; width: 104px; height: 104px; box-sizing: border-box; border-radius: 18px; border: 2px solid #2A1B5E; background: #FFF1B8; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 900; opacity: 0.55">Photo</div>
+<div style="flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 4px">
+<div style="font-family: 'Titan One', sans-serif; font-size: 22px; line-height: 1.15; text-decoration: line-through">Nebula Banana Bread</div>
+<a href="FunDesktop.dc.html#notify" style="font-size: 15px; font-weight: 900">Get a heads-up next drop</a>
+</div>
+<span style="flex: none; background: #2A1B5E; color: #FFFFFF; border-radius: 10px; padding: 3px 12px; font-family: 'Titan One', sans-serif; font-size: 15px; transform: rotate(-4deg)">SOLD OUT</span>
+</div>
+</sc-if>
+</div>
+<p style="margin: 0; font-size: 15px; font-weight: 700">Up to 5 of each box per person, per drop.</p>
+</div>
+</sc-if>
+
+<!-- SIGN IN -->
+<sc-if value="{{isSignin}}" hint-placeholder-val="{{false}}">
+<div style="display: flex; flex-direction: column; gap: 18px; max-width: 560px">
+<h1 style="margin: 0; font-family: 'Titan One', sans-serif; font-weight: 400; font-size: 48px; line-height: 1.04">Sign in to check out</h1>
+<p style="margin: 0; font-size: 18px; font-weight: 700">New or returning, it's the same step. We'll email you a sign-in link and a 6-digit code. No passwords.</p>
+<form style="display: flex; flex-direction: column; gap: 10px">
+<label for="cod-email" style="font-size: 15px; font-weight: 900">Email address</label>
+<input id="cod-email" type="email" autocomplete="email" placeholder="you@example.com" style="height: 60px; box-sizing: border-box; border: 2.5px solid #2A1B5E; border-radius: 16px; padding: 0 18px; font: inherit; font-weight: 700; background: #FFFFFF; color: #2A1B5E">
+<button type="button" onClick="{{goCode}}" style="align-self: flex-start; margin-top: 8px; min-height: 62px; padding: 0 34px; border: 2.5px solid #2A1B5E; border-radius: 999px; background: #FF9CCB; color: #2A1B5E; box-shadow: 0 6px 0 #2A1B5E; font-family: 'Titan One', sans-serif; font-size: 20px; cursor: pointer">Email me a sign-in code</button>
+</form>
+<div style="display: flex; gap: 10px; align-items: center; font-size: 15px; font-weight: 700">
+<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><path d="M5 12l5 5 9-10"></path></svg>
+Your boxes stay in your cart while you sign in.</div>
+</div>
+</sc-if>
+
+<!-- CODE -->
+<sc-if value="{{isCode}}" hint-placeholder-val="{{false}}">
+<div style="display: flex; flex-direction: column; gap: 18px; max-width: 560px">
+<h1 style="margin: 0; font-family: 'Titan One', sans-serif; font-weight: 400; font-size: 48px; line-height: 1.04">Check your email</h1>
+<p style="margin: 0; font-size: 18px; font-weight: 700">We sent a link and a code to <strong style="font-weight: 900">you@example.com</strong>. Click the link, or type the code here.</p>
+<form style="display: flex; flex-direction: column; gap: 10px">
+<label for="cod-code" style="font-size: 15px; font-weight: 900">6-digit code</label>
+<div style="display: flex; flex-wrap: wrap; gap: 12px">
+<input id="cod-code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" style="flex: 1 1 260px; min-width: 0; height: 68px; box-sizing: border-box; border: 2.5px solid #2A1B5E; border-radius: 16px; padding: 0 18px; font-family: 'Titan One', sans-serif; font-size: 32px; letter-spacing: 0.4em; text-align: center; background: #FFFFFF; color: #2A1B5E">
+<button type="button" onClick="{{goDelivery}}" style="min-height: 68px; padding: 0 34px; border: 2.5px solid #2A1B5E; border-radius: 999px; background: #FF9CCB; color: #2A1B5E; box-shadow: 0 6px 0 #2A1B5E; font-family: 'Titan One', sans-serif; font-size: 20px; cursor: pointer">Continue</button>
+</div>
+</form>
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px; font-size: 15px; font-weight: 700">
+<span>Didn't get it?</span>
+<button type="button" disabled="{{true}}" style="min-height: 44px; padding: 0 16px; border: 2px solid #2A1B5E; border-radius: 999px; background: #FFFFFF; color: #2A1B5E; font: inherit; font-weight: 900; opacity: 0.5">Resend in 0:24</button>
+<span>The link and code expire in 15 minutes.</span>
+</div>
+</div>
+</sc-if>
+
+<!-- DELIVERY -->
+<sc-if value="{{isDelivery}}" hint-placeholder-val="{{false}}">
+<div style="display: flex; flex-direction: column; gap: 20px">
+<div style="display: flex; flex-direction: column; gap: 6px">
+<h1 style="margin: 0; font-family: 'Titan One', sans-serif; font-weight: 400; font-size: 48px; line-height: 1.04">Where should it go?</h1>
+<p style="margin: 0; font-size: 17px; font-weight: 700">We deliver within Tokyo's 23 wards. Sending a gift? Use the recipient's name and address.</p>
+</div>
+<form style="display: flex; flex-direction: column; gap: 18px">
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)); gap: 16px">
+<div style="display: flex; flex-direction: column; gap: 6px">
+<label for="cod-name" style="font-size: 15px; font-weight: 900">Recipient name <span style="font-weight: 700">お名前</span></label>
+<input id="cod-name" type="text" autocomplete="name" value="山田 花子" style="height: 56px; box-sizing: border-box; border: 2.5px solid #2A1B5E; border-radius: 14px; padding: 0 16px; font: inherit; font-weight: 700; background: #FFFFFF; color: #2A1B5E">
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px">
+<label for="cod-phone" style="font-size: 15px; font-weight: 900">Phone <span style="font-weight: 700">電話番号</span></label>
+<input id="cod-phone" type="tel" autocomplete="tel" value="090-1234-5678" style="height: 56px; box-sizing: border-box; border: 2.5px solid #2A1B5E; border-radius: 14px; padding: 0 16px; font: inherit; font-weight: 700; background: #FFFFFF; color: #2A1B5E">
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px">
+<label for="cod-postal" style="font-size: 15px; font-weight: 900">Postal code <span style="font-weight: 700">郵便番号</span></label>
+<div style="display: flex; gap: 8px">
+<input id="cod-postal" type="text" inputmode="numeric" autocomplete="postal-code" value="153-0061" style="flex: 1 1 auto; min-width: 0; height: 56px; box-sizing: border-box; border: 2.5px solid #2A1B5E; border-radius: 14px; padding: 0 16px; font: inherit; font-weight: 700; background: #FFFFFF; color: #2A1B5E">
+<button type="button" style="flex: none; min-height: 56px; padding: 0 18px; border: 2.5px solid #2A1B5E; border-radius: 14px; background: #CDB4FF; color: #2A1B5E; font: inherit; font-weight: 900; cursor: pointer">Look up</button>
+</div>
+</div>
+<div style="display: flex; flex-direction: column; justify-content: center; gap: 6px; background: #F1E8FF; border: 2px dashed #2A1B5E; border-radius: 14px; padding: 10px 16px">
+<div style="font-size: 12px; font-weight: 900">Filled from your postal code</div>
+<div style="font-weight: 900; font-size: 18px; line-height: 1.3">東京都 目黒区 中目黒</div>
+<div style="align-self: flex-start; display: flex; align-items: center; gap: 6px; background: #DDF7E8; border: 2px solid #0A7A3B; border-radius: 999px; padding: 1px 10px; color: #075C2C; font-size: 13px; font-weight: 900">
+<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg>
+We deliver to Meguro-ku</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px">
+<label for="cod-line1" style="font-size: 15px; font-weight: 900">Street number <span style="font-weight: 700">番地</span></label>
+<input id="cod-line1" type="text" autocomplete="address-line1" value="1-2-3" style="height: 56px; box-sizing: border-box; border: 2.5px solid #2A1B5E; border-radius: 14px; padding: 0 16px; font: inherit; font-weight: 700; background: #FFFFFF; color: #2A1B5E">
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px">
+<label for="cod-line2" style="font-size: 15px; font-weight: 900">Building, room <span style="font-weight: 700">建物名・部屋番号 (optional)</span></label>
+<input id="cod-line2" type="text" autocomplete="address-line2" placeholder="例: アストロハイツ 201" style="height: 56px; box-sizing: border-box; border: 2.5px solid #2A1B5E; border-radius: 14px; padding: 0 16px; font: inherit; font-weight: 700; background: #FFFFFF; color: #2A1B5E">
+</div>
+</div>
+
+<label style="display: flex; align-items: center; gap: 12px; min-height: 48px; font-weight: 900; cursor: pointer">
+<input type="checkbox" checked="{{giftOn}}" onChange="{{toggleGift}}" style="width: 24px; height: 24px; accent-color: #2A1B5E; margin: 0">
+This is a gift — add a message
+</label>
+<sc-if value="{{giftOn}}" hint-placeholder-val="{{false}}">
+<div style="display: flex; flex-direction: column; gap: 6px; margin-top: -8px">
+<label for="cod-gift" style="font-size: 15px; font-weight: 900">Gift message <span style="font-weight: 700">(printed on a card in the box)</span></label>
+<textarea id="cod-gift" rows="3" maxlength="150" style="box-sizing: border-box; border: 2.5px solid #2A1B5E; border-radius: 14px; padding: 12px 16px; font: inherit; font-weight: 700; background: #FFFFFF; color: #2A1B5E; resize: vertical">Happy birthday! Save one for me.</textarea>
+<span style="align-self: flex-end; font-size: 13px; font-weight: 700">32 / 150</span>
+</div>
+</sc-if>
+
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 14px 24px">
+<button type="button" onClick="{{goPay}}" style="min-height: 62px; padding: 0 34px; border: 2.5px solid #2A1B5E; border-radius: 999px; background: #FF9CCB; color: #2A1B5E; box-shadow: 0 6px 0 #2A1B5E; font-family: 'Titan One', sans-serif; font-size: 20px; cursor: pointer">Continue to payment</button>
+<span style="font-size: 14px; font-weight: 700">We'll save this address to your account for next time.</span>
+</div>
+</form>
+</div>
+</sc-if>
+
+<!-- REVIEW & PAY -->
+<sc-if value="{{isPay}}" hint-placeholder-val="{{false}}">
+<div style="display: flex; flex-direction: column; gap: 22px">
+<h1 style="margin: 0; font-family: 'Titan One', sans-serif; font-weight: 400; font-size: 48px; line-height: 1.04">Review and pay</h1>
+
+<section aria-label="Delivery" style="display: flex; flex-direction: column; gap: 6px; background: #FFFFFF; border: 2.5px solid #2A1B5E; border-radius: 22px; padding: 20px">
+<div style="display: flex; justify-content: space-between; align-items: center; gap: 12px">
+<div style="font-family: 'Titan One', sans-serif; font-size: 17px; letter-spacing: 0.04em">DELIVER TO</div>
+<button type="button" onClick="{{goDelivery}}" style="min-height: 44px; padding: 0 16px; border: 2px solid #2A1B5E; border-radius: 999px; background: #FFFFFF; color: #2A1B5E; font: inherit; font-size: 15px; font-weight: 900; cursor: pointer">Edit</button>
+</div>
+<div style="font-weight: 900">山田 花子</div>
+<div>〒153-0061 東京都目黒区中目黒1-2-3 · 090-1234-5678</div>
+<sc-if value="{{giftOn}}" hint-placeholder-val="{{false}}"><div style="margin-top: 4px; background: #FFD3E8; border-radius: 12px; padding: 8px 14px; font-size: 15px"><span style="font-weight: 900">Gift card:</span> Happy birthday! Save one for me.</div></sc-if>
+<div style="margin-top: 6px; display: flex; gap: 8px; align-items: center; font-size: 15px; font-weight: 900">
+<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><path d="M3 7h11v9H3z"></path><path d="M14 10h4l3 3v3h-7"></path><circle cx="7" cy="17.5" r="1.8"></circle><circle cx="17" cy="17.5" r="1.8"></circle></svg>
+Ships Sun, Oct 25 by Yamato · arrives Mon, Oct 26</div>
+</section>
+
+<section aria-label="Payment" style="display: flex; flex-direction: column; gap: 12px; background: #FFFFFF; border: 2.5px solid #2A1B5E; border-radius: 22px; padding: 20px">
+<div style="font-family: 'Titan One', sans-serif; font-size: 17px; letter-spacing: 0.04em">PAY WITH</div>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px">
+<button type="button" aria-pressed="{{isCard}}" onClick="{{payCard}}" style="min-height: 62px; border: 2.5px solid #2A1B5E; border-radius: 16px; background: {{cardBg}}; color: #2A1B5E; box-shadow: {{cardShadow}}; font: inherit; font-weight: 900; display: flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer">
+<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="6" width="18" height="13" rx="2.5"></rect><path d="M3 10h18"></path></svg>
+Card</button>
+<button type="button" aria-pressed="{{isPaypay}}" onClick="{{payPaypay}}" style="min-height: 62px; border: 2.5px solid #2A1B5E; border-radius: 16px; background: {{paypayBg}}; color: #2A1B5E; box-shadow: {{paypayShadow}}; font: inherit; font-weight: 900; cursor: pointer">PayPay</button>
+</div>
+<sc-if value="{{isCard}}" hint-placeholder-val="{{true}}">
+<div style="min-height: 140px; box-sizing: border-box; border: 2.5px dashed #2A1B5E; border-radius: 16px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; text-align: center; padding: 16px; font-size: 15px; font-weight: 900">Stripe Payment Element<span style="font-weight: 700; font-size: 14px">card number · expiry · CVC</span></div>
+</sc-if>
+<sc-if value="{{isPaypay}}" hint-placeholder-val="{{false}}">
+<div style="border: 2.5px dashed #2A1B5E; border-radius: 16px; padding: 16px; font-size: 15px; font-weight: 700">We'll show a PayPay QR code to scan with your phone. Once you approve it in the app, this page confirms your order.</div>
+</sc-if>
+</section>
+</div>
+</sc-if>
+
+<!-- CONFIRMATION -->
+<sc-if value="{{isDone}}" hint-placeholder-val="{{false}}">
+<div style="display: flex; flex-direction: column; gap: 26px">
+<section style="display: flex; flex-wrap: wrap; align-items: center; gap: 28px; background: #CDB4FF; border: 2.5px solid #2A1B5E; border-radius: 28px; box-shadow: 6px 6px 0 #2A1B5E; padding: 28px">
+<div style="position: relative; flex: none; width: 170px; height: 170px">
+<img src="../assets/astro-cookie.jpg" alt="Astro the border collie with a cookie" style="width: 170px; height: 170px; box-sizing: border-box; object-fit: cover; border-radius: 50%; border: 2.5px solid #2A1B5E; box-shadow: 5px 5px 0 #2A1B5E">
+<svg viewBox="0 0 48 48" aria-hidden="true" style="position: absolute; right: -14px; top: -10px; width: 46px; height: 46px"><path d="M24 2 l6.2 13.4 14.6 1.8 -10.8 10 2.9 14.5 -12.9 -7.3 -12.9 7.3 2.9 -14.5 -10.8 -10 14.6 -1.8z" fill="#FFE066" stroke="#2A1B5E" stroke-width="3" stroke-linejoin="round"></path></svg>
+</div>
+<div style="flex: 1 1 280px; min-width: 0; display: flex; flex-direction: column; gap: 10px">
+<h1 style="margin: 0; font-family: 'Titan One', sans-serif; font-weight: 400; font-size: 60px; line-height: 1">You're in.</h1>
+<p style="margin: 0; font-size: 18px; font-weight: 700">Order <strong style="font-weight: 900">AB-003-017</strong> is confirmed. A confirmation email is on its way to you@example.com.</p>
+</div>
+</section>
+
+<section aria-label="What happens next" style="display: flex; flex-direction: column; gap: 14px">
+<h2 style="margin: 0; font-family: 'Titan One', sans-serif; font-weight: 400; font-size: 30px">What happens next</h2>
+<ol style="list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(150px, 100%), 1fr)); gap: 14px">
+<li style="display: flex; flex-direction: column; gap: 8px; background: #FFFFFF; border: 2.5px solid #2A1B5E; border-radius: 20px; padding: 16px"><span style="width: 36px; height: 36px; box-sizing: border-box; border-radius: 999px; border: 2.5px solid #2A1B5E; background: #FF9CCB"></span><div style="font-weight: 900; line-height: 1.3">Sun, Oct 18<br>Drop closes</div><div style="font-size: 14px; font-weight: 700">Cancel free until then, from your order page.</div></li>
+<li style="display: flex; flex-direction: column; gap: 8px; background: #FFFFFF; border: 2.5px solid #2A1B5E; border-radius: 20px; padding: 16px"><span style="width: 36px; height: 36px; box-sizing: border-box; border-radius: 999px; border: 2.5px solid #2A1B5E; background: #FFE066"></span><div style="font-weight: 900; line-height: 1.3">Bake day<br>All at once</div><div style="font-size: 14px; font-weight: 700">One kitchen session for the whole drop.</div></li>
+<li style="display: flex; flex-direction: column; gap: 8px; background: #FFFFFF; border: 2.5px solid #2A1B5E; border-radius: 20px; padding: 16px"><span style="width: 36px; height: 36px; box-sizing: border-box; border-radius: 999px; border: 2.5px solid #2A1B5E; background: #7DE8E4"></span><div style="font-weight: 900; line-height: 1.3">Sun, Oct 25<br>Ships by Yamato</div><div style="font-size: 14px; font-weight: 700">We'll email your tracking number.</div></li>
+<li style="display: flex; flex-direction: column; gap: 8px; background: #FFFFFF; border: 2.5px solid #2A1B5E; border-radius: 20px; padding: 16px"><span style="width: 36px; height: 36px; box-sizing: border-box; border-radius: 999px; border: 2.5px solid #2A1B5E; background: #CDB4FF"></span><div style="font-weight: 900; line-height: 1.3">Mon, Oct 26<br>Arrives</div><div style="font-size: 14px; font-weight: 700">At 山田 花子's door.</div></li>
+</ol>
+</section>
+</div>
+</sc-if>
+</div>
+
+<!-- ============ RIGHT COLUMN (pinned summary) ============ -->
+<aside aria-label="Order summary" style="flex: 1 1 320px; min-width: 0; position: sticky; top: 24px; display: flex; flex-direction: column; gap: 16px">
+<section style="display: flex; flex-direction: column; gap: 10px; background: #FFFFFF; border: 2.5px solid #2A1B5E; border-radius: 24px; box-shadow: 6px 6px 0 #2A1B5E; padding: 22px">
+<div style="font-family: 'Titan One', sans-serif; font-size: 17px; letter-spacing: 0.04em">{{summaryTitle}}</div>
+<sc-if value="{{showLines}}" hint-placeholder-val="{{false}}">
+<div style="display: flex; flex-direction: column; gap: 6px">
+<sc-for list="{{lines}}" as="ln" hint-placeholder-count="2">
+<div style="display: flex; justify-content: space-between; gap: 12px; font-size: 16px"><span>{{ln.name}} <span style="font-weight: 900">× {{ln.qty}}</span></span><span style="font-weight: 900; white-space: nowrap">{{ln.lineLabel}}</span></div>
+</sc-for>
+</div>
+</sc-if>
+<div style="display: flex; justify-content: space-between; gap: 12px; border-top: 2px dashed #2A1B5E; padding-top: 10px"><span>Subtotal · {{countLabel}}</span><span style="font-weight: 900">{{subtotalLabel}}</span></div>
+<div style="display: flex; justify-content: space-between; gap: 12px"><span>Shipping <span style="font-size: 13px">· 23 wards, flat</span></span><span style="font-weight: 900">¥[fee]</span></div>
+<div style="display: flex; justify-content: space-between; gap: 12px; align-items: baseline"><span style="font-weight: 900">Total <span style="font-size: 12px">税込</span></span><span style="font-family: 'Titan One', sans-serif; font-size: 28px">¥[total]</span></div>
+<div style="display: flex; gap: 8px; align-items: center; background: #BFF3F0; border: 2px solid #2A1B5E; border-radius: 14px; padding: 10px 12px; font-size: 14px; font-weight: 900">
+<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><path d="M3 7h11v9H3z"></path><path d="M14 10h4l3 3v3h-7"></path><circle cx="7" cy="17.5" r="1.8"></circle><circle cx="17" cy="17.5" r="1.8"></circle></svg>
+Ships Sun, Oct 25 · arrives Mon, Oct 26</div>
+</section>
+
+<sc-if value="{{isCart}}" hint-placeholder-val="{{true}}">
+<div style="display: flex; flex-direction: column; gap: 10px">
+<button type="button" onClick="{{goSignin}}" disabled="{{cartEmpty}}" style="min-height: 64px; border: 2.5px solid #2A1B5E; border-radius: 999px; background: #FF9CCB; color: #2A1B5E; box-shadow: 0 6px 0 #2A1B5E; font-family: 'Titan One', sans-serif; font-size: 22px; cursor: pointer">Checkout →</button>
+<p style="margin: 0; font-size: 14px; font-weight: 700; text-align: center">Your boxes are held for 10 minutes once you start checkout.</p>
+</div>
+</sc-if>
+
+<sc-if value="{{isPay}}" hint-placeholder-val="{{false}}">
+<div style="display: flex; flex-direction: column; gap: 14px">
+<div style="background: #FFE066; border: 2.5px solid #2A1B5E; border-radius: 18px; padding: 14px 16px; font-size: 14px; font-weight: 700"><span style="font-weight: 900">Cancelling:</span> free, with a full refund, until the drop closes (Sun, Oct 18, 21:00 JST). After that, orders can't be cancelled. <a href="#top" style="font-weight: 900">特定商取引法に基づく表記</a></div>
+<button type="button" onClick="{{goDone}}" style="min-height: 66px; border: 2.5px solid #2A1B5E; border-radius: 999px; background: #FF9CCB; color: #2A1B5E; box-shadow: 0 6px 0 #2A1B5E; font-family: 'Titan One', sans-serif; font-size: 20px; cursor: pointer">{{placeLabel}}</button>
+<p style="margin: 0; font-size: 13px; font-weight: 700; text-align: center">By placing this order you agree to the <a href="#top">Terms</a> and confirm the details shown.</p>
+</div>
+</sc-if>
+
+<sc-if value="{{isDone}}" hint-placeholder-val="{{false}}">
+<div style="display: flex; flex-direction: column; gap: 12px">
+<div style="font-size: 15px; font-weight: 700">To 山田 花子 · 東京都目黒区中目黒1-2-3</div>
+<a href="#top" style="display: flex; align-items: center; justify-content: center; min-height: 60px; border: 2.5px solid #2A1B5E; border-radius: 999px; background: #FFFFFF; box-shadow: 0 5px 0 #2A1B5E; font-family: 'Titan One', sans-serif; font-size: 19px; text-decoration: none">View your order</a>
+<div style="display: flex; gap: 12px; align-items: center; background: #FFFFFF; border: 2.5px solid #2A1B5E; border-radius: 20px; padding: 14px 16px">
+<div style="flex: 1 1 auto; min-width: 0"><div style="font-weight: 900">Hear about the next drop on LINE</div><div style="font-size: 13px; font-weight: 700">Announcements only.</div></div>
+<a href="#top" style="flex: none; display: flex; align-items: center; min-height: 46px; padding: 0 16px; border-radius: 999px; background: #0A7A3B; border: 2.5px solid #2A1B5E; color: #FFFFFF; font-weight: 900; text-decoration: none">Add friend</a>
+</div>
+</div>
+</sc-if>
+</aside>
+
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"step":{"editor":"enum","options":["cart","soldout","signin","code","delivery","pay","done"],"default":"cart"},"gift":{"editor":"boolean","default":false},"$preview":{"width":1280,"height":1000}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { step: null, q: null, gift: null, pay: 'card' };
+  }
+  renderVals() {
+    const step = this.state.step || this.props.step || 'cart';
+    const sold = (this.props.step === 'soldout');
+    const giftOn = this.state.gift == null ? !!this.props.gift : this.state.gift;
+    const go = (s) => () => this.setState({ step: s });
+    const prev = { signin: 'cart', code: 'signin', delivery: 'code', pay: 'delivery' };
+    const backLabels = { signin: 'Back to your boxes', code: 'Use a different email', delivery: 'Back', pay: 'Back to delivery' };
+    const yen = (n) => '¥' + n.toLocaleString('en-US');
+    const q = this.state.q || (sold ? { cookie: 2, loaf: 0 } : { cookie: 1, loaf: 1 });
+    const set = (id, n) => this.setState({ q: Object.assign({}, q, { [id]: n }) });
+    const data = [
+      { id: 'cookie', name: '4 Cookie Box', price: 1000, left: sold ? 2 : 7, tint: '#FFD3E8' },
+      { id: 'loaf', name: 'Nebula Banana Bread', price: 500, left: sold ? 0 : 3, tint: '#FFF1B8' }
+    ];
+    const items = data.filter((b) => b.left > 0).map((b) => {
+      const qty = q[b.id] || 0;
+      const max = Math.min(b.left, 5);
+      return Object.assign({}, b, {
+        qty: qty,
+        unitLabel: yen(b.price),
+        lineLabel: yen(qty * b.price),
+        atMin: qty <= 0,
+        atMax: qty >= max,
+        dec: () => set(b.id, Math.max(0, qty - 1)),
+        inc: () => set(b.id, Math.min(max, qty + 1))
+      });
+    });
+    const lines = items.filter((it) => it.qty > 0);
+    const count = items.reduce((s, it) => s + it.qty, 0);
+    const subtotal = items.reduce((s, it) => s + it.qty * it.price, 0);
+    const idx = { signin: 1, code: 1, delivery: 2, pay: 3 }[step] || 0;
+    const dot = (n) => n < idx ? { bg: '#2A1B5E', fg: '#FFFFFF' } : (n === idx ? { bg: '#FF9CCB', fg: '#2A1B5E' } : { bg: '#FFFFFF', fg: '#2A1B5E' });
+    const inCheckout = idx > 0;
+    const isCart = step === 'cart' || step === 'soldout';
+    const isCard = this.state.pay === 'card';
+    return {
+      isCart: isCart,
+      showRecheck: step === 'soldout',
+      isSignin: step === 'signin',
+      isCode: step === 'code',
+      isDelivery: step === 'delivery',
+      isPay: step === 'pay',
+      isDone: step === 'done',
+      hasBack: inCheckout,
+      backLabel: backLabels[step] || 'Back',
+      showHold: inCheckout,
+      showSteps: inCheckout,
+      showLines: !isCart,
+      summaryTitle: step === 'done' ? 'YOUR ORDER' : (isCart ? 'TOTAL' : 'ORDER SUMMARY'),
+      s1: dot(1), s2: dot(2), s3: dot(3),
+      back: () => this.setState({ step: prev[step] || 'cart' }),
+      goSignin: go('signin'), goCode: go('code'), goDelivery: go('delivery'), goPay: go('pay'), goDone: go('done'),
+      items: items,
+      lines: lines,
+      cartEmpty: count === 0,
+      countLabel: count + (count === 1 ? ' box' : ' boxes'),
+      subtotalLabel: yen(subtotal),
+      giftOn: giftOn,
+      toggleGift: () => this.setState({ gift: !giftOn }),
+      isCard: isCard,
+      isPaypay: !isCard,
+      payCard: () => this.setState({ pay: 'card' }),
+      payPaypay: () => this.setState({ pay: 'paypay' }),
+      cardBg: isCard ? '#7DE8E4' : '#FFFFFF',
+      paypayBg: isCard ? '#FFFFFF' : '#7DE8E4',
+      cardShadow: isCard ? '3px 3px 0 #2A1B5E' : 'none',
+      paypayShadow: isCard ? 'none' : '3px 3px 0 #2A1B5E',
+      placeLabel: isCard ? 'Place order and pay ¥[total]' : 'Place order · pay with PayPay'
+    };
+  }
+}
+</script>
+</body>
+</html>

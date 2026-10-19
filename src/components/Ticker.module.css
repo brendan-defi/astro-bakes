@@ -1,0 +1,17 @@
+.ticker {
+  background: var(--ink); color: var(--butter);
+  overflow: hidden; white-space: nowrap;
+  padding: 9px 0;
+  font-family: var(--font-display), sans-serif;
+  font-size: 14px; letter-spacing: 0.06em;
+}
+.track { display: inline-flex; animation: ab-ticker 22s linear infinite; }
+.group { display: inline-flex; }
+.item { display: inline-flex; gap: 22px; padding-left: 22px; }
+.pink { color: var(--pink); }
+.aqua { color: var(--aqua); }
+@media (min-width: 768px) {
+  .ticker { padding: 10px 0; font-size: 15px; }
+  .track { animation-duration: 40s; }
+  .item { gap: 28px; padding-left: 28px; }
+}

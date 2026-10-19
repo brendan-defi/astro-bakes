@@ -1,0 +1,320 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Astro Bakes — homepage, drop open, fun revision, desktop</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Titan+One&family=Pacifico&family=Zen+Maru+Gothic:wght@500;700;900&display=swap">
+<style>
+body{margin:0;background:#2A1B5E}
+a{color:#2A1B5E}a:hover{color:#5B3FC4}
+button{font-family:inherit;cursor:pointer}
+button:disabled{opacity:.35;cursor:default}
+@keyframes ab-ticker{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+@keyframes ab-bob{0%,100%{transform:translateY(0) rotate(-3deg)}50%{transform:translateY(-10px) rotate(2deg)}}
+@keyframes ab-spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion: reduce){*{animation:none !important}}
+</style>
+</helmet>
+<div style="font-family: 'Zen Maru Gothic', 'Hiragino Maru Gothic ProN', system-ui, sans-serif; font-weight: 500; color: #2A1B5E; background: #FFF5FA; font-size: 17px; line-height: 1.6; overflow-x: clip">
+
+<!-- TICKER (drop status) -->
+<div role="status" aria-label="Drop 03 is open. Closes in 2 days. Ships October 25." style="background: #2A1B5E; color: #FFE066; overflow: hidden; white-space: nowrap; padding: 10px 0; font-family: 'Titan One', sans-serif; font-size: 15px; letter-spacing: 0.06em">
+<div aria-hidden="true" style="display: inline-flex; gap: 28px; padding-left: 28px; animation: ab-ticker 40s linear infinite">
+<span>DROP 03 IS OPEN</span><span style="color: #FF9CCB">★</span><span>CLOSES IN 2 DAYS</span><span style="color: #7DE8E4">★</span><span>TOKYO 23 WARDS</span><span style="color: #FF9CCB">★</span><span>SHIPS OCT 25</span><span style="color: #7DE8E4">★</span><span>DROP 03 IS OPEN</span><span style="color: #FF9CCB">★</span><span>CLOSES IN 2 DAYS</span><span style="color: #7DE8E4">★</span><span>TOKYO 23 WARDS</span><span style="color: #FF9CCB">★</span><span>SHIPS OCT 25</span><span style="color: #7DE8E4">★</span><span>DROP 03 IS OPEN</span><span style="color: #FF9CCB">★</span><span>CLOSES IN 2 DAYS</span><span style="color: #7DE8E4">★</span><span>TOKYO 23 WARDS</span><span style="color: #FF9CCB">★</span><span>SHIPS OCT 25</span><span style="color: #7DE8E4">★</span>
+<span>DROP 03 IS OPEN</span><span style="color: #FF9CCB">★</span><span>CLOSES IN 2 DAYS</span><span style="color: #7DE8E4">★</span><span>TOKYO 23 WARDS</span><span style="color: #FF9CCB">★</span><span>SHIPS OCT 25</span><span style="color: #7DE8E4">★</span><span>DROP 03 IS OPEN</span><span style="color: #FF9CCB">★</span><span>CLOSES IN 2 DAYS</span><span style="color: #7DE8E4">★</span><span>TOKYO 23 WARDS</span><span style="color: #FF9CCB">★</span><span>SHIPS OCT 25</span><span style="color: #7DE8E4">★</span><span>DROP 03 IS OPEN</span><span style="color: #FF9CCB">★</span><span>CLOSES IN 2 DAYS</span><span style="color: #7DE8E4">★</span><span>TOKYO 23 WARDS</span><span style="color: #FF9CCB">★</span><span>SHIPS OCT 25</span><span style="color: #7DE8E4">★</span>
+</div>
+</div>
+
+<!-- NAV -->
+<header style="background: #CDB4FF; padding: 20px 40px 0">
+<div style="max-width: 1120px; margin: 0 auto; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px">
+<a href="#top" aria-label="Astro Bakes home" style="display: flex; align-items: center; height: 60px; padding: 0 24px 5px; background: #FFFFFF; border: 2.5px solid #2A1B5E; border-radius: 50%; box-shadow: 4px 4px 0 #2A1B5E; transform: rotate(-4deg); text-decoration: none">
+<span style="font-family: 'Pacifico', cursive; font-size: 30px; line-height: 1; color: #B14FE0; white-space: nowrap">Astro Bakes</span>
+</a>
+<div style="display: flex; align-items: center; gap: 14px">
+<div role="group" aria-label="Language" style="display: flex; background: #FFFFFF; border: 2.5px solid #2A1B5E; border-radius: 999px; padding: 2px">
+<a href="#top" style="display: flex; align-items: center; justify-content: center; min-width: 42px; height: 40px; border-radius: 999px; font-size: 14px; font-weight: 900; text-decoration: none">JA</a>
+<a href="#top" aria-current="true" style="display: flex; align-items: center; justify-content: center; min-width: 42px; height: 40px; border-radius: 999px; background: #2A1B5E; color: #FFFFFF; font-size: 14px; font-weight: 900; text-decoration: none">EN</a>
+</div>
+<a href="#cart" aria-label="Cart" style="position: relative; display: flex; align-items: center; justify-content: center; width: 48px; height: 48px; background: #FFE066; border: 2.5px solid #2A1B5E; border-radius: 999px; box-sizing: border-box">
+<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 8h14l-1.2 11H6.2L5 8z"></path><path d="M9 8V6a3 3 0 0 1 6 0v2"></path></svg>
+<sc-if value="{{hasCart}}" hint-placeholder-val="{{true}}"><span style="position: absolute; top: -8px; right: -8px; min-width: 24px; height: 24px; border-radius: 999px; background: #FF9CCB; border: 2px solid #2A1B5E; box-sizing: border-box; font-size: 13px; font-weight: 900; display: flex; align-items: center; justify-content: center">{{count}}</span></sc-if>
+</a>
+<a href="#top" style="display: flex; align-items: center; height: 48px; padding: 0 22px; background: #FFFFFF; border: 2.5px solid #2A1B5E; border-radius: 999px; box-shadow: 0 4px 0 #2A1B5E; box-sizing: border-box; font-size: 15px; font-weight: 900; text-decoration: none">Sign in</a>
+</div>
+</div>
+</header>
+
+<!-- HERO -->
+<section id="top" style="position: relative; background: #CDB4FF; padding: 44px 40px 48px">
+<div style="max-width: 1120px; margin: 0 auto; display: flex; flex-wrap: wrap; align-items: center; gap: 48px">
+<div style="flex: 1.25 1 440px; min-width: 0; display: flex; flex-direction: column; gap: 20px; align-items: flex-start">
+<div style="background: #FFE066; border: 2.5px solid #2A1B5E; border-radius: 10px; padding: 5px 14px; transform: rotate(-3deg); box-shadow: 3px 3px 0 #2A1B5E; font-family: 'Titan One', sans-serif; font-size: 16px; letter-spacing: 0.06em">DROP 03 · OCTOBER</div>
+<h1 style="margin: 0; font-family: 'Titan One', sans-serif; font-weight: 400; font-size: 74px; line-height: 1; letter-spacing: -0.01em; text-shadow: 4px 4px 0 #FFFFFF">American-style bakes, <span style="color: #FFFFFF; text-shadow: 5px 5px 0 #2A1B5E, -2px -2px 0 #2A1B5E, 2px -2px 0 #2A1B5E, -2px 2px 0 #2A1B5E">launched one drop at a time.</span></h1>
+<p style="margin: 0; font-size: 20px; font-weight: 700; max-width: 560px; text-wrap: pretty">Cookies and banana bread, baked in small batches in Nakameguro. Order while a drop is open; we bake everything at once and deliver across Tokyo's 23 wards.</p>
+<p style="margin: 0; font-size: 15px; font-weight: 700">アメリカンスタイルの手作りクッキー＆ベイク</p>
+<div style="align-self: stretch; display: flex; flex-wrap: wrap; align-items: center; gap: 18px; margin-top: 6px">
+<div style="flex: 1 1 170px; background: #FFD3E8; border: 2.5px solid #2A1B5E; border-radius: 18px; box-shadow: 4px 4px 0 #2A1B5E; padding: 12px 16px; transform: rotate(-1.500deg)">
+<div style="font-family: 'Titan One', sans-serif; font-size: 13px; letter-spacing: 0.08em">ORDERS CLOSE</div>
+<div style="font-weight: 900; font-size: 18px; line-height: 1.3">Sun, Oct 18 · 21:00 JST</div>
+<div style="font-size: 13px; font-weight: 700">or when sold out</div>
+</div>
+<div style="flex: 1 1 170px; background: #BFF3F0; border: 2.5px solid #2A1B5E; border-radius: 18px; box-shadow: 4px 4px 0 #2A1B5E; padding: 12px 16px; transform: rotate(1.500deg)">
+<div style="font-family: 'Titan One', sans-serif; font-size: 13px; letter-spacing: 0.08em">ARRIVES</div>
+<div style="font-weight: 900; font-size: 18px; line-height: 1.3">Mon, Oct 26 · at your door</div>
+<div style="font-size: 13px; font-weight: 700">ships Sun, Oct 25</div>
+</div>
+</div>
+<a href="#boxes" style="display: flex; align-items: center; justify-content: center; gap: 12px; min-height: 68px; padding: 0 40px; margin-top: 8px; border-radius: 999px; background: #FF9CCB; border: 2.5px solid #2A1B5E; box-shadow: 0 7px 0 #2A1B5E; font-family: 'Titan One', sans-serif; font-size: 26px; text-decoration: none">Pick your boxes
+<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v15M5 13l7 7 7-7"></path></svg>
+</a>
+</div>
+
+<div style="flex: 1 1 360px; min-width: 0; display: flex; justify-content: center">
+<div style="position: relative; width: 100%; max-width: 460px; aspect-ratio: 1 / 1">
+<div style="position: absolute; inset: 4%; border-radius: 50%; background: #FFE066; border: 2.5px solid #2A1B5E"></div>
+<svg viewBox="0 0 340 340" aria-hidden="true" style="position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible"><path d="M4 216 C -34 150, 110 56, 250 50 C 344 46, 376 92, 334 140" fill="none" stroke="#2A1B5E" stroke-width="10" stroke-linecap="round"></path><path d="M4 216 C -34 150, 110 56, 250 50 C 344 46, 376 92, 334 140" fill="none" stroke="#FF9CCB" stroke-width="5.500" stroke-linecap="round"></path></svg>
+<img src="../assets/astro-cookie.jpg" alt="Astro the border collie eyeing a marshmallow cookie" style="position: absolute; inset: 11%; width: 78%; height: 78%; object-fit: cover; border-radius: 50%; border: 2.5px solid #2A1B5E; box-sizing: border-box">
+<svg viewBox="0 0 340 340" aria-hidden="true" style="position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible"><path d="M334 198 C 300 264, 150 322, 60 294" fill="none" stroke="#2A1B5E" stroke-width="10" stroke-linecap="round"></path><path d="M334 198 C 300 264, 150 322, 60 294" fill="none" stroke="#FF9CCB" stroke-width="5.500" stroke-linecap="round"></path></svg>
+<svg viewBox="0 0 64 64" aria-hidden="true" style="position: absolute; left: -6%; bottom: 2%; width: 23%; height: 23%; animation: ab-bob 4s ease-in-out infinite"><circle cx="32" cy="32" r="28" fill="#E8B56A" stroke="#2A1B5E" stroke-width="3.500"></circle><circle cx="22" cy="24" r="5" fill="#6B3E26"></circle><circle cx="40" cy="20" r="4" fill="#6B3E26"></circle><circle cx="43" cy="38" r="5.500" fill="#6B3E26"></circle><circle cx="26" cy="43" r="4.500" fill="#6B3E26"></circle><circle cx="32" cy="31" r="3" fill="#6B3E26"></circle></svg>
+<svg viewBox="0 0 48 48" aria-hidden="true" style="position: absolute; right: 0; top: 0; width: 15%; height: 15%; animation: ab-spin 14s linear infinite"><path d="M24 2 l6.200 13.400 14.600 1.800 -10.800 10 2.900 14.500 -12.900 -7.300 -12.900 7.300 2.900 -14.500 -10.800 -10 14.600 -1.800z" fill="#7DE8E4" stroke="#2A1B5E" stroke-width="2.500" stroke-linejoin="round"></path></svg>
+<svg viewBox="0 0 48 48" aria-hidden="true" style="position: absolute; left: 2%; top: 8%; width: 9%; height: 9%"><path d="M24 2 l6.200 13.400 14.600 1.800 -10.800 10 2.900 14.500 -12.900 -7.300 -12.900 7.300 2.900 -14.500 -10.800 -10 14.600 -1.800z" fill="#FFFFFF" stroke="#2A1B5E" stroke-width="3.500" stroke-linejoin="round"></path></svg>
+<div style="position: absolute; right: -4%; bottom: 12%; transform: rotate(4deg); background: #FFFFFF; border: 2.5px solid #2A1B5E; border-radius: 20px 20px 20px 4px; box-shadow: 4px 4px 0 #2A1B5E; padding: 8px 16px; font-weight: 900; font-size: 17px; line-height: 1.3; max-width: 44%">Drop 03 is open!</div>
+</div>
+</div>
+</div>
+</section>
+<svg viewBox="0 0 1300 30" preserveAspectRatio="none" aria-hidden="true" style="display: block; width: 100%; height: 34px; background: #FFF5FA"><path d="M0 0 H1300 V10 Q 1267.500 34 1235 10 T 1170 10 T 1105 10 T 1040 10 T 975 10 T 910 10 T 845 10 T 780 10 T 715 10 T 650 10 T 585 10 T 520 10 T 455 10 T 390 10 T 325 10 T 260 10 T 195 10 T 130 10 T 65 10 T 0 10 Z" fill="#CDB4FF"></path></svg>
+
+<!-- BOXES -->
+<section id="boxes" style="padding: 48px 40px 28px">
+<div style="max-width: 1120px; margin: 0 auto; display: flex; flex-direction: column; gap: 36px">
+<div style="display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 24px">
+<h2 style="margin: 0; font-family: 'Titan One', sans-serif; font-weight: 400; font-size: 56px; line-height: 1.02">In this drop</h2>
+<p style="margin: 0; font-size: 16px; font-weight: 700">Up to 5 of each box per person. Prices include tax.</p>
+</div>
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); gap: 32px 30px">
+<sc-for list="{{boxes}}" as="box" hint-placeholder-count="3">
+<article style="position: relative; display: flex; flex-direction: column; background: #FFFFFF; border: 2.5px solid #2A1B5E; border-radius: 28px; box-shadow: 7px 7px 0 #2A1B5E; transform: rotate({{box.tilt}})">
+<div style="height: 220px; border-radius: 25px 25px 0 0; border-bottom: 2.5px solid #2A1B5E; background: {{box.tint}}; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; font-size: 13px; font-weight: 900">
+<svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l1.500-2h7L17 8h3v11H4z"></path><circle cx="12" cy="13" r="3.500"></circle></svg>
+<span>Product photo — {{box.name}}</span>
+</div>
+<sc-if value="{{box.open}}" hint-placeholder-val="{{true}}">
+<div style="position: absolute; top: -22px; right: -16px; width: 96px; height: 96px; transform: rotate(12deg)">
+<svg viewBox="-4 -4 108 108" aria-hidden="true" style="position: absolute; inset: 0; width: 100%; height: 100%"><polygon points="100,50 87.700,60.100 93.300,75 77.600,77.600 75,93.300 60.100,87.700 50,100 39.900,87.700 25,93.300 22.400,77.600 6.700,75 12.300,60.100 0,50 12.300,39.900 6.700,25 22.400,22.400 25,6.700 39.900,12.300 50,0 60.100,12.300 75,6.700 77.600,22.400 93.300,25 87.700,39.900" fill="#FFE066" stroke="#2A1B5E" stroke-width="4" stroke-linejoin="round"></polygon></svg>
+<div style="position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; font-family: 'Titan One', sans-serif; line-height: 0.95"><span style="font-size: 30px">{{box.left}}</span><span style="font-size: 13px; letter-spacing: 0.06em">LEFT</span></div>
+</div>
+</sc-if>
+<sc-if value="{{box.soldOut}}" hint-placeholder-val="{{false}}">
+<div style="position: absolute; top: 80px; left: 50%; transform: translateX(-50%) rotate(-9deg); background: #2A1B5E; color: #FFFFFF; border: 2.5px solid #FFFFFF; outline: 2.5px solid #2A1B5E; border-radius: 10px; padding: 4px 18px; font-family: 'Titan One', sans-serif; font-size: 28px; white-space: nowrap">SOLD OUT</div>
+</sc-if>
+<div style="display: flex; flex-direction: column; gap: 10px; padding: 18px 20px 20px; flex-grow: 1">
+<div style="display: flex; justify-content: space-between; align-items: baseline; gap: 12px">
+<h3 style="margin: 0; font-family: 'Titan One', sans-serif; font-weight: 400; font-size: 25px; line-height: 1.1">{{box.name}}</h3>
+<div style="white-space: nowrap; font-family: 'Titan One', sans-serif; font-size: 23px">{{box.priceLabel}} <span style="font-family: 'Zen Maru Gothic', sans-serif; font-size: 12px; font-weight: 700">税込</span></div>
+</div>
+<p style="margin: 0; font-size: 15px; font-weight: 700">{{box.desc}}</p>
+<p style="margin: 0; font-size: 14px">{{box.contents}}</p>
+<div style="display: flex; flex-wrap: wrap; gap: 6px; align-items: center">
+<span style="font-size: 12px; font-weight: 900">Contains</span>
+<sc-for list="{{box.allergens}}" as="al" hint-placeholder-count="3"><span style="background: #F1E8FF; border: 2px solid #2A1B5E; border-radius: 999px; padding: 0 10px; font-size: 12px; font-weight: 900">{{al}}</span></sc-for>
+</div>
+<sc-if value="{{box.open}}" hint-placeholder-val="{{true}}">
+<div style="margin-top: auto; padding-top: 10px; display: flex; align-items: center; justify-content: space-between; gap: 12px">
+<span style="font-family: 'Titan One', sans-serif; font-size: 15px; letter-spacing: 0.04em">HOW MANY?</span>
+<div style="display: flex; align-items: center; gap: 6px">
+<button type="button" aria-label="Remove one" onClick="{{box.dec}}" disabled="{{box.atMin}}" style="width: 48px; height: 48px; border: 2.5px solid #2A1B5E; border-radius: 999px; background: #FFFFFF; color: #2A1B5E; box-shadow: 0 3px 0 #2A1B5E; font-family: 'Titan One', sans-serif; font-size: 26px; line-height: 1">−</button>
+<span aria-live="polite" style="min-width: 40px; text-align: center; font-family: 'Titan One', sans-serif; font-size: 28px; line-height: 1">{{box.qty}}</span>
+<button type="button" aria-label="Add one" onClick="{{box.inc}}" disabled="{{box.atMax}}" style="width: 48px; height: 48px; border: 2.5px solid #2A1B5E; border-radius: 999px; background: #7DE8E4; color: #2A1B5E; box-shadow: 0 3px 0 #2A1B5E; font-family: 'Titan One', sans-serif; font-size: 26px; line-height: 1">+</button>
+</div>
+</div>
+</sc-if>
+<sc-if value="{{box.soldOut}}" hint-placeholder-val="{{false}}">
+<div style="margin-top: auto; padding-top: 10px; font-size: 14px; font-weight: 900">Sold out this drop. <a href="#notify">Get a heads-up next time</a></div>
+</sc-if>
+</div>
+</article>
+</sc-for>
+</div>
+</div>
+</section>
+
+<!-- STICKY CART BAR -->
+<sc-if value="{{hasCart}}" hint-placeholder-val="{{true}}">
+<div id="cart" style="position: sticky; bottom: 0; z-index: 2; padding: 14px 40px 26px">
+<a href="CheckoutDesktop.dc.html" style="max-width: 640px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 64px; box-sizing: border-box; padding: 0 30px; border-radius: 999px; background: #FF9CCB; border: 2.5px solid #2A1B5E; box-shadow: 0 6px 0 #2A1B5E; color: #2A1B5E; text-decoration: none; font-family: 'Titan One', sans-serif; font-size: 20px">
+<span>{{countLabel}} · {{totalLabel}} <span style="font-family: 'Zen Maru Gothic', sans-serif; font-size: 13px; font-weight: 900">+ ¥[fee] shipping</span></span>
+<span style="white-space: nowrap">Checkout →</span>
+</a>
+</div>
+</sc-if>
+
+<!-- HOW DROPS WORK -->
+<svg viewBox="0 0 1300 30" preserveAspectRatio="none" aria-hidden="true" style="display: block; width: 100%; height: 34px; background: #FFE066; margin-top: 20px"><path d="M0 0 H1300 V10 Q 1267.500 34 1235 10 T 1170 10 T 1105 10 T 1040 10 T 975 10 T 910 10 T 845 10 T 780 10 T 715 10 T 650 10 T 585 10 T 520 10 T 455 10 T 390 10 T 325 10 T 260 10 T 195 10 T 130 10 T 65 10 T 0 10 Z" fill="#FFF5FA"></path></svg>
+<section id="how" style="background: #FFE066; padding: 40px 40px 72px">
+<div style="max-width: 1120px; margin: 0 auto; display: flex; flex-direction: column; gap: 30px">
+<div style="display: flex; flex-direction: column; gap: 2px">
+<div style="font-family: 'Titan One', sans-serif; font-size: 16px; letter-spacing: 0.08em">NEW HERE?</div>
+<h2 style="margin: 0; font-family: 'Titan One', sans-serif; font-weight: 400; font-size: 56px; line-height: 1.02">How a drop works</h2>
+</div>
+<ol style="list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr)); gap: 28px">
+<li style="display: flex; flex-direction: column; gap: 14px; background: #FFFFFF; border: 2.5px solid #2A1B5E; border-radius: 24px; box-shadow: 6px 6px 0 #2A1B5E; padding: 24px; transform: rotate(-1.500deg)">
+<span style="width: 72px; height: 72px; border-radius: 999px; background: #FF9CCB; border: 2.5px solid #2A1B5E; box-sizing: border-box; display: flex; align-items: center; justify-content: center; font-family: 'Titan One', sans-serif; font-size: 36px">1</span>
+<div><div style="font-family: 'Titan One', sans-serif; font-size: 26px; line-height: 1.15">Preorder during the drop</div><div style="font-size: 15px; font-weight: 700; margin-top: 6px">Order while the drop is open. Boxes are limited, so some sell out early.</div></div>
+</li>
+<li style="display: flex; flex-direction: column; gap: 14px; background: #FFFFFF; border: 2.5px solid #2A1B5E; border-radius: 24px; box-shadow: 6px 6px 0 #2A1B5E; padding: 24px; transform: rotate(1deg) translateY(14px)">
+<span style="width: 72px; height: 72px; border-radius: 999px; background: #7DE8E4; border: 2.5px solid #2A1B5E; box-sizing: border-box; display: flex; align-items: center; justify-content: center; font-family: 'Titan One', sans-serif; font-size: 36px">2</span>
+<div><div style="font-family: 'Titan One', sans-serif; font-size: 26px; line-height: 1.15">We bake it all at once</div><div style="font-size: 15px; font-weight: 700; margin-top: 6px">Every order in the drop is baked fresh in one kitchen session.</div></div>
+</li>
+<li style="display: flex; flex-direction: column; gap: 14px; background: #FFFFFF; border: 2.5px solid #2A1B5E; border-radius: 24px; box-shadow: 6px 6px 0 #2A1B5E; padding: 24px; transform: rotate(-1deg)">
+<span style="width: 72px; height: 72px; border-radius: 999px; background: #CDB4FF; border: 2.5px solid #2A1B5E; box-sizing: border-box; display: flex; align-items: center; justify-content: center; font-family: 'Titan One', sans-serif; font-size: 36px">3</span>
+<div><div style="font-family: 'Titan One', sans-serif; font-size: 26px; line-height: 1.15">Delivered the next day</div><div style="font-size: 15px; font-weight: 700; margin-top: 6px">Everything ships by Yamato on one date and arrives the day after.</div></div>
+</li>
+</ol>
+<div style="display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px">
+<span style="background: #FFFFFF; border: 2.5px solid #2A1B5E; border-radius: 999px; padding: 5px 16px; font-size: 15px; font-weight: 900">Tokyo 23 wards only</span>
+<span style="background: #FFFFFF; border: 2.5px solid #2A1B5E; border-radius: 999px; padding: 5px 16px; font-size: 15px; font-weight: 900">¥[fee] shipping</span>
+<span style="background: #FFFFFF; border: 2.5px solid #2A1B5E; border-radius: 999px; padding: 5px 16px; font-size: 15px; font-weight: 900">Cancel free until the drop closes</span>
+</div>
+</div>
+</section>
+
+<!-- STORY -->
+<section id="story" style="background-color: #2A1B5E; background-image: radial-gradient(circle at 5% 12%, #FFFFFF 0 1.500px, transparent 2px), radial-gradient(circle at 18% 82%, #FFE066 0 2px, transparent 2.500px), radial-gradient(circle at 33% 18%, #7DE8E4 0 1.800px, transparent 2.300px), radial-gradient(circle at 46% 66%, #FFFFFF 0 1.200px, transparent 1.700px), radial-gradient(circle at 57% 9%, #FF9CCB 0 2px, transparent 2.500px), radial-gradient(circle at 70% 90%, #FFFFFF 0 1.400px, transparent 1.900px), radial-gradient(circle at 96% 20%, #FFFFFF 0 1.300px, transparent 1.800px), radial-gradient(circle at 92% 74%, #CDB4FF 0 1.800px, transparent 2.300px), radial-gradient(circle at 12% 46%, #FFFFFF 0 1.100px, transparent 1.600px), radial-gradient(circle at 50% 38%, #FFFFFF 0 1.100px, transparent 1.600px); color: #FFFFFF; padding: 80px 40px 96px">
+<div style="max-width: 1120px; margin: 0 auto; display: flex; flex-wrap: wrap; gap: 64px; align-items: center">
+<div style="flex: 1 1 400px; min-width: 0; display: flex; flex-direction: column; gap: 16px">
+<div style="display: flex; align-items: center; gap: 10px; color: #FFE066">
+<svg viewBox="0 0 24 24" width="30" height="30" fill="currentColor" aria-hidden="true"><ellipse cx="6" cy="10" rx="2.200" ry="2.800"></ellipse><ellipse cx="10" cy="5.500" rx="2.200" ry="2.800"></ellipse><ellipse cx="14.500" cy="5.500" rx="2.200" ry="2.800"></ellipse><ellipse cx="18.500" cy="10" rx="2.200" ry="2.800"></ellipse><path d="M12.200 11c-3 0-5.700 3.200-5.700 6 0 1.800 1.400 2.800 3 2.800 1.200 0 1.800-.6 2.700-.6s1.500.6 2.700.6c1.600 0 3-1 3-2.800 0-2.800-2.700-6-5.700-6z"></path></svg>
+<span style="font-family: 'Titan One', sans-serif; font-size: 16px; letter-spacing: 0.08em">BAKED IN NAKAMEGURO</span>
+</div>
+<h2 style="margin: 0; font-family: 'Titan One', sans-serif; font-weight: 400; font-size: 56px; line-height: 1.02">Meet Astro</h2>
+<p style="margin: 0; font-size: 19px; font-weight: 700">Astro is our border collie, and the name on the box. He watches every bake from the kitchen floor and has never once been allowed a cookie.</p>
+<p style="margin: 0">We handle the baking: the stuff you'd find on an American kitchen counter. Thick cookies with gooey middles, banana bread, chocolate cake.</p>
+<p style="margin: 0">It's all made in small batches in Nakameguro, one drop at a time, so nothing sits on a shelf waiting for you.</p>
+<a href="https://instagram.com" style="align-self: flex-start; display: flex; align-items: center; gap: 8px; min-height: 52px; padding: 0 24px; margin-top: 6px; border-radius: 999px; background: #FFFFFF; border: 2.5px solid #2A1B5E; box-shadow: 0 5px 0 #FF9CCB; font-weight: 900; text-decoration: none">
+<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.200" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="5"></rect><circle cx="12" cy="12" r="3.500"></circle><circle cx="16.800" cy="7.200" r=".6"></circle></svg>
+More Astro on Instagram</a>
+</div>
+<div style="flex: 1 1 400px; min-width: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 26px 22px; color: #2A1B5E">
+<figure style="margin: 0; background: #FFFFFF; padding: 10px 10px 8px; border-radius: 6px; transform: rotate(-4deg); box-shadow: 6px 6px 0 #FF9CCB">
+<img src="../assets/astro-outside.jpg" alt="Astro the border collie outdoors" style="display: block; width: 100%; aspect-ratio: 1 / 1; object-fit: cover; border-radius: 3px">
+<figcaption style="text-align: center; font-size: 15px; font-weight: 900; padding-top: 6px">Head of QC</figcaption>
+</figure>
+<figure style="margin: 0; background: #FFFFFF; padding: 10px 10px 8px; border-radius: 6px; transform: rotate(3deg) translateY(20px); box-shadow: 6px 6px 0 #7DE8E4">
+<div style="aspect-ratio: 1 / 1; border-radius: 3px; background: #FFF1B8; display: flex; align-items: center; justify-content: center; text-align: center; padding: 10px; font-size: 13px; font-weight: 900">Photo — gooey cookie, pulled apart</div>
+<figcaption style="text-align: center; font-size: 15px; font-weight: 900; padding-top: 6px">Gooey middles</figcaption>
+</figure>
+<figure style="margin: 0; background: #FFFFFF; padding: 10px 10px 8px; border-radius: 6px; transform: rotate(2deg); box-shadow: 6px 6px 0 #FFE066">
+<div style="aspect-ratio: 1 / 1; border-radius: 3px; background: #D5F5F4; display: flex; align-items: center; justify-content: center; text-align: center; padding: 10px; font-size: 13px; font-weight: 900">Photo — banana bread, sliced</div>
+<figcaption style="text-align: center; font-size: 15px; font-weight: 900; padding-top: 6px">Nebula loaf</figcaption>
+</figure>
+<figure style="margin: 0; background: #FFFFFF; padding: 10px 10px 8px; border-radius: 6px; transform: rotate(-3deg) translateY(20px); box-shadow: 6px 6px 0 #CDB4FF">
+<div style="aspect-ratio: 1 / 1; border-radius: 3px; background: #E7DDFB; display: flex; align-items: center; justify-content: center; text-align: center; padding: 10px; font-size: 13px; font-weight: 900">Photo — trays in the kitchen</div>
+<figcaption style="text-align: center; font-size: 15px; font-weight: 900; padding-top: 6px">Bake day</figcaption>
+</figure>
+</div>
+</div>
+</section>
+
+<!-- NOTIFY -->
+<section id="notify" style="background: #7DE8E4; padding: 72px 40px 80px">
+<div style="max-width: 1120px; margin: 0 auto; display: flex; flex-wrap: wrap; gap: 48px; align-items: center">
+<div style="flex: 1.500 1 440px; min-width: 0; display: flex; flex-direction: column; gap: 14px">
+<h2 style="margin: 0; font-family: 'Titan One', sans-serif; font-weight: 400; font-size: 56px; line-height: 1.02">Hear about the next drop</h2>
+<p style="margin: 0; font-size: 19px; font-weight: 700">We'll email you when a drop is announced and when it opens.</p>
+<form style="display: flex; flex-direction: column; gap: 10px; margin-top: 4px">
+<label for="notify-email-fund" style="font-size: 14px; font-weight: 900">Email address</label>
+<div style="display: flex; flex-wrap: wrap; gap: 12px">
+<input id="notify-email-fund" type="email" placeholder="you@example.com" style="flex: 1 1 220px; min-width: 0; height: 60px; box-sizing: border-box; border: 2.5px solid #2A1B5E; border-radius: 16px; padding: 0 18px; font: inherit; font-weight: 700; background: #FFFFFF; color: #2A1B5E">
+<button type="button" style="min-height: 60px; padding: 0 26px; border: 2.5px solid #2A1B5E; border-radius: 999px; background: #FFE066; color: #2A1B5E; box-shadow: 0 5px 0 #2A1B5E; font-family: 'Titan One', sans-serif; font-size: 18px">Tell me when the next drop opens</button>
+</div>
+<p style="margin: 6px 0 0; font-size: 13px; font-weight: 700">We'll only email you about drops. Unsubscribe any time.</p>
+</form>
+</div>
+<div style="flex: 1 1 300px; min-width: 0; display: flex; gap: 18px; align-items: center; background: #FFFFFF; border: 2.5px solid #2A1B5E; border-radius: 24px; box-shadow: 6px 6px 0 #2A1B5E; padding: 22px; transform: rotate(2deg)">
+<div style="flex: none; width: 108px; height: 108px; border-radius: 12px; border: 2.5px dashed #2A1B5E; box-sizing: border-box; display: flex; align-items: center; justify-content: center; text-align: center; font-size: 12px; font-weight: 900">LINE QR</div>
+<div style="display: flex; flex-direction: column; gap: 10px; min-width: 0">
+<div style="font-family: 'Titan One', sans-serif; font-size: 22px; line-height: 1.15">Or add us on LINE</div>
+<a href="#notify" style="display: flex; align-items: center; justify-content: center; min-height: 50px; padding: 0 18px; border-radius: 999px; background: #0A7A3B; border: 2.5px solid #2A1B5E; color: #FFFFFF; font-weight: 900; text-decoration: none">Add friend on LINE</a>
+</div>
+</div>
+</div>
+</section>
+
+<!-- FOOTER -->
+<footer style="background: #2A1B5E; color: #FFFFFF; padding: 48px 40px 40px">
+<div style="max-width: 1120px; margin: 0 auto; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 20px 40px">
+<span style="font-family: 'Pacifico', cursive; font-size: 34px; color: #7DE8E4; transform: rotate(-3deg)">Astro Bakes</span>
+<nav aria-label="Footer" style="display: flex; flex-wrap: wrap; gap: 0 24px; font-size: 14px; font-weight: 700">
+<a href="#top" style="color: #FFFFFF; display: flex; align-items: center; min-height: 44px">FAQ</a>
+<a href="#top" style="color: #FFFFFF; display: flex; align-items: center; min-height: 44px">Contact</a>
+<a href="#top" style="color: #FFFFFF; display: flex; align-items: center; min-height: 44px">Instagram</a>
+<a href="#top" style="color: #FFFFFF; display: flex; align-items: center; min-height: 44px">LINE</a>
+<a href="#top" style="color: #FFFFFF; display: flex; align-items: center; min-height: 44px">特定商取引法に基づく表記</a>
+<a href="#top" style="color: #FFFFFF; display: flex; align-items: center; min-height: 44px">プライバシーポリシー</a>
+<a href="#top" style="color: #FFFFFF; display: flex; align-items: center; min-height: 44px">利用規約</a>
+</nav>
+<div style="flex-basis: 100%; font-size: 13px; color: #CDB4FF">© Astro Bakes</div>
+</div>
+</footer>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":3450}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { q: { cookie: 1, loaf: 1, sampler: 0 } };
+  }
+  renderVals() {
+    const q = this.state.q;
+    const data = [
+      { id: 'cookie', name: '4 Cookie Box', price: 1000, left: 7, tint: '#FFD3E8', tilt: '-1.2deg',
+        desc: 'All four signature cookies. Thick and soft in the middle.',
+        contents: '1 American chocolate chip · 1 matcha white chocolate · 1 double chocolate & roasted walnut · 1 cookies & cream',
+        allergens: ['Egg', 'Milk', 'Wheat', 'Walnut'] },
+      { id: 'loaf', name: 'Nebula Banana Bread', price: 500, left: 3, tint: '#FFF1B8', tilt: '1deg',
+        desc: 'A mini loaf, sweet from ripe bananas and very moist.',
+        contents: '1 whole mini loaf',
+        allergens: ['Egg', 'Milk', 'Wheat'] },
+      { id: 'sampler', name: 'Sampler Box', price: null, left: 0, tint: '#E7DDFB', tilt: '-0.8deg',
+        desc: 'A little of everything from this drop.',
+        contents: '1 slice Nebula Banana Bread · 1 slice Midnight Chocolate Cake · 2 chocolate chip cookies',
+        allergens: ['Egg', 'Milk', 'Wheat'] }
+    ];
+    const yen = (n) => '¥' + n.toLocaleString('en-US');
+    const set = (id, n) => this.setState({ q: Object.assign({}, q, { [id]: n }) });
+    const boxes = data.map((b) => {
+      const qty = q[b.id] || 0;
+      const max = Math.min(b.left, 5);
+      return Object.assign({}, b, {
+        qty: qty,
+        soldOut: b.left === 0,
+        open: b.left > 0,
+        priceLabel: b.price == null ? '¥[price]' : yen(b.price),
+        atMin: qty <= 0,
+        atMax: qty >= max,
+        dec: () => set(b.id, Math.max(0, qty - 1)),
+        inc: () => set(b.id, Math.min(max, qty + 1))
+      });
+    });
+    const count = boxes.reduce((s, b) => s + b.qty, 0);
+    const total = boxes.reduce((s, b) => s + b.qty * (b.price || 0), 0);
+    return {
+      boxes: boxes,
+      count: count,
+      hasCart: count > 0,
+      countLabel: count + (count === 1 ? ' box' : ' boxes'),
+      totalLabel: yen(total)
+    };
+  }
+}
+</script>
+</body>
+</html>
