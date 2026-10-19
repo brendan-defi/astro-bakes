@@ -77,7 +77,7 @@ export const settings: Settings = {
 
 export const boxes: Box[] = [
   {
-    id: "cookie",
+    id: "cookie-box",
     name: "4 Cookie Box",
     price: 1000,
     left: 7,
@@ -90,7 +90,7 @@ export const boxes: Box[] = [
     allergens: ["Egg", "Milk", "Wheat", "Walnut"],
   },
   {
-    id: "loaf",
+    id: "banana-bread",
     name: "Nebula Banana Bread",
     price: 500,
     left: 3,
@@ -102,7 +102,7 @@ export const boxes: Box[] = [
     allergens: ["Egg", "Milk", "Wheat"],
   },
   {
-    id: "sampler",
+    id: "sampler-box",
     name: "Sampler Box",
     price: 900, // sample price; the real one is set in admin
     left: 0,
@@ -238,9 +238,11 @@ export function getHome(q: HomeQuery = {}, src: HomeSource = mockSource): HomeDa
     q.viewer === "ordered" ? sampleViewer : q.viewer === "member" ? { ...sampleViewer, order: null } : anonymousViewer;
   const { catalogue, settings } = src;
   const base = { viewer, settings };
+  // Drafts and cancelled drops are never public, demo overrides included.
   const live = [...src.drops]
     .sort((a, b) => a.openAt.getTime() - b.openAt.getTime())
-    .map((d) => ({ d, s: effectiveState(d, now) }));
+    .map((d) => ({ d, s: effectiveState(d, now) }))
+    .filter(({ s }) => s !== "draft" && s !== "cancelled");
   const current = live.find(({ s }) => s === "open")?.d ?? null;
   const scheduled = live.find(({ s }) => s === "scheduled")?.d ?? null;
   const past = [...live].reverse().find(({ s }) => s === "closed" || s === "baking" || s === "shipped" || s === "complete")?.d ?? null;
@@ -270,7 +272,7 @@ export function getHome(q: HomeQuery = {}, src: HomeSource = mockSource): HomeDa
   }
 
   // Otherwise read the state machine: the earliest unfinished drop is "current".
-  const head = live.find(({ s }) => s !== "draft" && s !== "complete" && s !== "cancelled");
+  const head = live.find(({ s }) => s !== "complete");
   if (!head) return { ...base, state: "nodrop", drop: null, nextDrop: null, boxes: catalogue };
   if (head.s === "scheduled") return { ...base, state: "scheduled", drop: head.d, nextDrop: null, boxes: head.d.boxes };
   if (head.s === "open") return { ...base, state: "open", drop: head.d, nextDrop: null, boxes: head.d.boxes };

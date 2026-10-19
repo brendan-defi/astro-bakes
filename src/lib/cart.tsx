@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { boxes, drop, settings, type Box } from "./data";
+import type { Box } from "./data";
 
 type Quantities = Record<string, number>;
 
@@ -27,13 +27,23 @@ interface CartValue {
 }
 
 const CartContext = createContext<CartValue | null>(null);
-const STORAGE_KEY = `ab-cart:${drop.id}`;
 
 export function maxFor(box: Box): number {
   return Math.min(box.left, box.maxPerCustomer);
 }
 
-export function CartProvider({ children, initial }: { children: ReactNode; initial?: Quantities }) {
+interface ProviderProps {
+  children: ReactNode;
+  /** The drop this cart is for; the cart is stored per drop (PRD 3.3). */
+  dropId: string;
+  /** Boxes on sale in that drop: prices, remaining stock and per-customer limits for clamping. */
+  boxes: Box[];
+  shippingFee: number | null;
+  initial?: Quantities;
+}
+
+export function CartProvider({ children, dropId, boxes, shippingFee, initial }: ProviderProps) {
+  const STORAGE_KEY = `ab-cart:${dropId}`;
   const [qty, setQty] = useState<Quantities>(initial ?? {});
   const [hydrated, setHydrated] = useState(false);
 
@@ -42,8 +52,8 @@ export function CartProvider({ children, initial }: { children: ReactNode; initi
     try {
       // ?demo=cart / ?demo=soldout seed a sample cart for local mockup screenshots.
       const demo = new URLSearchParams(window.location.search).get("demo");
-      if (demo === "cart") setQty({ cookie: 1, loaf: 1 });
-      else if (demo === "soldout") setQty({ cookie: 3, loaf: 1 });
+      if (demo === "cart") setQty({ "cookie-box": 1, "banana-bread": 1 });
+      else if (demo === "soldout") setQty({ "cookie-box": 3, "banana-bread": 1 });
       else {
         const raw = window.localStorage.getItem(STORAGE_KEY);
         if (raw && !initial) setQty(JSON.parse(raw));
@@ -51,27 +61,27 @@ export function CartProvider({ children, initial }: { children: ReactNode; initi
     } catch {}
     setHydrated(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [STORAGE_KEY]);
 
   useEffect(() => {
     if (!hydrated) return;
     try {
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(qty));
     } catch {}
-  }, [qty, hydrated]);
+  }, [qty, hydrated, STORAGE_KEY]);
 
   const set = useCallback((id: string, n: number) => {
     const box = boxes.find((b) => b.id === id);
     if (!box) return;
     const clamped = Math.max(0, Math.min(maxFor(box), Math.floor(n)));
     setQty((q) => (q[id] === clamped ? q : { ...q, [id]: clamped }));
-  }, []);
+  }, [boxes]);
 
   const inc = useCallback((id: string) => setQty((q) => {
     const box = boxes.find((b) => b.id === id);
     if (!box) return q;
     return { ...q, [id]: Math.min(maxFor(box), (q[id] ?? 0) + 1) };
-  }), []);
+  }), [boxes]);
 
   const dec = useCallback((id: string) => setQty((q) => ({ ...q, [id]: Math.max(0, (q[id] ?? 0) - 1) })), []);
   const clear = useCallback(() => setQty({}), []);
@@ -82,10 +92,9 @@ export function CartProvider({ children, initial }: { children: ReactNode; initi
       .map((b) => ({ box: b, qty: qty[b.id], lineTotal: b.price * qty[b.id] }));
     const count = lines.reduce((s, l) => s + l.qty, 0);
     const subtotal = lines.reduce((s, l) => s + l.lineTotal, 0);
-    const shippingFee = settings.shippingFee;
     const total = shippingFee == null || count === 0 ? null : subtotal + shippingFee;
     return { qty, set, inc, dec, clear, lines, count, subtotal, shippingFee, total, hydrated };
-  }, [qty, set, inc, dec, clear, hydrated]);
+  }, [qty, set, inc, dec, clear, hydrated, boxes, shippingFee]);
 
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;
 }

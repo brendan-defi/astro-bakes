@@ -62,7 +62,7 @@ export function Checkout({ locale }: { locale: Locale }) {
 
   function onCheckout() {
     // Simulated server response for the re-check. Real build: POST /api/checkout → hold + Order(pending_payment).
-    const inventory: Record<string, number> = demo === "soldout" ? { cookie: 2, loaf: 0 } : {};
+    const inventory: Record<string, number> = demo === "soldout" ? { "cookie-box": 2, "banana-bread": 0 } : {};
     const found: Change[] = [];
     for (const line of cart.lines) {
       const left = inventory[line.box.id] ?? line.box.left;
