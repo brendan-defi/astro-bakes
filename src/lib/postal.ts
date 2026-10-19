@@ -7,17 +7,19 @@ export interface PostalHit {
   city: string;
   town: string;
   wardEn: string;
+  /** JIS municipality code, e.g. 13110 = Meguro-ku; the 23-ward check runs on this (D20). */
+  wardCode: string;
   /** true when the address is inside Tokyo's 23 wards */
   deliverable: boolean;
 }
 
 const TABLE: Record<string, PostalHit> = {
-  "1530061": { prefecture: "東京都", city: "目黒区", town: "中目黒", wardEn: "Meguro-ku", deliverable: true },
-  "1500001": { prefecture: "東京都", city: "渋谷区", town: "神宮前", wardEn: "Shibuya-ku", deliverable: true },
-  "1060032": { prefecture: "東京都", city: "港区", town: "六本木", wardEn: "Minato-ku", deliverable: true },
-  "1000001": { prefecture: "東京都", city: "千代田区", town: "千代田", wardEn: "Chiyoda-ku", deliverable: true },
-  "1800004": { prefecture: "東京都", city: "武蔵野市", town: "吉祥寺本町", wardEn: "Musashino-shi", deliverable: false },
-  "2310001": { prefecture: "神奈川県", city: "横浜市中区", town: "新港", wardEn: "Yokohama", deliverable: false },
+  "1530061": { prefecture: "東京都", city: "目黒区", town: "中目黒", wardEn: "Meguro-ku", wardCode: "13110", deliverable: true },
+  "1500001": { prefecture: "東京都", city: "渋谷区", town: "神宮前", wardEn: "Shibuya-ku", wardCode: "13113", deliverable: true },
+  "1060032": { prefecture: "東京都", city: "港区", town: "六本木", wardEn: "Minato-ku", wardCode: "13103", deliverable: true },
+  "1000001": { prefecture: "東京都", city: "千代田区", town: "千代田", wardEn: "Chiyoda-ku", wardCode: "13101", deliverable: true },
+  "1800004": { prefecture: "東京都", city: "武蔵野市", town: "吉祥寺本町", wardEn: "Musashino-shi", wardCode: "13203", deliverable: false },
+  "2310001": { prefecture: "神奈川県", city: "横浜市中区", town: "新港", wardEn: "Yokohama", wardCode: "14104", deliverable: false },
 };
 
 export function normalisePostal(input: string): string {
