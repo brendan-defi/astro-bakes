@@ -1,10 +1,10 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Box } from "./data";
 import { demoEnabled } from "./demo";
 
-type Quantities = Record<string, number>;
+export type Quantities = Record<string, number>;
 
 export interface CartLine {
   box: Box;
@@ -24,6 +24,7 @@ interface CartValue {
   subtotal: number;
   shippingFee: number | null;
   total: number | null;
+  /** True once this drop's saved cart has been read on the client. */
   hydrated: boolean;
 }
 
@@ -33,6 +34,26 @@ export function maxFor(box: Box): number {
   return Math.min(box.left, box.maxPerCustomer);
 }
 
+export function storageKey(dropId: string): string {
+  return `ab-cart:${dropId}`;
+}
+
+/** Keep only boxes in this drop, clamped to what can still be bought (D5, D7). Unknown ids and junk are dropped. */
+export function sanitize(qty: Quantities, boxes: Box[]): Quantities {
+  const out: Quantities = {};
+  for (const box of boxes) {
+    const n = Math.min(maxFor(box), Math.floor(Number(qty[box.id] ?? 0)));
+    if (Number.isFinite(n) && n > 0) out[box.id] = n;
+  }
+  return out;
+}
+
+/** ?demo=cart / ?demo=soldout sample carts; development and previews only (see demo.ts). */
+const DEMO_CARTS: Record<string, Quantities> = {
+  cart: { "cookie-box": 1, "banana-bread": 1 },
+  soldout: { "cookie-box": 3, "banana-bread": 1 },
+};
+
 interface ProviderProps {
   children: ReactNode;
   /** The drop this cart is for; the cart is stored per drop (PRD 3.3). */
@@ -40,62 +61,87 @@ interface ProviderProps {
   /** Boxes on sale in that drop: prices, remaining stock and per-customer limits for clamping. */
   boxes: Box[];
   shippingFee: number | null;
+  /** Seed for the first render; wins over anything saved. */
   initial?: Quantities;
 }
 
-export function CartProvider({ children, dropId, boxes, shippingFee, initial }: ProviderProps) {
-  const STORAGE_KEY = `ab-cart:${dropId}`;
-  const [qty, setQty] = useState<Quantities>(initial ?? {});
-  const [hydrated, setHydrated] = useState(false);
+/** The quantities are tagged with the drop they were loaded for, so a drop switch can never persist one drop's cart under another's key. */
+interface CartState {
+  dropId: string;
+  qty: Quantities;
+  hydrated: boolean;
+}
 
-  // Cart is client-side until sign-in (PRD 3.3); persist per drop.
+export function CartProvider({ children, dropId, boxes, shippingFee, initial }: ProviderProps) {
+  const [state, setState] = useState<CartState>({ dropId, qty: initial ?? {}, hydrated: false });
+  const boxesRef = useRef(boxes);
+  boxesRef.current = boxes;
+
+  // Load this drop's cart on mount and again whenever the drop changes (client-side until sign-in, PRD 3.3).
   useEffect(() => {
+    let qty: Quantities = initial ?? {};
     try {
-      // ?demo=cart / ?demo=soldout seed a sample cart; development and previews only.
       const demo = demoEnabled ? new URLSearchParams(window.location.search).get("demo") : null;
-      if (demo === "cart") setQty({ "cookie-box": 1, "banana-bread": 1 });
-      else if (demo === "soldout") setQty({ "cookie-box": 3, "banana-bread": 1 });
-      else {
-        const raw = window.localStorage.getItem(STORAGE_KEY);
-        if (raw && !initial) setQty(JSON.parse(raw));
+      if (demo && DEMO_CARTS[demo]) qty = DEMO_CARTS[demo];
+      else if (!initial) {
+        const raw = window.localStorage.getItem(storageKey(dropId));
+        if (raw) qty = JSON.parse(raw) as Quantities;
       }
     } catch {}
-    setHydrated(true);
+    setState({ dropId, qty: sanitize(qty, boxesRef.current), hydrated: true });
+    // `initial` only seeds the first load.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [STORAGE_KEY]);
+  }, [dropId]);
 
+  // Persist, but only a cart that was loaded for the drop currently on show.
+  const current = state.hydrated && state.dropId === dropId;
   useEffect(() => {
-    if (!hydrated) return;
+    if (!current) return;
     try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(qty));
+      window.localStorage.setItem(storageKey(dropId), JSON.stringify(state.qty));
     } catch {}
-  }, [qty, hydrated, STORAGE_KEY]);
+  }, [current, dropId, state.qty]);
+
+  const update = useCallback((fn: (q: Quantities) => Quantities) => {
+    setState((s) => {
+      const qty = fn(s.qty);
+      return qty === s.qty ? s : { ...s, qty };
+    });
+  }, []);
 
   const set = useCallback((id: string, n: number) => {
     const box = boxes.find((b) => b.id === id);
     if (!box) return;
     const clamped = Math.max(0, Math.min(maxFor(box), Math.floor(n)));
-    setQty((q) => (q[id] === clamped ? q : { ...q, [id]: clamped }));
-  }, [boxes]);
+    update((q) => (q[id] === clamped ? q : { ...q, [id]: clamped }));
+  }, [boxes, update]);
 
-  const inc = useCallback((id: string) => setQty((q) => {
+  const inc = useCallback((id: string) => {
     const box = boxes.find((b) => b.id === id);
-    if (!box) return q;
-    return { ...q, [id]: Math.min(maxFor(box), (q[id] ?? 0) + 1) };
-  }), [boxes]);
+    if (!box) return;
+    update((q) => {
+      const next = Math.min(maxFor(box), (q[id] ?? 0) + 1);
+      return q[id] === next ? q : { ...q, [id]: next };
+    });
+  }, [boxes, update]);
 
-  const dec = useCallback((id: string) => setQty((q) => ({ ...q, [id]: Math.max(0, (q[id] ?? 0) - 1) })), []);
-  const clear = useCallback(() => setQty({}), []);
+  const dec = useCallback((id: string) => {
+    update((q) => (id in q ? { ...q, [id]: Math.max(0, q[id] - 1) } : q));
+  }, [update]);
+
+  const clear = useCallback(() => update(() => ({})), [update]);
 
   const value = useMemo<CartValue>(() => {
+    // While a different drop's cart is still in state, expose an empty one rather than a stale one.
+    const qty = state.dropId === dropId ? state.qty : {};
     const lines: CartLine[] = boxes
       .filter((b) => (qty[b.id] ?? 0) > 0)
       .map((b) => ({ box: b, qty: qty[b.id], lineTotal: b.price * qty[b.id] }));
     const count = lines.reduce((s, l) => s + l.qty, 0);
     const subtotal = lines.reduce((s, l) => s + l.lineTotal, 0);
     const total = shippingFee == null || count === 0 ? null : subtotal + shippingFee;
-    return { qty, set, inc, dec, clear, lines, count, subtotal, shippingFee, total, hydrated };
-  }, [qty, set, inc, dec, clear, hydrated, boxes, shippingFee]);
+    return { qty, set, inc, dec, clear, lines, count, subtotal, shippingFee, total, hydrated: current };
+  }, [state, dropId, current, set, inc, dec, clear, boxes, shippingFee]);
 
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;
 }

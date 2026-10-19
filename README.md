@@ -12,6 +12,15 @@ pnpm dev                   # http://localhost:3000 → redirects to /en or /ja
 pnpm build
 ```
 
+## Tests
+
+```sh
+pnpm test          # Vitest: src/**/*.test.ts(x), jsdom for the cart provider
+pnpm test:watch
+```
+
+Regression tests cover the drop state machine and `getHome()` (timeline, draft visibility, demo overrides) and the cart provider (clamping to injected stock and prices, restoring a saved cart, switching drops, production gating). CI runs type-check and tests on every pull request (`.github/workflows/ci.yml`).
+
 ## Database
 
 Neon Postgres, provisioned through the Vercel Marketplace (resource `neon-claret-ladder`), with Drizzle ORM. The schema is `src/db/schema.ts`; migrations are generated from it into `drizzle/` and reviewed as SQL.
