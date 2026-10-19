@@ -11,6 +11,7 @@ import { getStrings, type Strings } from "@/lib/i18n";
 import { useCart, type CartLine } from "@/lib/cart";
 import { lookupPostal, normalisePostal, type PostalHit } from "@/lib/postal";
 import { clearHold, readHold, startHold, type Hold } from "@/lib/hold";
+import { reservationStatus, reservedLines, totals, type Reservation } from "@/lib/reservation";
 import { ArrowLeftIcon, CardIcon, CheckIcon, ClockIcon, StarShape, TruckIcon, WarningIcon } from "./icons";
 import { Logo } from "./Logo";
 import { Stepper } from "./Stepper";
@@ -39,7 +40,7 @@ function rich(template: (arg: string) => string, arg: string) {
 }
 const plural = (name: string) => (name.endsWith("Box") ? `${name}es` : name);
 
-export function Checkout({ locale, drop: dropIn, lineUrl }: { locale: Locale; drop: CheckoutDrop | null; lineUrl: string }) {
+export function Checkout({ locale, drop: dropIn, lineUrl, held }: { locale: Locale; drop: CheckoutDrop | null; lineUrl: string; held: Reservation | null }) {
   const t = getStrings(locale);
   // Dates for the summary; when no drop is open the cart step shows a closed notice instead.
   const drop = dropIn && { ...dropIn, closeAt: new Date(dropIn.closeAt), shipAt: new Date(dropIn.shipAt), arriveAt: new Date(dropIn.arriveAt) };
@@ -115,11 +116,29 @@ export function Checkout({ locale, drop: dropIn, lineUrl }: { locale: Locale; dr
   useEffect(() => {
     if (!inCheckout) return;
     let h = readHold();
-    if (!h || h.expires < Date.now()) h = startHold();
+    const status = reservationStatus(h, held);
+    if (status === "stale") {
+      // Another tab took or replaced the browser's reservation: this tab must review the cart (PRD 3.3).
+      clearHold();
+      setHold(null);
+      setNotice(t.cartChanged);
+      go("cart");
+      return;
+    }
+    if (status === "none" && h?.checkoutId) {
+      // This tab reserved, but the server no longer holds anything: expired or already ordered.
+      clearHold();
+      setHold(null);
+      setServerExpired(true);
+      return;
+    }
+    if (status === "ok" && held) h = startHold({ ...h, expires: held.expiresAt });
+    else if (!h || h.expires < Date.now()) h = startHold();
     setHold(h);
     const id = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(id);
-  }, [inCheckout]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inCheckout, held]);
   const holdLeft = hold != null ? hold.expires - now : null;
   const holdExpired = inCheckout && (serverExpired || (holdLeft != null && holdLeft <= 0));
 
@@ -204,10 +223,13 @@ export function Checkout({ locale, drop: dropIn, lineUrl }: { locale: Locale; dr
   const shipLine = drop ? t.shipsArrives(fmtDate(drop.shipAt, locale), fmtDate(drop.arriveAt, locale)) : "";
   const shipLineYamato = drop ? t.shipsByYamato(fmtDate(drop.shipAt, locale), fmtDate(drop.arriveAt, locale)) : "";
   const feeLabel = yen(cart.shippingFee, "¥[fee]");
-  const summaryLines = step === "done" && placed ? placed.lines : cart.lines.map((l) => ({ name: l.box.name, qty: l.qty, lineTotal: l.lineTotal }));
-  const summarySubtotal = step === "done" && placed ? placed.subtotal : cart.subtotal;
+  // In the checkout steps the summary is the server's reservation (what placeOrder will buy); the cart step edits the local cart.
+  const buyingLines = inCheckout && held ? reservedLines(held.items, cart.boxes) : cart.lines;
+  const buying = { lines: buyingLines, ...totals(buyingLines, cart.shippingFee) };
+  const summaryLines = step === "done" && placed ? placed.lines : buying.lines.map((l) => ({ name: l.box.name, qty: l.qty, lineTotal: l.lineTotal }));
+  const summarySubtotal = step === "done" && placed ? placed.subtotal : buying.subtotal;
   const summaryCount = summaryLines.reduce((n, l) => n + l.qty, 0);
-  const summaryTotal = step === "done" && placed ? placed.total : cart.total;
+  const summaryTotal = step === "done" && placed ? placed.total : buying.total;
   const totalLabel = yen(summaryTotal, "¥[total]");
   const placeLabel = pay === "card" ? t.placeOrderCard(totalLabel) : t.placeOrderPaypay;
   const backLabel = { signin: t.backToBoxes, code: t.useDifferentEmail, delivery: t.back, pay: t.backToDelivery }[step as "signin"] ?? t.back;
@@ -272,7 +294,7 @@ export function Checkout({ locale, drop: dropIn, lineUrl }: { locale: Locale; dr
       {(step === "signin" || step === "code" || step === "delivery") && (
         <div className={s.pinned}>
           <div style={{ minWidth: 0 }}>
-            <div className={s.l1}>{t.boxCount(cart.count)} · {yen(cart.subtotal)} <span className={s.sub13}>{t.plusShipping}</span></div>
+            <div className={s.l1}>{t.boxCount(buying.count)} · {yen(buying.subtotal)} <span className={s.sub13}>{t.plusShipping}</span></div>
             <div className={s.l2}>{shipLine}</div>
           </div>
           <TruckIcon />
@@ -425,13 +447,13 @@ export function Checkout({ locale, drop: dropIn, lineUrl }: { locale: Locale; dr
                   <div className={s.mobileOnly}>
                     <section aria-label={t.yourOrder} className={`${s.section} ${s.sectionRaised}`}>
                       <div className={s.sectionTitle}>{t.yourOrder}</div>
-                      {cart.lines.map((l) => (
+                      {buying.lines.map((l) => (
                         <div key={l.box.id} className={s.tr}>
                           <span>{l.box.name} <span className="w9">× {l.qty}</span> <span className={s.sub12}>({yen(l.box.price)} {t.each})</span></span>
                           <span className={s.v} style={{ whiteSpace: "nowrap" }}>{yen(l.lineTotal)}</span>
                         </div>
                       ))}
-                      <div className={`${s.tr}`} style={{ borderTop: "2px dashed var(--ink)", paddingTop: 8, marginTop: 2 }}><span>{t.subtotal}</span><span className={s.v}>{yen(cart.subtotal)}</span></div>
+                      <div className={`${s.tr}`} style={{ borderTop: "2px dashed var(--ink)", paddingTop: 8, marginTop: 2 }}><span>{t.subtotal}</span><span className={s.v}>{yen(buying.subtotal)}</span></div>
                       <div className={s.tr}><span>{t.shipping}</span><span className={s.v}>{feeLabel}</span></div>
                       <div className={`${s.tr} ${s.trTotal}`} style={{ borderTop: 0, paddingTop: 0, marginTop: 0 }}><span className={s.k}>{t.total} <span className={s.sub12}>{t.taxIncl}</span></span><span className={s.v}>{totalLabel}</span></div>
                     </section>

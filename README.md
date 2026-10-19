@@ -49,7 +49,8 @@ The homepage reads drops, boxes and settings from the database (`src/lib/drops.t
 
 - **Checkout →** calls `startCheckout`: inside a transaction that locks the drop's boxes it re-checks the cart against `cap − sold − active holds`, reports anything gone or cut, and otherwise writes a `carts` row plus 10-minute `inventory_holds`. The cart id goes in an httpOnly `ab-cart` cookie; the hold expiry comes back for the countdown.
 - **Place order** calls `placeOrder`: with an unexpired held cart it creates the customer from the checkout email (unverified until sign-in exists), saves the address, takes the next per-drop sequence under a row lock (`AB-003-017`), writes `orders` + `order_items` with name and price snapshots, then `markPaid` sells the stock and releases the holds. Payment is **mocked**: `markPaid` runs immediately with a note on the order; the Stripe PR moves it into the webhook.
-- No drop open means no checkout: the cart step shows a closed notice and the actions refuse (PRD 5.2a). Outside production `?state=open` sells the most recent drop and `?demo=soldout` makes the re-check find only 2 cookie boxes and no loaf.
+- The storefront's "N left" is `cap − sold − active holds`, leaving out the viewer's own cart (D6, D8). In the checkout steps the summary and the submission are the server's reservation (checkout id + revision), not the editable cart: a tab whose reservation was replaced by another tab is sent back to review.
+- No drop open means no checkout: the cart step shows a closed notice and the actions refuse (PRD 5.2a). A checkout that already holds boxes can still finish after close while its hold lasts (PRD 3.8). Outside production `?state=open` sells the most recent drop and `?demo=soldout` makes the re-check find only 2 cookie boxes and no loaf.
 
 ## Where things are
 

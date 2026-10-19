@@ -14,6 +14,8 @@ export interface CartLine {
 
 interface CartValue {
   qty: Quantities;
+  /** The boxes on sale in this cart's drop. */
+  boxes: Box[];
   /** Set a box's quantity, clamped to [0, min(left, maxPerCustomer)]. */
   set: (id: string, n: number) => void;
   inc: (id: string) => void;
@@ -140,7 +142,7 @@ export function CartProvider({ children, dropId, boxes, shippingFee, initial }: 
     const count = lines.reduce((s, l) => s + l.qty, 0);
     const subtotal = lines.reduce((s, l) => s + l.lineTotal, 0);
     const total = shippingFee == null || count === 0 ? null : subtotal + shippingFee;
-    return { qty, set, inc, dec, clear, lines, count, subtotal, shippingFee, total, hydrated: current };
+    return { qty, boxes, set, inc, dec, clear, lines, count, subtotal, shippingFee, total, hydrated: current };
   }, [state, dropId, current, set, inc, dec, clear, boxes, shippingFee]);
 
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;

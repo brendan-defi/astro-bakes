@@ -23,8 +23,11 @@ export type { ReCheckChange, Available, DeliveryInput } from "./checkout-rules";
  *                  drop. markPaid() sells the stock and releases the holds; until
  *                  Stripe is wired it runs immediately (mock payment).
  *
- * Locking: both writers lock the cart row first, then the drop's rows, so two
- * tabs or two concurrent submissions serialise instead of racing.
+ * Locking: both writers take the cart row, then the drop row, then the drop's
+ * box rows, in that order. The drop row lock serialises every writer for a
+ * drop, which also covers the implicit foreign-key locks (a cart insert
+ * references the drop; order items reference the boxes) so startCheckout and
+ * placeOrder can't deadlock against each other.
  * Server only. The pure rules live in checkout-rules.ts so they can be tested.
  */
 
@@ -126,12 +129,13 @@ export async function startCheckout(input: StartInput, cartId: string | null): P
   const holdMinutes = await setting(db, "hold_minutes", defaultSettings.holdMinutes);
 
   return db.transaction(async (tx) => {
-    // Cart lock first (same order as placeOrder), then the drop's boxes so two carts can't both take the last one.
+    // Lock order: cart, then drop, then the drop's boxes (see the module comment).
     let cart = cartId && UUID.test(cartId) ? await lockCart(tx, cartId) : null;
     if (cart && cart.dropId !== drop.id) {
       await tx.delete(carts).where(eq(carts.id, cart.id)); // a leftover from another drop; its holds go with it
       cart = null;
     }
+    await tx.execute(sql`select id from ${drops} where id = ${drop.id} for update`);
     await tx.execute(sql`select id from ${dropBoxes} where ${dropBoxes.dropId} = ${drop.id} for update`);
     const avail = await availability(tx, drop.id, cart?.id ?? null);
     if (demoEnabled && input.flags?.demo === "soldout") {
@@ -222,19 +226,17 @@ export async function placeOrder(input: PlaceInput, cartId: string | null): Prom
   const db = getDb();
 
   return db.transaction(async (tx) => {
-    // The lock serialises concurrent submissions and startCheckout; a second submission finds the cart gone.
+    // Lock order: cart, then drop (see the module comment). A second submission finds the cart gone.
     const cart = await lockCart(tx, cartId);
     if (!cart) return { ok: false as const, error: "hold_expired" as const };
     if (cart.revision !== input.revision) return { ok: false as const, error: "changed" as const };
+    await tx.execute(sql`select id from ${drops} where id = ${cart.dropId} for update`);
     const holds = await holdsOf(tx, cart.id);
     const drop = await tx.query.drops.findFirst({ where: eq(drops.id, cart.dropId) });
     const now = new Date();
     if (!drop || drop.slug !== input.dropId || holds.length === 0 || holds.some((h) => h.expiresAt <= now)) {
       return { ok: false as const, error: "hold_expired" as const };
     }
-
-    // One order number per drop, in sequence: lock the drop while we pick the next one.
-    await tx.execute(sql`select id from ${drops} where id = ${drop.id} for update`);
 
     // The account: found by email, or created unverified from the checkout until sign-in exists (PRD 2.2).
     // An existing customer's profile and saved address are never changed from an unverified checkout.

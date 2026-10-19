@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { getHome } from "@/lib/data";
 import { demoEnabled } from "@/lib/demo";
 import { loadCatalogue, loadDrops, loadSettings } from "@/lib/drops";
+import { cartIdFromCookie } from "@/lib/cart-cookie";
 import { isLocale } from "@/lib/i18n";
 import { Ticker } from "@/components/Ticker";
 import { Nav } from "@/components/Nav";
@@ -24,7 +25,7 @@ export default async function HomePage({ params, searchParams }: { params: Promi
   const one = (k: string) => (Array.isArray(q[k]) ? q[k][0] : q[k]);
   // Homepage variant from the drop state machine over the database. Outside production,
   // ?state= / ?next= / ?viewer= override it so every variant can be opened directly (README).
-  const [drops, catalogue, settings] = await Promise.all([loadDrops(locale), loadCatalogue(locale), loadSettings()]);
+  const [drops, catalogue, settings] = await Promise.all([loadDrops(locale, await cartIdFromCookie()), loadCatalogue(locale), loadSettings()]);
   const overrides = demoEnabled ? { state: one("state"), next: one("next"), viewer: one("viewer") } : {};
   const home = getHome(overrides, { drops, catalogue, settings });
   const open = home.state === "open";

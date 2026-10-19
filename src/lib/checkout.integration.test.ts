@@ -8,6 +8,7 @@ import * as schema from "@/db/schema";
 import { closeDb } from "@/db";
 import { seed } from "@/db/seed";
 import { availability, heldCheckout, markPaid, placeOrder, startCheckout, type PlaceInput } from "@/lib/checkout";
+import { loadDrops } from "@/lib/drops";
 
 /**
  * The checkout write path against a real Postgres (TEST_DATABASE_URL; see README).
@@ -195,6 +196,33 @@ describe.skipIf(!URL)("checkout write path", () => {
     expect(await placeOrder(input(id, 1, "not-an-email"), id)).toEqual({ ok: false, error: "invalid" });
     expect(await placeOrder(input(id, 1, "x@test.invalid", { delivery: { name: "A", phone: "1", postal: "180-0004", line1: "1", line2: "" } }), id)).toEqual({ ok: false, error: "invalid" });
     expect(await count("orders")).toBe(0);
+  });
+
+  it("never deadlocks startCheckout against placeOrder", async () => {
+    // Each round: one browser submits its held cart while several others start checkouts. Postgres would
+    // raise 40P01 on a lock-order cycle, which surfaces here as a rejected promise.
+    for (let round = 0; round < 6; round++) {
+      const id = await held();
+      const results = await Promise.all([
+        placeOrder(input(id, 1, `dl${round}@test.invalid`), id),
+        start({ "cookie-box": 1 }),
+        start({ "banana-bread": 1 }),
+        start({ "cookie-box": 2, "banana-bread": 1 }),
+      ]);
+      expect(results[0].ok).toBe(true);
+      for (const r of results.slice(1)) expect(r.ok).toBe(true);
+      await db.execute(sql`truncate order_items, orders, inventory_holds, carts cascade`);
+      await seed(db);
+    }
+  });
+
+  it("storefront availability subtracts other carts' active holds but not the viewer's own (D6, D8)", async () => {
+    const id = await held(); // 2 cookies + 1 loaf
+    const left = async (exclude: string | null) => Object.fromEntries((await loadDrops("en", exclude)).find((d) => d.id === DROP)!.boxes.map((b) => [b.id, b.left]));
+    expect(await left(null)).toMatchObject({ "cookie-box": 5, "banana-bread": 2, "sampler-box": 0 });
+    expect(await left(id)).toMatchObject({ "cookie-box": 7, "banana-bread": 3 });
+    await db.update(schema.inventoryHolds).set({ expiresAt: new Date(Date.now() - 1000) }).where(eq(schema.inventoryHolds.cartId, id));
+    expect(await left(null)).toMatchObject({ "cookie-box": 7, "banana-bread": 3 });
   });
 
   it("markPaid is idempotent", async () => {

@@ -16,7 +16,8 @@ export default async function CheckoutPage({ params, searchParams }: { params: P
   if (!isLocale(locale)) notFound();
   const q = await searchParams;
   const one = (k: string) => (Array.isArray(q[k]) ? q[k][0] : q[k]);
-  const [drops, catalogue, settings, held] = await Promise.all([loadDrops(locale), loadCatalogue(locale), loadSettings(), heldCheckout(await cartIdFromCookie())]);
+  const cartId = await cartIdFromCookie();
+  const [drops, catalogue, settings, held] = await Promise.all([loadDrops(locale, cartId), loadCatalogue(locale), loadSettings(), heldCheckout(cartId)]);
   // A checkout with unexpired holds can finish even after the drop closed (PRD 3.8);
   // otherwise sell the drop the homepage shows, which is only the open one.
   const overrides = demoEnabled ? { state: one("state") } : {};
@@ -33,7 +34,7 @@ export default async function CheckoutPage({ params, searchParams }: { params: P
   return (
     <CartProvider dropId={selling?.id ?? "none"} boxes={selling?.boxes ?? []} shippingFee={settings.shippingFee}>
       <Suspense>
-        <Checkout locale={locale} drop={drop} lineUrl={settings.lineUrl} />
+        <Checkout locale={locale} drop={drop} lineUrl={settings.lineUrl} held={held && { checkoutId: held.checkoutId, revision: held.revision, expiresAt: held.expiresAt, items: held.items }} />
       </Suspense>
     </CartProvider>
   );
