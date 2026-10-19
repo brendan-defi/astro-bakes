@@ -21,7 +21,7 @@ pnpm test:watch
 
 Unit tests cover the drop state machine and `getHome()` (timeline, draft visibility, demo overrides), the cart provider (clamping to injected stock and prices, restoring a saved cart, switching drops, production gating) and the pure checkout rules.
 
-Integration tests (`src/lib/checkout.integration.test.ts`) run the real write path against Postgres: holds and availability, concurrent order submission, reservation changes between tabs, the per-customer limit across orders, finishing a held checkout after the drop closes, and customer records never being overwritten. They need `TEST_DATABASE_URL` and skip without it:
+Integration tests (`src/lib/checkout.integration.test.ts`, `src/lib/auth.integration.test.ts`) run the real write paths against Postgres: sign-in by link and by code, lockout, expiry, rate limits, subscriber conversion, sessions; holds and availability, concurrent order submission, reservation changes between tabs, the per-customer limit across orders, finishing a held checkout after the drop closes, and customer records never being overwritten. They need `TEST_DATABASE_URL` and skip without it:
 
 ```sh
 docker run -d --name astro-test-pg -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=astro_test -p 5433:5432 postgres:16
@@ -41,7 +41,16 @@ pnpm db:seed       # load the sample catalogue, Drop 03 / 04, settings, sample c
 pnpm db:studio     # browse the data
 ```
 
-The homepage reads drops, boxes and settings from the database (`src/lib/drops.ts`). Tables: customers, addresses, subscribers, auth_tokens, drops, boxes, items, box_items, drop_boxes, settings, carts, inventory_holds, orders, order_items.
+The homepage reads drops, boxes and settings from the database (`src/lib/drops.ts`). Tables: customers, addresses, subscribers, auth_tokens, sessions, notification_log, drops, boxes, items, box_items, drop_boxes, settings, carts, inventory_holds, orders, order_items.
+
+## Sign-in
+
+Magic link + 6-digit code (D13, PRD 2.1), in `src/lib/auth.ts` with the pure rules in `auth-rules.ts`:
+
+- **Request** (`/sign-in`, or the checkout's email step): one email with a link and a code, same answer whether or not the address has an account, rate-limited per email and per IP. Tokens live in `auth_tokens` as hashes, 15 minutes, single use; the code locks after 5 wrong tries.
+- **Verify**: the link hits `/{locale}/auth/verify`, the code goes through a server action. First verified sign-in creates the customer, converts a matching notify-me subscriber (PRD 2.7), and opens a 90-day session (`sessions` table, `ab-session` httpOnly cookie). `/account` shows who you are and signs out.
+- **Checkout** places orders for the signed-in customer only; the confirmed delivery details become their saved profile and address (PRD 2.3). The magic link lands back on the checkout at the delivery step with the cart intact.
+- **Email** goes through Resend (D23, Vercel Marketplace resource `resend-email-coquelicot-diamond`, Tokyo region) via `src/lib/email.ts`; every send is recorded in `notification_log`. The sending domain needs Resend's DKIM and SPF records at GoDaddy before `hello@astrobakes.xyz` can send; until then set `EMAIL_FROM="Astro Bakes <onboarding@resend.dev>"` for testing to your own address.
 
 ## Checkout write path
 

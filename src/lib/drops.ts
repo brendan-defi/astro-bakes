@@ -1,6 +1,6 @@
 import { and, asc, eq, gt, sql } from "drizzle-orm";
 import { getDb } from "@/db";
-import { boxes as boxesTable, dropBoxes as dropBoxesTable, drops as dropsTable, inventoryHolds, settings as settingsTable, type BoxRow, type DropBoxRow } from "@/db/schema";
+import { boxes as boxesTable, dropBoxes as dropBoxesTable, drops as dropsTable, inventoryHolds, orderItems, orders, settings as settingsTable, type BoxRow, type DropBoxRow } from "@/db/schema";
 import { settings as defaultSettings, type Box, type Drop, type Locale, type Settings } from "./data";
 import { isUuid } from "./uuid";
 
@@ -77,6 +77,20 @@ export async function loadDrops(locale: Locale, excludeCartId: string | null = n
 export async function loadCatalogue(locale: Locale): Promise<Box[]> {
   const rows = await getDb().select().from(boxesTable).where(eq(boxesTable.active, true)).orderBy(asc(boxesTable.sort));
   return rows.map((b, i) => toBox(b, locale, i));
+}
+
+/** The customer's live order in a drop, for the closed-state hero (PRD 1.1): "Your 2 boxes ship Sun, Oct 25". */
+export async function loadViewerOrder(customerId: string, dropSlug: string): Promise<{ number: string; dropId: string; boxCount: number } | null> {
+  const [row] = await getDb()
+    .select({ number: orders.number, boxCount: sql<number>`coalesce(sum(${orderItems.qty}), 0)::int` })
+    .from(orders)
+    .innerJoin(dropsTable, eq(orders.dropId, dropsTable.id))
+    .leftJoin(orderItems, eq(orderItems.orderId, orders.id))
+    .where(and(eq(orders.customerId, customerId), eq(dropsTable.slug, dropSlug), sql`${orders.state} not in ('cancelled', 'expired')`))
+    .groupBy(orders.id, orders.number)
+    .orderBy(asc(orders.createdAt))
+    .limit(1);
+  return row ? { number: row.number, dropId: dropSlug, boxCount: row.boxCount } : null;
 }
 
 /** Admin settings (PRD 4.9) over the code defaults, so a missing key never breaks a page. */

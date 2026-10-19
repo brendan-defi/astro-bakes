@@ -221,6 +221,18 @@ const en = {
   orderFailed: "We couldn't place your order and nothing was charged. Check your details and try again.",
   cartChanged: "Your cart was changed in another tab. Check it over, then continue.",
   dropUnavailable: "This drop is no longer taking orders, so we couldn't place yours. Nothing was charged.",
+  // sign-in (PRD 2.1)
+  invalidEmail: "That doesn't look like an email address.",
+  tooManyRequests: "Too many sign-in emails just now. Wait a few minutes, then try again.",
+  codeInvalid: "That code isn't right. Check the newest email and try again.",
+  codeExpired: "That code has expired. Request a new one.",
+  codeLocked: "Too many tries. Request a new code.",
+  linkExpired: "That sign-in link has expired or was already used. Request a new one.",
+  linkWorksToo: "The link in the email works too, on any device.",
+  signedOut: "Your session ended. Sign in again to finish.",
+  accountTitle: "Your account",
+  signedInAs: (email: string) => `Signed in as ${email}`,
+  signOut: "Sign out",
   limitReached: (already: number, name: string, max: number) => `You've already ordered ${already} × ${name} in this drop. The limit is ${max} of each box per person.`,
   // ---- scheduled / closed / no-drop homepage (design-ref/DROP-STATES.md) ----
   dropN: (n: number) => `Drop ${String(n).padStart(2, "0")}`,

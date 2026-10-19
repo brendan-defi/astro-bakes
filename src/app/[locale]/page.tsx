@@ -1,7 +1,8 @@
 import { notFound } from "next/navigation";
 import { getHome } from "@/lib/data";
 import { demoEnabled } from "@/lib/demo";
-import { loadCatalogue, loadDrops, loadSettings } from "@/lib/drops";
+import { loadCatalogue, loadDrops, loadSettings, loadViewerOrder } from "@/lib/drops";
+import { currentCustomer } from "@/lib/auth";
 import { cartIdFromCookie } from "@/lib/cart-cookie";
 import { isLocale } from "@/lib/i18n";
 import { Ticker } from "@/components/Ticker";
@@ -25,9 +26,14 @@ export default async function HomePage({ params, searchParams }: { params: Promi
   const one = (k: string) => (Array.isArray(q[k]) ? q[k][0] : q[k]);
   // Homepage variant from the drop state machine over the database. Outside production,
   // ?state= / ?next= / ?viewer= override it so every variant can be opened directly (README).
-  const [drops, catalogue, settings] = await Promise.all([loadDrops(locale, await cartIdFromCookie()), loadCatalogue(locale), loadSettings()]);
+  const [drops, catalogue, settings, me] = await Promise.all([loadDrops(locale, await cartIdFromCookie()), loadCatalogue(locale), loadSettings(), currentCustomer()]);
   const overrides = demoEnabled ? { state: one("state"), next: one("next"), viewer: one("viewer") } : {};
-  const home = getHome(overrides, { drops, catalogue, settings });
+  let home = getHome(overrides, { drops, catalogue, settings });
+  if (me && !overrides.viewer) {
+    // A real session beats the sample viewer: avatar, notification preference, and their order in the drop on show.
+    const order = home.drop ? await loadViewerOrder(me.id, home.drop.id) : null;
+    home = { ...home, viewer: { signedIn: true, initial: (me.name || me.email).trim().charAt(0).toUpperCase(), optedIn: me.marketingOptIn, order } };
+  }
   const open = home.state === "open";
   return (
     // The cart is scoped to the drop on show, so steppers clamp against its real stock and prices.

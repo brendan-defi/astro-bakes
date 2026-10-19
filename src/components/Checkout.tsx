@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { sampleCustomer, type Box, type Locale } from "@/lib/data";
+import type { Box, Locale } from "@/lib/data";
 import { placeOrderAction, startCheckoutAction } from "@/app/[locale]/checkout/actions";
+import { requestSignInAction, verifyCodeAction } from "@/app/[locale]/auth/actions";
 import { demoEnabled } from "@/lib/demo";
 import { fmtCountdown, fmtDate, fmtDateTime, yen } from "@/lib/format";
 import { getStrings, type Strings } from "@/lib/i18n";
@@ -30,6 +31,8 @@ interface PlacedOrder { number: string; lines: { name: string; qty: number; line
 
 /** The open drop being sold, from the server. Dates are ISO strings so the page can pass them to this client component. */
 export interface CheckoutDrop { id: string; number: number; name: string; closeAt: string; shipAt: string; arriveAt: string }
+/** The signed-in customer's saved details, for prefill (PRD 2.3). */
+export interface CheckoutCustomer { email: string; name: string; phone: string; postal: string; line1: string; line2: string }
 
 const ORDER_KEY = "ab-last-order";
 
@@ -40,7 +43,7 @@ function rich(template: (arg: string) => string, arg: string) {
 }
 const plural = (name: string) => (name.endsWith("Box") ? `${name}es` : name);
 
-export function Checkout({ locale, drop: dropIn, lineUrl, held }: { locale: Locale; drop: CheckoutDrop | null; lineUrl: string; held: Reservation | null }) {
+export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { locale: Locale; drop: CheckoutDrop | null; lineUrl: string; held: Reservation | null; customer: CheckoutCustomer | null }) {
   const t = getStrings(locale);
   // Dates for the summary; when no drop is open the cart step shows a closed notice instead.
   const drop = dropIn && { ...dropIn, closeAt: new Date(dropIn.closeAt), shipAt: new Date(dropIn.shipAt), arriveAt: new Date(dropIn.arriveAt) };
@@ -142,17 +145,60 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held }: { locale: Loca
   const holdLeft = hold != null ? hold.expires - now : null;
   const holdExpired = inCheckout && (serverExpired || (holdLeft != null && holdLeft <= 0));
 
-  // ---- sign in ----
+  // ---- sign in (PRD 2.1; the magic link lands back here at the delivery step) ----
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
+  const [authNotice, setAuthNotice] = useState<string | null>(null);
   const [resendAt, setResendAt] = useState<number | null>(null);
   useEffect(() => { if (step === "code") setResendAt(Date.now() + 30_000); }, [step]);
   const resendLeft = resendAt ? Math.max(0, resendAt - now) : 0;
+  useEffect(() => {
+    // Already signed in: there is nothing to ask at the email steps.
+    if (customer && (step === "signin" || step === "code")) go("delivery");
+  }, [customer, step, go]);
+
+  async function requestCode() {
+    if (!email || busy) return;
+    setBusy(true);
+    setAuthNotice(null);
+    try {
+      const params = new URLSearchParams(sp.toString());
+      params.set("step", "delivery");
+      const r = await requestSignInAction({ email, locale, next: `${pathname}?${params}` });
+      if (!r.ok) { setAuthNotice(r.error === "rate_limited" ? t.tooManyRequests : t.invalidEmail); return; }
+      setCode("");
+      setResendAt(Date.now() + 30_000);
+      if (step !== "code") go("code");
+    } finally { setBusy(false); }
+  }
+
+  async function submitCode() {
+    if (code.length !== 6 || busy) return;
+    setBusy(true);
+    setAuthNotice(null);
+    try {
+      const r = await verifyCodeAction({ email, code });
+      if (!r.ok) { setAuthNotice(r.error === "locked" ? t.codeLocked : r.error === "expired" ? t.codeExpired : t.codeInvalid); return; }
+      router.refresh(); // pick up the session: the page re-renders with the customer and their saved details
+      go("delivery");
+    } finally { setBusy(false); }
+  }
 
   // ---- delivery ----
-  const [addr, setAddr] = useState<Address>({ name: sampleCustomer.name, phone: sampleCustomer.phone, postal: sampleCustomer.postalCode, line1: sampleCustomer.line1, line2: sampleCustomer.line2 });
-  const [hit, setHit] = useState<PostalHit | null>(() => lookupPostal(sampleCustomer.postalCode));
-  const [postalTried, setPostalTried] = useState(true);
+  const prefill = (c: CheckoutCustomer | null): Address => ({ name: c?.name ?? "", phone: c?.phone ?? "", postal: c?.postal ?? "", line1: c?.line1 ?? "", line2: c?.line2 ?? "" });
+  const [addr, setAddr] = useState<Address>(() => prefill(customer));
+  const [hit, setHit] = useState<PostalHit | null>(() => (customer?.postal ? lookupPostal(customer.postal) : null));
+  const [postalTried, setPostalTried] = useState(!!customer?.postal);
+  const [prefilledFor, setPrefilledFor] = useState<string | null>(customer?.email ?? null);
+  useEffect(() => {
+    // The session arrives after the code step: prefill once from the saved details, without clobbering edits.
+    if (customer && customer.email !== prefilledFor) {
+      setAddr(prefill(customer));
+      setHit(customer.postal ? lookupPostal(customer.postal) : null);
+      setPostalTried(!!customer.postal);
+      setPrefilledFor(customer.email);
+    }
+  }, [customer, prefilledFor]);
   const [gift, setGift] = useState(false);
   const [giftMsg, setGiftMsg] = useState("Happy birthday! Save one for me.");
   const [pay, setPay] = useState<"card" | "paypay">("card");
@@ -195,7 +241,6 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held }: { locale: Loca
         dropId: drop.id,
         checkoutId: h.checkoutId,
         revision: h.revision,
-        email: email || sampleCustomer.email, // sign-in is still mocked; the typed email stands in for the account (PRD 2.2)
         locale,
         delivery: addr,
         gift: gift ? giftMsg : null,
@@ -205,6 +250,7 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held }: { locale: Loca
         if (res.error === "hold_expired") { clearHold(); setServerExpired(true); }
         else if (res.error === "changed") { clearHold(); setNotice(t.cartChanged); go("cart"); }
         else if (res.error === "drop_closed") { clearHold(); setNotice(t.dropUnavailable); go("cart"); }
+        else if (res.error === "signed_out") { setAuthNotice(t.signedOut); go("signin"); }
         else if (res.error === "limit") { clearHold(); setNotice(t.limitReached(res.already, res.name, res.max)); go("cart"); }
         else { setNotice(t.orderFailed); setTouched(true); go("delivery"); }
         return;
@@ -234,7 +280,7 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held }: { locale: Loca
   const totalLabel = yen(summaryTotal, "¥[total]");
   const placeLabel = pay === "card" ? t.placeOrderCard(totalLabel) : t.placeOrderPaypay;
   const backLabel = { signin: t.backToBoxes, code: t.useDifferentEmail, delivery: t.back, pay: t.backToDelivery }[step as "signin"] ?? t.back;
-  const doneEmail = placed?.email || email || sampleCustomer.email;
+  const doneEmail = placed?.email || customer?.email || email;
   const doneName = placed?.address.name ?? addr.name;
   const doneAddr = placed ? `${placed.hit.prefecture}${placed.hit.city}${placed.hit.town}${placed.address.line1}` : shortAddress;
 
@@ -329,10 +375,11 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held }: { locale: Loca
                 <div className={`stack ${s.narrow}`} style={{ gap: 16 }}>
                   <h1 className={`display ${s.h1sm}`}>{t.signInTitle}</h1>
                   <p className={s.lead}>{t.signInBody}</p>
-                  <form className={s.form} onSubmit={(e) => { e.preventDefault(); if (email) go("code"); }}>
+                  {authNotice && <div role="alert" className="note">{authNotice}</div>}
+                  <form className={s.form} onSubmit={(e) => { e.preventDefault(); requestCode(); }}>
                     <label htmlFor="co-email" className="label">{t.emailAddress}</label>
                     <input id="co-email" type="email" required autoComplete="email" placeholder="you@example.com" className="input" value={email} onChange={(e) => setEmail(e.target.value)} />
-                    <button type="submit" className={`btn btn-primary ${s.selfStart}`} style={{ marginTop: 6 }}>{t.emailMeCode}</button>
+                    <button type="submit" className={`btn btn-primary ${s.selfStart}`} style={{ marginTop: 6 }} disabled={busy}>{t.emailMeCode}</button>
                   </form>
                   <div className={s.inline}><CheckIcon />{t.cartStays}</div>
                 </div>
@@ -342,18 +389,19 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held }: { locale: Loca
               {step === "code" && (
                 <div className={`stack ${s.narrow}`} style={{ gap: 16 }}>
                   <h1 className={`display ${s.h1sm}`}>{t.checkEmail}</h1>
-                  <p className={s.lead}>{rich(t.sentTo, email || sampleCustomer.email)}</p>
-                  <form className={s.form} onSubmit={(e) => { e.preventDefault(); if (code.length === 6) go("delivery"); }}>
+                  <p className={s.lead}>{rich(t.sentTo, email)}</p>
+                  {authNotice && <div role="alert" className="note">{authNotice}</div>}
+                  <form className={s.form} onSubmit={(e) => { e.preventDefault(); submitCode(); }}>
                     <label htmlFor="co-code" className="label">{t.sixDigit}</label>
                     <div className={s.codeRow}>
                       <input id="co-code" type="text" inputMode="numeric" autoComplete="one-time-code" maxLength={6} placeholder="000000" className={`input ${s.codeInput}`} value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))} />
-                      <button type="submit" className="btn btn-primary" disabled={code.length !== 6}>{t.continue}</button>
+                      <button type="submit" className="btn btn-primary" disabled={code.length !== 6 || busy}>{t.continue}</button>
                     </div>
                   </form>
                   <div className={s.hideDesktop}><div className="note">{t.inAppTip}</div></div>
                   <div className={s.resendRow}>
                     <span>{t.didntGetIt}</span>
-                    <button type="button" className={s.resendBtn} disabled={resendLeft > 0} onClick={() => setResendAt(Date.now() + 30_000)}>
+                    <button type="button" className={s.resendBtn} disabled={resendLeft > 0 || busy} onClick={() => requestCode()}>
                       {resendLeft > 0 ? t.resendIn(fmtCountdown(resendLeft)) : t.resend}
                     </button>
                     <span className={`${s.expires} ${s.hideMobile}`}>{t.expires}</span>

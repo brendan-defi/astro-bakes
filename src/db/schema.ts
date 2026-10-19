@@ -114,11 +114,51 @@ export const authTokens = pgTable(
     email: text().notNull(),
     tokenHash: text().notNull().unique(),
     codeHash: text().notNull(),
+    /** Wrong-code attempts; the token locks after a few (PRD 5.4). */
+    attempts: integer().notNull().default(0),
+    locale: localeEnum().notNull().default("en"),
+    /** Same-site path to return to after sign-in (checkout step 2, the account page). */
+    next: text(),
+    /** Hash of the requesting IP, for the per-IP rate limit (PRD 5.4). */
+    ipHash: text(),
     expiresAt: timestamp({ withTimezone: true }).notNull(),
     usedAt: timestamp({ withTimezone: true }),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("auth_tokens_email_idx").on(t.email)],
+  (t) => [index("auth_tokens_email_idx").on(t.email, t.createdAt), index("auth_tokens_ip_idx").on(t.ipHash, t.createdAt)],
+);
+
+/** A signed-in browser: a random token in a 90-day httpOnly cookie, hashed here, so sign-out and revocation are real (PRD 2.1). */
+export const sessions = pgTable(
+  "sessions",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    customerId: uuid()
+      .notNull()
+      .references(() => customers.id, { onDelete: "cascade" }),
+    tokenHash: text().notNull().unique(),
+    expiresAt: timestamp({ withTimezone: true }).notNull(),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    lastSeenAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("sessions_customer_idx").on(t.customerId)],
+);
+
+/** Every email we send (PRD 5.1, 5.3): what, to whom, when, and the provider's id or the error. */
+export const notificationLog = pgTable(
+  "notification_log",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    /** sign_in, order_confirmation, order_cancelled, shipped, announcement, internal … */
+    type: text().notNull(),
+    to: text().notNull(),
+    customerId: uuid().references(() => customers.id, { onDelete: "set null" }),
+    orderId: uuid().references(() => orders.id, { onDelete: "set null" }),
+    providerMessageId: text(),
+    error: text(),
+    sentAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("notification_log_to_idx").on(t.to, t.sentAt)],
 );
 
 // ---------------------------------------------------------------- Drops
@@ -338,6 +378,10 @@ export const orderItems = pgTable(
 export const customersRelations = relations(customers, ({ one, many }) => ({
   address: one(addresses, { fields: [customers.id], references: [addresses.customerId] }),
   orders: many(orders),
+  sessions: many(sessions),
+}));
+export const sessionsRelations = relations(sessions, ({ one }) => ({
+  customer: one(customers, { fields: [sessions.customerId], references: [customers.id] }),
 }));
 export const addressesRelations = relations(addresses, ({ one }) => ({
   customer: one(customers, { fields: [addresses.customerId], references: [customers.id] }),
@@ -380,6 +424,8 @@ export type SubscriberRow = typeof subscribers.$inferSelect;
 export type DropRow = typeof drops.$inferSelect;
 export type BoxRow = typeof boxes.$inferSelect;
 export type DropBoxRow = typeof dropBoxes.$inferSelect;
+export type AuthTokenRow = typeof authTokens.$inferSelect;
+export type SessionRow = typeof sessions.$inferSelect;
 export type CartRow = typeof carts.$inferSelect;
 export type InventoryHoldRow = typeof inventoryHolds.$inferSelect;
 export type OrderRow = typeof orders.$inferSelect;

@@ -4,7 +4,7 @@ import { getDb, type Db } from "@/db";
 import { addresses, carts, customers, dropBoxes, drops, inventoryHolds, orderItems, orders, settings as settingsTable } from "@/db/schema";
 import { effectiveState, settings as defaultSettings, type Locale } from "./data";
 import { demoEnabled } from "./demo";
-import { EMAIL, orderNumber, reconcile, validateDelivery, type DeliveryInput, type ReCheckChange } from "./checkout-rules";
+import { orderNumber, reconcile, validateDelivery, type DeliveryInput, type ReCheckChange } from "./checkout-rules";
 import { isUuid } from "./uuid";
 
 export { reconcile, orderNumber, validateDelivery } from "./checkout-rules";
@@ -200,7 +200,6 @@ export interface PlaceInput {
   /** From startCheckout: the cart and the revision the customer reviewed. */
   checkoutId: string;
   revision: number;
-  email: string;
   locale: Locale;
   delivery: DeliveryInput;
   gift: string | null;
@@ -218,14 +217,15 @@ export interface PlacedOrder {
 
 export type PlaceResult =
   | { ok: true; order: PlacedOrder }
-  | { ok: false; error: "hold_expired" | "invalid" | "changed" | "drop_closed" }
+  | { ok: false; error: "hold_expired" | "invalid" | "changed" | "drop_closed" | "signed_out" }
   | { ok: false; error: "limit"; box: string; name: string; max: number; already: number };
 
-export async function placeOrder(input: PlaceInput, cartId: string | null): Promise<PlaceResult> {
-  const email = input.email?.trim().toLowerCase() ?? "";
+/** `customerId` is the signed-in customer (D12); an order is never placed for an unverified email. */
+export async function placeOrder(input: PlaceInput, cartId: string | null, customerId: string | null): Promise<PlaceResult> {
   const delivery = validateDelivery(input.delivery);
   const hit = delivery.hit;
-  if (!EMAIL.test(email) || !delivery.ok || !hit || !Number.isInteger(input.revision)) return { ok: false, error: "invalid" };
+  if (!isUuid(customerId)) return { ok: false, error: "signed_out" };
+  if (!delivery.ok || !hit || !Number.isInteger(input.revision)) return { ok: false, error: "invalid" };
   if (!isUuid(cartId)) return { ok: false, error: "hold_expired" };
   if (cartId !== input.checkoutId) return { ok: false, error: "changed" };
   const gift = input.gift?.trim().slice(0, 150) || null;
@@ -246,30 +246,23 @@ export async function placeOrder(input: PlaceInput, cartId: string | null): Prom
     // Finishing after the normal close is allowed while the hold lasts (PRD 3.8); a cancelled drop is not.
     if (!sellable(drop, now)) return { ok: false as const, error: "drop_closed" as const };
 
-    // The account: found by email, or created unverified from the checkout until sign-in exists (PRD 2.2).
-    // An existing customer's profile and saved address are never changed from an unverified checkout.
-    const existing = await tx.query.customers.findFirst({ where: eq(customers.email, email), columns: { id: true } });
-    let customerId = existing?.id;
-    if (!customerId) {
-      const [created] = await tx
-        .insert(customers)
-        .values({ email, name: input.delivery.name.trim(), phone: input.delivery.phone.trim(), locale: input.locale })
-        .returning({ id: customers.id });
-      customerId = created.id;
-      await tx
-        .insert(addresses)
-        .values({
-          customerId,
-          postalCode: delivery.postal,
-          prefecture: hit.prefecture,
-          city: hit.city,
-          town: hit.town,
-          line1: input.delivery.line1.trim(),
-          line2: input.delivery.line2?.trim() || null,
-          wardCode: hit.wardCode,
-        })
-        .onConflictDoNothing();
-    }
+    // The signed-in customer: name and phone go on the profile, and the address they just confirmed
+    // becomes the saved one for next time (PRD 2.3 "the edited address becomes the saved one").
+    const customer = await tx.query.customers.findFirst({ where: eq(customers.id, customerId), columns: { id: true, email: true, deletedAt: true } });
+    if (!customer || customer.deletedAt) return { ok: false as const, error: "signed_out" as const };
+    const email = customer.email;
+    await tx.update(customers).set({ name: input.delivery.name.trim(), phone: input.delivery.phone.trim(), updatedAt: now }).where(eq(customers.id, customerId));
+    const saved = {
+      customerId,
+      postalCode: delivery.postal,
+      prefecture: hit.prefecture,
+      city: hit.city,
+      town: hit.town,
+      line1: input.delivery.line1.trim(),
+      line2: input.delivery.line2?.trim() || null,
+      wardCode: hit.wardCode,
+    };
+    await tx.insert(addresses).values(saved).onConflictDoUpdate({ target: addresses.customerId, set: { ...saved, updatedAt: now } });
 
     // Per-customer limit across every order they already have in this drop (D7).
     const prior = await tx

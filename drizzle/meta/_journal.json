@@ -22,6 +22,13 @@
       "when": 1792389189675,
       "tag": "0002_brainy_mandarin",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1792393891076,
+      "tag": "0003_absent_sunspot",
+      "breakpoints": true
     }
   ]
 }
