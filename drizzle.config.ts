@@ -1,4 +1,5 @@
 import { defineConfig } from "drizzle-kit";
+import { withVerifyFull } from "./src/db/url";
 
 // Migrations use the direct (unpooled) connection per Neon's guidance.
 const url = process.env.DATABASE_URL_UNPOOLED;
@@ -9,7 +10,7 @@ export default defineConfig({
   out: "./drizzle",
   dialect: "postgresql",
   casing: "snake_case",
-  dbCredentials: { url },
+  dbCredentials: { url: withVerifyFull(url) },
   strict: true,
   verbose: true,
 });

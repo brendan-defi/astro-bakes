@@ -2,6 +2,7 @@ import { Pool } from "pg";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { attachDatabasePool } from "@vercel/functions";
 import * as schema from "./schema";
+import { withVerifyFull } from "./url";
 
 /**
  * Lazy Drizzle client over a pg Pool on the pooled Neon URL. Lazy so that
@@ -11,7 +12,7 @@ import * as schema from "./schema";
 function create() {
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error("DATABASE_URL is not set. Run `npx vercel env pull` to fetch it.");
-  const pool = new Pool({ connectionString: url, max: 5 });
+  const pool = new Pool({ connectionString: withVerifyFull(url), max: 5 });
   attachDatabasePool(pool);
   return drizzle(pool, { schema, casing: "snake_case" });
 }

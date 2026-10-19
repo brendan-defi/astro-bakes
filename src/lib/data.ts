@@ -18,8 +18,8 @@ export interface Box {
   desc: string;
   contents: string;
   allergens: string[];
-  /** Tax-inclusive price in JPY. null = not set yet (renders "¥[price]"). */
-  price: number | null;
+  /** Tax-inclusive price in JPY (D18). */
+  price: number;
   /** Remaining = cap − sold − active holds (D8). */
   left: number;
   /** Per-customer limit for this drop (D7). */
@@ -104,7 +104,7 @@ export const boxes: Box[] = [
   {
     id: "sampler",
     name: "Sampler Box",
-    price: null,
+    price: 900, // sample price; the real one is set in admin
     left: 0,
     maxPerCustomer: 5,
     tint: "var(--lilac-tint)",

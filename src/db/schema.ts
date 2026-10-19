@@ -134,7 +134,7 @@ export const drops = pgTable(
   (t) => [index("drops_state_idx").on(t.state), index("drops_open_at_idx").on(t.openAt)],
 );
 
-/** The catalogue (PRD 4.3). Prices are tax-inclusive JPY (D18); null until the owner sets one. */
+/** The catalogue (PRD 4.3). Prices are tax-inclusive JPY (D18). */
 export const boxes = pgTable("boxes", {
   id: uuid().primaryKey().defaultRandom(),
   slug: text().notNull().unique(),
@@ -145,7 +145,7 @@ export const boxes = pgTable("boxes", {
   /** Display line for what's inside ("1 slice … · 2 cookies"). box_items holds the production breakdown. */
   contentsEn: text(),
   contentsJa: text(),
-  price: integer(),
+  price: integer().notNull(),
   allergens: text().array().notNull().default(sql`'{}'::text[]`),
   /** Photo URLs (Vercel Blob later; placeholders render until then, D4). */
   photos: text().array().notNull().default(sql`'{}'::text[]`),
@@ -199,7 +199,8 @@ export const dropBoxes = pgTable(
       .references(() => boxes.id, { onDelete: "restrict" }),
     cap: integer().notNull(),
     maxPerCustomer: integer().notNull().default(5),
-    price: integer(),
+    /** Price snapshot taken when the box is added to the drop (D18). */
+    price: integer().notNull(),
     soldQty: integer().notNull().default(0),
     sort: integer().notNull().default(0),
   },

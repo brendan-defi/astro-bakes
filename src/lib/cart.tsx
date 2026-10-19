@@ -8,7 +8,7 @@ type Quantities = Record<string, number>;
 export interface CartLine {
   box: Box;
   qty: number;
-  lineTotal: number | null;
+  lineTotal: number;
 }
 
 interface CartValue {
@@ -79,9 +79,9 @@ export function CartProvider({ children, initial }: { children: ReactNode; initi
   const value = useMemo<CartValue>(() => {
     const lines: CartLine[] = boxes
       .filter((b) => (qty[b.id] ?? 0) > 0)
-      .map((b) => ({ box: b, qty: qty[b.id], lineTotal: b.price == null ? null : b.price * qty[b.id] }));
+      .map((b) => ({ box: b, qty: qty[b.id], lineTotal: b.price * qty[b.id] }));
     const count = lines.reduce((s, l) => s + l.qty, 0);
-    const subtotal = lines.reduce((s, l) => s + (l.lineTotal ?? 0), 0);
+    const subtotal = lines.reduce((s, l) => s + l.lineTotal, 0);
     const shippingFee = settings.shippingFee;
     const total = shippingFee == null || count === 0 ? null : subtotal + shippingFee;
     return { qty, set, inc, dec, clear, lines, count, subtotal, shippingFee, total, hydrated };

@@ -11,6 +11,7 @@ import { Pool } from "pg";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { eq } from "drizzle-orm";
 import * as schema from "./schema";
+import { withVerifyFull } from "./url";
 
 const JST = (iso: string) => new Date(iso + "+09:00");
 
@@ -61,7 +62,7 @@ const BOXES = [
     nameEn: "Sampler Box",
     descriptionEn: "A little of everything from this drop.",
     contentsEn: "1 slice Nebula Banana Bread · 1 slice Midnight Chocolate Cake · 2 chocolate chip cookies",
-    price: null, // not set yet → renders "¥[price]"
+    price: 900, // sample price; the owner sets the real one in admin (PRD 4.3)
     allergens: ["Egg", "Milk", "Wheat"],
     defaultCap: 10,
     sort: 2,
@@ -98,7 +99,7 @@ const DROPS = [
 async function main() {
   const url = process.env.DATABASE_URL_UNPOOLED;
   if (!url) throw new Error("DATABASE_URL_UNPOOLED is not set. Run `npx vercel env pull`.");
-  const pool = new Pool({ connectionString: url, max: 1 });
+  const pool = new Pool({ connectionString: withVerifyFull(url), max: 1 });
   const db = drizzle(pool, { schema, casing: "snake_case" });
   const now = new Date();
 
@@ -115,7 +116,7 @@ async function main() {
   }
 
   const boxIds = new Map<string, string>();
-  const boxPrice = new Map<string, number | null>();
+  const boxPrice = new Map<string, number>();
   for (const { items, ...box } of BOXES) {
     const [row] = await db
       .insert(schema.boxes)
@@ -136,7 +137,7 @@ async function main() {
       .returning({ id: schema.drops.id });
     let sort = 0;
     for (const [slug, { cap, sold }] of Object.entries(boxes)) {
-      const values = { dropId: row.id, boxId: boxIds.get(slug)!, cap, soldQty: sold, price: boxPrice.get(slug) ?? null, sort: sort++ };
+      const values = { dropId: row.id, boxId: boxIds.get(slug)!, cap, soldQty: sold, price: boxPrice.get(slug)!, sort: sort++ };
       await db
         .insert(schema.dropBoxes)
         .values(values)
