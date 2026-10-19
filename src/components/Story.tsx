@@ -1,9 +1,9 @@
-import { settings, type Locale } from "@/lib/data";
+import type { Locale, Settings } from "@/lib/data";
 import { getStrings } from "@/lib/i18n";
 import { InstagramIcon, PawIcon } from "./icons";
 import s from "./home.module.css";
 
-export function Story({ locale }: { locale: Locale }) {
+export function Story({ locale, settings }: { locale: Locale; settings: Settings }) {
   const t = getStrings(locale);
   return (
     <section id="story" className={s.story}>

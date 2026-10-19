@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { boxes, drop, sampleCustomer, sampleOrderNumber, settings, type Box, type Locale } from "@/lib/data";
+import { demoEnabled } from "@/lib/demo";
 import { fmtCountdown, fmtDate, fmtDateTime, yen } from "@/lib/format";
 import { getStrings, type Strings } from "@/lib/i18n";
 import { useCart, type CartLine } from "@/lib/cart";
@@ -40,7 +41,7 @@ export function Checkout({ locale }: { locale: Locale }) {
   const router = useRouter();
   const pathname = usePathname();
   const sp = useSearchParams();
-  const demo = sp.get("demo");
+  const demo = demoEnabled ? sp.get("demo") : null;
   const rawStep = sp.get("step") as Step | null;
   const step: Step = rawStep && STEPS.includes(rawStep) ? rawStep : "cart";
   const isCart = step === "cart";
@@ -62,7 +63,7 @@ export function Checkout({ locale }: { locale: Locale }) {
 
   function onCheckout() {
     // Simulated server response for the re-check. Real build: POST /api/checkout → hold + Order(pending_payment).
-    const inventory: Record<string, number> = demo === "soldout" ? { cookie: 2, loaf: 0 } : {};
+    const inventory: Record<string, number> = demo === "soldout" ? { "cookie-box": 2, "banana-bread": 0 } : {};
     const found: Change[] = [];
     for (const line of cart.lines) {
       const left = inventory[line.box.id] ?? line.box.left;

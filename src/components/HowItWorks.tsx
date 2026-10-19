@@ -1,9 +1,9 @@
-import { settings, type Locale } from "@/lib/data";
+import type { Locale, Settings } from "@/lib/data";
 import { yen } from "@/lib/format";
 import { getStrings } from "@/lib/i18n";
 import s from "./home.module.css";
 
-export function HowItWorks({ locale }: { locale: Locale }) {
+export function HowItWorks({ locale, settings }: { locale: Locale; settings: Settings }) {
   const t = getStrings(locale);
   const steps = [
     { n: 1, bg: "var(--pink)", title: t.how1Title, body: t.how1Body, tilt: "rotate(-1deg)", tiltD: "rotate(-1.5deg)" },

@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { Titan_One, Pacifico, Zen_Maru_Gothic } from "next/font/google";
 import { notFound } from "next/navigation";
-import { CartProvider } from "@/lib/cart";
 import { isLocale } from "@/lib/i18n";
 import "../globals.css";
 
@@ -30,7 +29,7 @@ export default async function LocaleLayout({
   return (
     <html lang={locale} className={`${display.variable} ${logo.variable} ${body.variable}`}>
       <body>
-        <CartProvider>{children}</CartProvider>
+        {children}
       </body>
     </html>
   );

@@ -1,4 +1,4 @@
-import { settings, type Drop, type HomeData, type Locale } from "@/lib/data";
+import type { Drop, HomeData, Locale } from "@/lib/data";
 import { daysHoursUntil, fmtDate, fmtDateTime, fmtHourShort, fmtTime, fmtWeekday, yen } from "@/lib/format";
 import { getStrings } from "@/lib/i18n";
 import { ArrowDownIcon, CookieShape, StarShape, TruckIcon } from "./icons";
@@ -50,7 +50,7 @@ function HeroOpen({ locale, drop }: { locale: Locale; drop: Drop }) {
 /** Scheduled, closed and no-drop variants (design-ref/DROP-STATES.md). */
 function HeroNotOpen({ locale, home }: { locale: Locale; home: HomeData }) {
   const t = getStrings(locale);
-  const { state, drop, nextDrop, viewer } = home;
+  const { state, drop, nextDrop, viewer, settings } = home;
   // The drop the notify copy refers to: the scheduled one, or the next one after a closed drop.
   const upcoming = state === "scheduled" ? drop : nextDrop;
   const order = state === "closed" && drop && viewer.signedIn && viewer.order?.dropId === drop.id ? viewer.order : null;

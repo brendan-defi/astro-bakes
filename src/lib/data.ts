@@ -18,8 +18,8 @@ export interface Box {
   desc: string;
   contents: string;
   allergens: string[];
-  /** Tax-inclusive price in JPY. null = not set yet (renders "¥[price]"). */
-  price: number | null;
+  /** Tax-inclusive price in JPY (D18). */
+  price: number;
   /** Remaining = cap − sold − active holds (D8). */
   left: number;
   /** Per-customer limit for this drop (D7). */
@@ -77,7 +77,7 @@ export const settings: Settings = {
 
 export const boxes: Box[] = [
   {
-    id: "cookie",
+    id: "cookie-box",
     name: "4 Cookie Box",
     price: 1000,
     left: 7,
@@ -90,7 +90,7 @@ export const boxes: Box[] = [
     allergens: ["Egg", "Milk", "Wheat", "Walnut"],
   },
   {
-    id: "loaf",
+    id: "banana-bread",
     name: "Nebula Banana Bread",
     price: 500,
     left: 3,
@@ -102,9 +102,9 @@ export const boxes: Box[] = [
     allergens: ["Egg", "Milk", "Wheat"],
   },
   {
-    id: "sampler",
+    id: "sampler-box",
     name: "Sampler Box",
-    price: null,
+    price: 900, // sample price; the real one is set in admin
     left: 0,
     maxPerCustomer: 5,
     tint: "var(--lilac-tint)",
@@ -208,7 +208,18 @@ export interface HomeData {
   /** Boxes for section 1.3: the drop's boxes, or every active box between drops. */
   boxes: Box[];
   viewer: Viewer;
+  settings: Settings;
 }
+
+/** Where getHome() reads from: the database in the app, the mocks above in tests and the checkout. */
+export interface HomeSource {
+  drops: Drop[];
+  /** Active boxes, shown as "The menu" when no drop is scheduled. */
+  catalogue: Box[];
+  settings: Settings;
+}
+
+export const mockSource: HomeSource = { drops, catalogue: boxes, settings };
 
 export interface HomeQuery {
   /** Demo override: "open" | "scheduled" | "closed" | "nodrop". */
@@ -221,37 +232,52 @@ export interface HomeQuery {
 }
 
 /** Resolves what the homepage should show (PRD 1.1, 1.3, 1.5, 5.2a). */
-export function getHome(q: HomeQuery = {}): HomeData {
+export function getHome(q: HomeQuery = {}, src: HomeSource = mockSource): HomeData {
   const now = q.now ?? new Date();
   const viewer: Viewer =
     q.viewer === "ordered" ? sampleViewer : q.viewer === "member" ? { ...sampleViewer, order: null } : anonymousViewer;
-  const [current, upcoming] = drops;
+  const { catalogue, settings } = src;
+  const base = { viewer, settings };
+  // Drafts and cancelled drops are never public, demo overrides included.
+  const live = [...src.drops]
+    .sort((a, b) => a.openAt.getTime() - b.openAt.getTime())
+    .map((d) => ({ d, s: effectiveState(d, now) }))
+    .filter(({ s }) => s !== "draft" && s !== "cancelled");
+  const current = live.find(({ s }) => s === "open")?.d ?? null;
+  const scheduled = live.find(({ s }) => s === "scheduled")?.d ?? null;
+  const past = [...live].reverse().find(({ s }) => s === "closed" || s === "baking" || s === "shipped" || s === "complete")?.d ?? null;
 
   // Demo overrides so every state can be opened directly (see README).
   switch (q.state) {
-    case "open":
-      return { state: "open", drop: current, nextDrop: null, boxes: current.boxes, viewer };
-    case "scheduled":
-      return { state: "scheduled", drop: upcoming, nextDrop: null, boxes: upcoming.boxes, viewer };
+    case "open": {
+      const d = current ?? past ?? scheduled;
+      if (d) return { ...base, state: "open", drop: d, nextDrop: null, boxes: d.boxes };
+      break;
+    }
+    case "scheduled": {
+      const d = scheduled ?? live.at(-1)?.d;
+      if (d) return { ...base, state: "scheduled", drop: d, nextDrop: null, boxes: d.boxes };
+      break;
+    }
     case "closed": {
-      const next = q.next === "0" ? null : upcoming;
-      return { state: "closed", drop: current, nextDrop: next, boxes: next ? next.boxes : boxes, viewer };
+      const d = past ?? current ?? scheduled;
+      if (d) {
+        const next = q.next === "0" || scheduled === d ? null : scheduled;
+        return { ...base, state: "closed", drop: d, nextDrop: next, boxes: next ? next.boxes : catalogue };
+      }
+      break;
     }
     case "nodrop":
-      return { state: "nodrop", drop: null, nextDrop: null, boxes, viewer };
+      return { ...base, state: "nodrop", drop: null, nextDrop: null, boxes: catalogue };
   }
 
   // Otherwise read the state machine: the earliest unfinished drop is "current".
-  const live = drops
-    .map((d) => ({ d, s: effectiveState(d, now) }))
-    .filter(({ s }) => s !== "draft" && s !== "complete" && s !== "cancelled")
-    .sort((a, b) => a.d.openAt.getTime() - b.d.openAt.getTime());
-  const head = live[0];
-  if (!head) return { state: "nodrop", drop: null, nextDrop: null, boxes, viewer };
-  if (head.s === "scheduled") return { state: "scheduled", drop: head.d, nextDrop: null, boxes: head.d.boxes, viewer };
-  if (head.s === "open") return { state: "open", drop: head.d, nextDrop: null, boxes: head.d.boxes, viewer };
-  const next = live.slice(1).find(({ s }) => s === "scheduled")?.d ?? null;
-  return { state: "closed", drop: head.d, nextDrop: next, boxes: next ? next.boxes : boxes, viewer };
+  const head = live.find(({ s }) => s !== "complete");
+  if (!head) return { ...base, state: "nodrop", drop: null, nextDrop: null, boxes: catalogue };
+  if (head.s === "scheduled") return { ...base, state: "scheduled", drop: head.d, nextDrop: null, boxes: head.d.boxes };
+  if (head.s === "open") return { ...base, state: "open", drop: head.d, nextDrop: null, boxes: head.d.boxes };
+  const next = live.find(({ d, s }) => s === "scheduled" && d.openAt > head.d.openAt)?.d ?? null;
+  return { ...base, state: "closed", drop: head.d, nextDrop: next, boxes: next ? next.boxes : catalogue };
 }
 
 export function getBox(id: string): Box | undefined {
