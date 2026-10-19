@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { boxes, drop, sampleCustomer, sampleOrderNumber, settings, type Box, type Locale } from "@/lib/data";
+import { demoEnabled } from "@/lib/demo";
 import { fmtCountdown, fmtDate, fmtDateTime, yen } from "@/lib/format";
 import { getStrings, type Strings } from "@/lib/i18n";
 import { useCart, type CartLine } from "@/lib/cart";
@@ -40,7 +41,7 @@ export function Checkout({ locale }: { locale: Locale }) {
   const router = useRouter();
   const pathname = usePathname();
   const sp = useSearchParams();
-  const demo = sp.get("demo");
+  const demo = demoEnabled ? sp.get("demo") : null;
   const rawStep = sp.get("step") as Step | null;
   const step: Step = rawStep && STEPS.includes(rawStep) ? rawStep : "cart";
   const isCart = step === "cart";

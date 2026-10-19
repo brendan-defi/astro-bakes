@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { getHome } from "@/lib/data";
+import { demoEnabled } from "@/lib/demo";
 import { loadCatalogue, loadDrops, loadSettings } from "@/lib/drops";
 import { isLocale } from "@/lib/i18n";
 import { Ticker } from "@/components/Ticker";
@@ -21,9 +22,11 @@ export default async function HomePage({ params, searchParams }: { params: Promi
   if (!isLocale(locale)) notFound();
   const q = await searchParams;
   const one = (k: string) => (Array.isArray(q[k]) ? q[k][0] : q[k]);
-  // Homepage variant from the drop state machine over the database, or a ?state= / ?viewer= demo override (README).
+  // Homepage variant from the drop state machine over the database. Outside production,
+  // ?state= / ?next= / ?viewer= override it so every variant can be opened directly (README).
   const [drops, catalogue, settings] = await Promise.all([loadDrops(locale), loadCatalogue(locale), loadSettings()]);
-  const home = getHome({ state: one("state"), next: one("next"), viewer: one("viewer") }, { drops, catalogue, settings });
+  const overrides = demoEnabled ? { state: one("state"), next: one("next"), viewer: one("viewer") } : {};
+  const home = getHome(overrides, { drops, catalogue, settings });
   const open = home.state === "open";
   return (
     // The cart is scoped to the drop on show, so steppers clamp against its real stock and prices.

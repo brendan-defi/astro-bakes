@@ -44,6 +44,7 @@ The homepage reads drops, boxes and settings from the database (`src/lib/drops.t
 
 - The homepage picks its state from the seeded drop dates and the clock (PRD 5.2a): Drop 03 closed on Oct 18 and ships Oct 25, so today it shows **closed** with Drop 04 as the next drop; from Oct 29 it shows **scheduled**; Drop 04 opens Nov 8 at 10:00 JST.
 - Force a state with `?state=open`, `?state=scheduled`, `?state=closed` or `?state=nodrop`. Add `&next=0` to `closed` to hide the next drop.
+- All of these switches, including `?demo=`, work in local dev and on Vercel preview deployments only. Production ignores them (`src/lib/demo.ts`).
 - `?viewer=member` renders a signed-in, opted-in viewer (avatar in the nav, "You're on the list" instead of the email form). `?viewer=ordered` adds their order card on the closed page.
 - `?demo=cart` seeds a cart (1 cookie box, 1 loaf); on the homepage combine it with `?state=open`.
 - `?demo=soldout` on `/en/checkout` seeds 3 cookie boxes + 1 loaf; pressing **Checkout →** runs the inventory re-check and shows the sold-out alert.

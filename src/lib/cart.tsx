@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { Box } from "./data";
+import { demoEnabled } from "./demo";
 
 type Quantities = Record<string, number>;
 
@@ -50,8 +51,8 @@ export function CartProvider({ children, dropId, boxes, shippingFee, initial }: 
   // Cart is client-side until sign-in (PRD 3.3); persist per drop.
   useEffect(() => {
     try {
-      // ?demo=cart / ?demo=soldout seed a sample cart for local mockup screenshots.
-      const demo = new URLSearchParams(window.location.search).get("demo");
+      // ?demo=cart / ?demo=soldout seed a sample cart; development and previews only.
+      const demo = demoEnabled ? new URLSearchParams(window.location.search).get("demo") : null;
       if (demo === "cart") setQty({ "cookie-box": 1, "banana-bread": 1 });
       else if (demo === "soldout") setQty({ "cookie-box": 3, "banana-bread": 1 });
       else {
