@@ -13,18 +13,36 @@ export interface Reservation {
   items: Record<string, number>;
 }
 
+/** A reference to one exact reservation, carried through the sign-in return path so a new tab can pick it up. */
+export interface ReservationRef {
+  checkoutId: string;
+  revision: number;
+}
+
+export function formatReservationRef(r: ReservationRef): string {
+  return `${r.checkoutId}:${r.revision}`;
+}
+
+export function parseReservationRef(v: string | null | undefined): ReservationRef | null {
+  const m = /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}):(\d{1,9})$/i.exec(v ?? "");
+  return m ? { checkoutId: m[1], revision: Number(m[2]) } : null;
+}
+
 export type ReservationStatus =
   /** Nothing is reserved for this browser: expired, consumed, or never started. */
   | "none"
   /** This tab reserved exactly what the server holds. */
   | "ok"
+  /** This tab didn't reserve it, but the sign-in link named exactly this reservation: pick it up. */
+  | "adopt"
   /** The browser's reservation was taken or replaced by another tab; this tab must review the cart. */
   | "stale";
 
-export function reservationStatus(tab: Hold | null, server: Reservation | null): ReservationStatus {
+export function reservationStatus(tab: Hold | null, server: Reservation | null, ref?: ReservationRef | null): ReservationStatus {
   if (!server) return "none";
-  if (!tab?.checkoutId) return "stale";
-  return tab.checkoutId === server.checkoutId && tab.revision === server.revision ? "ok" : "stale";
+  if (tab?.checkoutId === server.checkoutId && tab?.revision === server.revision) return "ok";
+  if (ref && ref.checkoutId === server.checkoutId && ref.revision === server.revision) return "adopt";
+  return "stale";
 }
 
 export interface ReservedLine {

@@ -21,7 +21,7 @@ export function normaliseEmail(input: string): string {
   return (input ?? "").trim().toLowerCase();
 }
 
-/** 32 random bytes, URL-safe; goes in the magic link and is never stored. */
+/** 32 random bytes, URL-safe; used for link tokens, session tokens and the browser flow secret. Never stored raw. */
 export function generateToken(): string {
   return randomBytes(32).toString("base64url");
 }
@@ -37,18 +37,63 @@ export function sha256(input: string): string {
 
 export const hashToken = (token: string) => sha256(`token:${token}`);
 export const hashSession = (token: string) => sha256(`session:${token}`);
+export const hashFlow = (secret: string) => sha256(`flow:${secret}`);
 /** The code is salted with the token's row id so equal codes never share a hash. */
 export const hashCode = (tokenId: string, code: string) => sha256(`code:${tokenId}:${code}`);
 export const hashIp = (ip: string | null | undefined) => (ip ? sha256(`ip:${ip.trim()}`) : null);
 
-export function codeMatches(tokenId: string, code: string, storedHash: string): boolean {
-  const a = Buffer.from(hashCode(tokenId, code.replace(/\D/g, "")));
-  const b = Buffer.from(storedHash);
-  return a.length === b.length && timingSafeEqual(a, b);
+function equalHashes(a: string, b: string): boolean {
+  const x = Buffer.from(a);
+  const y = Buffer.from(b);
+  return x.length === y.length && timingSafeEqual(x, y);
 }
 
-/** Only same-site paths may be used as a return target; anything else falls back. */
+export function codeMatches(tokenId: string, code: string, storedHash: string): boolean {
+  return equalHashes(hashCode(tokenId, code.replace(/\D/g, "")), storedHash);
+}
+
+/** Does this browser's flow secret match the one the token was requested with? */
+export function flowMatches(secret: string | null | undefined, storedHash: string): boolean {
+  return !!secret && equalHashes(hashFlow(secret), storedHash);
+}
+
+/**
+ * Only a same-site path may be used as a return target. Anything with a scheme,
+ * a host, a protocol-relative prefix, a backslash or any control character is
+ * replaced by the fallback; the result is also resolved against a dummy origin
+ * and must stay there.
+ */
 export function safeNext(next: string | null | undefined, fallback: string): string {
-  if (!next || !next.startsWith("/") || next.startsWith("//") || next.includes("\\") || /[\r\n]/.test(next)) return fallback;
-  return next;
+  if (!next || !next.startsWith("/") || next.startsWith("//") || /[\\\u0000-\u001F\u007F]/.test(next)) return fallback;
+  try {
+    const u = new URL(next, "https://same.invalid");
+    if (u.origin !== "https://same.invalid" || !u.pathname.startsWith("/")) return fallback;
+    return u.pathname + u.search + u.hash;
+  } catch {
+    return fallback;
+  }
+}
+
+/** "jane.doe@example.com" → "j***@example.com", for the confirmation page. */
+export function maskEmail(email: string): string {
+  const [local, domain] = email.split("@");
+  if (!local || !domain) return "***";
+  return `${local.charAt(0)}***@${domain}`;
+}
+
+/**
+ * Was this request made by our own pages? Modern browsers send Sec-Fetch-Site;
+ * older ones send Origin on POST. A confirmation that switches accounts must
+ * never be triggered cross-site (login CSRF).
+ */
+export function isSameOriginRequest(h: { secFetchSite?: string | null; origin?: string | null; host?: string | null; forwardedHost?: string | null }): boolean {
+  const site = h.secFetchSite?.toLowerCase();
+  if (site) return site === "same-origin" || site === "none";
+  if (!h.origin) return false;
+  const host = (h.forwardedHost ?? h.host ?? "").split(",")[0].trim().toLowerCase();
+  try {
+    return !!host && new URL(h.origin).host.toLowerCase() === host;
+  } catch {
+    return false;
+  }
 }

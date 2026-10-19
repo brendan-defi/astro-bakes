@@ -1,22 +1,40 @@
 import { describe, expect, it } from "vitest";
 import { boxes } from "./data";
-import { reservationStatus, reservedLines, totals } from "./reservation";
+import { formatReservationRef, parseReservationRef, reservationStatus, reservedLines, totals } from "./reservation";
 
-const server = { checkoutId: "c1", revision: 2, expiresAt: Date.now() + 60_000, items: { "cookie-box": 1 } };
+const ID = "3f2504e0-4f89-11d3-9a0c-0305e82c3301";
+const server = { checkoutId: ID, revision: 2, expiresAt: Date.now() + 60_000, items: { "cookie-box": 1 } };
+const tab = (checkoutId: string | null, revision: number | null) => ({ expires: 1, checkoutId, revision });
 
 describe("reservationStatus", () => {
   it("is none when the browser holds nothing", () => {
     expect(reservationStatus(null, null)).toBe("none");
-    expect(reservationStatus({ expires: 1, checkoutId: "c1", revision: 2 }, null)).toBe("none");
+    expect(reservationStatus(tab(ID, 2), null)).toBe("none");
   });
   it("is ok only when this tab reserved exactly what the server holds", () => {
-    expect(reservationStatus({ expires: 1, checkoutId: "c1", revision: 2 }, server)).toBe("ok");
+    expect(reservationStatus(tab(ID, 2), server)).toBe("ok");
   });
   it("is stale when another tab reserved or re-reserved", () => {
     expect(reservationStatus(null, server)).toBe("stale");
-    expect(reservationStatus({ expires: 1, checkoutId: null, revision: null }, server)).toBe("stale");
-    expect(reservationStatus({ expires: 1, checkoutId: "c1", revision: 1 }, server)).toBe("stale");
-    expect(reservationStatus({ expires: 1, checkoutId: "c0", revision: 2 }, server)).toBe("stale");
+    expect(reservationStatus(tab(null, null), server)).toBe("stale");
+    expect(reservationStatus(tab(ID, 1), server)).toBe("stale");
+    expect(reservationStatus(tab("c0", 2), server)).toBe("stale");
+  });
+  it("adopts a reservation named by the sign-in link only when it still matches the server exactly", () => {
+    const ref = { checkoutId: ID, revision: 2 };
+    expect(reservationStatus(null, server, ref)).toBe("adopt"); // new tab from the email
+    expect(reservationStatus(tab(ID, 1), server, ref)).toBe("adopt"); // this tab's old copy, but the link names the current one
+    expect(reservationStatus(null, server, { checkoutId: ID, revision: 1 })).toBe("stale"); // another tab changed it since the email
+    expect(reservationStatus(null, server, { checkoutId: "other", revision: 2 })).toBe("stale");
+    expect(reservationStatus(tab(ID, 2), server, { checkoutId: ID, revision: 1 })).toBe("ok"); // the tab's own copy wins
+    expect(reservationStatus(null, null, ref)).toBe("none");
+  });
+});
+
+describe("reservation refs", () => {
+  it("round-trips and rejects junk", () => {
+    expect(parseReservationRef(formatReservationRef({ checkoutId: ID, revision: 7 }))).toEqual({ checkoutId: ID, revision: 7 });
+    for (const bad of ["", null, undefined, "abc:1", `${ID}:`, `${ID}:x`, `${ID}:1:2`, "------------------------------------:1"]) expect(parseReservationRef(bad)).toBeNull();
   });
 });
 

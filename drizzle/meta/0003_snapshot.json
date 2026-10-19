@@ -1,5 +1,5 @@
 {
-  "id": "d903c55e-eb69-463a-9e96-c82a5a2b8394",
+  "id": "6f277ceb-3856-49ab-932b-42099bcfe720",
   "prevId": "1429566a-7e72-484b-afe2-9f6682870c0c",
   "version": "7",
   "dialect": "postgresql",
@@ -163,6 +163,12 @@
           "type": "text",
           "primaryKey": false,
           "notNull": false
+        },
+        "flow_hash": {
+          "name": "flow_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
         },
         "expires_at": {
           "name": "expires_at",

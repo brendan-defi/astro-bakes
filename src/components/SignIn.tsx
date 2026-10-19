@@ -2,11 +2,11 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, type FormEvent } from "react";
-import { requestSignInAction, verifyCodeAction } from "@/app/[locale]/auth/actions";
+import { useState, type FormEvent } from "react";
 import type { Locale } from "@/lib/data";
 import { fmtCountdown } from "@/lib/format";
 import { getStrings } from "@/lib/i18n";
+import { useSignInFlow } from "@/lib/use-sign-in";
 import { ArrowLeftIcon, CheckIcon } from "./icons";
 import { Logo } from "./Logo";
 import s from "./checkout.module.css";
@@ -16,45 +16,20 @@ export function SignIn({ locale, next, error }: { locale: Locale; next: string; 
   const t = getStrings(locale);
   const router = useRouter();
   const home = `/${locale}`;
-  const [email, setEmail] = useState("");
-  const [code, setCode] = useState("");
-  const [sent, setSent] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [notice, setNotice] = useState<string | null>(error === "expired" ? t.linkExpired : error === "invalid" ? t.linkExpired : error === "locked" ? t.codeLocked : null);
-  const [now, setNow] = useState(() => Date.now());
-  const [resendAt, setResendAt] = useState<number | null>(null);
-  useEffect(() => {
-    const id = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(id);
-  }, []);
-  const resendLeft = resendAt ? Math.max(0, resendAt - now) : 0;
-
-  async function request(e?: FormEvent) {
-    e?.preventDefault();
-    if (!email || busy) return;
-    setBusy(true);
-    setNotice(null);
-    try {
-      const r = await requestSignInAction({ email, locale, next });
-      if (!r.ok) { setNotice(r.error === "rate_limited" ? t.tooManyRequests : t.invalidEmail); return; }
-      setSent(true);
-      setCode("");
-      setResendAt(Date.now() + 30_000);
-    } finally { setBusy(false); }
-  }
-
-  async function verify(e: FormEvent) {
-    e.preventDefault();
-    if (code.length !== 6 || busy) return;
-    setBusy(true);
-    setNotice(null);
-    try {
-      const r = await verifyCodeAction({ email, code });
-      if (!r.ok) { setNotice(r.error === "locked" ? t.codeLocked : r.error === "expired" ? t.codeExpired : t.codeInvalid); return; }
-      router.push(r.next);
+  const [urlNotice] = useState<string | null>(error === "locked" ? t.codeLocked : error ? t.linkExpired : null);
+  const auth = useSignInFlow({
+    locale,
+    next: () => next,
+    onSignedIn: (to) => {
+      router.push(to);
       router.refresh();
-    } finally { setBusy(false); }
-  }
+    },
+  });
+  const notice = auth.notice ?? (auth.pending ? null : urlNotice);
+  const submit = (fn: () => Promise<boolean>) => (e: FormEvent) => {
+    e.preventDefault();
+    void fn();
+  };
 
   return (
     <div className={s.page}>
@@ -67,37 +42,37 @@ export function SignIn({ locale, next, error }: { locale: Locale; next: string; 
       </header>
       <div className={s.body}>
         <main className={s.main}>
-          {!sent ? (
+          {!auth.pending ? (
             <div className={`stack ${s.narrow}`} style={{ gap: 16 }}>
               <h1 className={`display ${s.h1sm}`}>{t.signIn}</h1>
               <p className={s.lead}>{t.signInBody}</p>
               {notice && <div role="alert" className="note">{notice}</div>}
-              <form className={s.form} onSubmit={request}>
+              <form className={s.form} onSubmit={submit(auth.request)}>
                 <label htmlFor="si-email" className="label">{t.emailAddress}</label>
-                <input id="si-email" type="email" required autoComplete="email" placeholder="you@example.com" className="input" value={email} onChange={(e) => setEmail(e.target.value)} />
-                <button type="submit" className={`btn btn-primary ${s.selfStart}`} style={{ marginTop: 6 }} disabled={busy}>{t.emailMeCode}</button>
+                <input id="si-email" type="email" required autoComplete="email" placeholder="you@example.com" className="input" value={auth.email} onChange={(e) => auth.setEmail(e.target.value)} />
+                <button type="submit" className={`btn btn-primary ${s.selfStart}`} style={{ marginTop: 6 }} disabled={auth.busy}>{t.emailMeCode}</button>
               </form>
             </div>
           ) : (
             <div className={`stack ${s.narrow}`} style={{ gap: 16 }}>
               <h1 className={`display ${s.h1sm}`}>{t.checkEmail}</h1>
-              <p className={s.lead}>{t.sentTo(email)}</p>
+              <p className={s.lead}>{t.sentTo(auth.email)}</p>
               {notice && <div role="alert" className="note">{notice}</div>}
-              <form className={s.form} onSubmit={verify}>
+              <form className={s.form} onSubmit={submit(auth.verify)}>
                 <label htmlFor="si-code" className="label">{t.sixDigit}</label>
                 <div className={s.codeRow}>
-                  <input id="si-code" type="text" inputMode="numeric" autoComplete="one-time-code" maxLength={6} placeholder="000000" className={`input ${s.codeInput}`} value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))} />
-                  <button type="submit" className="btn btn-primary" disabled={code.length !== 6 || busy}>{t.continue}</button>
+                  <input id="si-code" type="text" inputMode="numeric" autoComplete="one-time-code" maxLength={6} placeholder="000000" className={`input ${s.codeInput}`} value={auth.code} onChange={(e) => auth.setCode(e.target.value.replace(/\D/g, "").slice(0, 6))} />
+                  <button type="submit" className="btn btn-primary" disabled={auth.code.length !== 6 || auth.busy}>{t.continue}</button>
                 </div>
               </form>
               <div className={s.resendRow}>
                 <span>{t.didntGetIt}</span>
-                <button type="button" className={s.resendBtn} disabled={resendLeft > 0 || busy} onClick={() => request()}>
-                  {resendLeft > 0 ? t.resendIn(fmtCountdown(resendLeft)) : t.resend}
+                <button type="button" className={s.resendBtn} disabled={auth.resendLeft > 0 || auth.busy} onClick={() => void auth.request()}>
+                  {auth.resendLeft > 0 ? t.resendIn(fmtCountdown(auth.resendLeft)) : t.resend}
                 </button>
               </div>
               <p className={s.expires}>{t.expires}</p>
-              <button type="button" className="btn-text" onClick={() => { setSent(false); setNotice(null); }}><ArrowLeftIcon size={18} /> {t.useDifferentEmail}</button>
+              <button type="button" className="btn-text" onClick={auth.reset}><ArrowLeftIcon size={18} /> {t.useDifferentEmail}</button>
               <div className={s.inline}><CheckIcon />{t.linkWorksToo}</div>
             </div>
           )}

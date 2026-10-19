@@ -24,6 +24,7 @@ ALTER TABLE "auth_tokens" ADD COLUMN "attempts" integer DEFAULT 0 NOT NULL;--> s
 ALTER TABLE "auth_tokens" ADD COLUMN "locale" "locale" DEFAULT 'en' NOT NULL;--> statement-breakpoint
 ALTER TABLE "auth_tokens" ADD COLUMN "next" text;--> statement-breakpoint
 ALTER TABLE "auth_tokens" ADD COLUMN "ip_hash" text;--> statement-breakpoint
+ALTER TABLE "auth_tokens" ADD COLUMN "flow_hash" text NOT NULL;--> statement-breakpoint
 ALTER TABLE "notification_log" ADD CONSTRAINT "notification_log_customer_id_customers_id_fk" FOREIGN KEY ("customer_id") REFERENCES "public"."customers"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "notification_log" ADD CONSTRAINT "notification_log_order_id_orders_id_fk" FOREIGN KEY ("order_id") REFERENCES "public"."orders"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "sessions" ADD CONSTRAINT "sessions_customer_id_customers_id_fk" FOREIGN KEY ("customer_id") REFERENCES "public"."customers"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint

@@ -121,6 +121,8 @@ export const authTokens = pgTable(
     next: text(),
     /** Hash of the requesting IP, for the per-IP rate limit (PRD 5.4). */
     ipHash: text(),
+    /** Hash of the browser's flow cookie: only that browser may redeem silently; others must confirm. */
+    flowHash: text().notNull(),
     expiresAt: timestamp({ withTimezone: true }).notNull(),
     usedAt: timestamp({ withTimezone: true }),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),

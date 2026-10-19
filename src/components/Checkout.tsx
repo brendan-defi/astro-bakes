@@ -5,14 +5,14 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import type { Box, Locale } from "@/lib/data";
 import { placeOrderAction, startCheckoutAction } from "@/app/[locale]/checkout/actions";
-import { requestSignInAction, verifyCodeAction } from "@/app/[locale]/auth/actions";
+import { useSignInFlow } from "@/lib/use-sign-in";
 import { demoEnabled } from "@/lib/demo";
 import { fmtCountdown, fmtDate, fmtDateTime, yen } from "@/lib/format";
 import { getStrings, type Strings } from "@/lib/i18n";
 import { useCart, type CartLine } from "@/lib/cart";
 import { lookupPostal, normalisePostal, type PostalHit } from "@/lib/postal";
 import { clearHold, readHold, startHold, type Hold } from "@/lib/hold";
-import { reservationStatus, reservedLines, totals, type Reservation } from "@/lib/reservation";
+import { formatReservationRef, parseReservationRef, reservationStatus, reservedLines, totals, type Reservation } from "@/lib/reservation";
 import { ArrowLeftIcon, CardIcon, CheckIcon, ClockIcon, StarShape, TruckIcon, WarningIcon } from "./icons";
 import { Logo } from "./Logo";
 import { Stepper } from "./Stepper";
@@ -59,15 +59,19 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
   const inCheckout = idx > 0;
   const home = `/${locale}`;
 
-  const go = useCallback((to: Step) => {
+  const go = useCallback((to: Step, replace = false) => {
     // Keep the demo switches (?state=, ?demo=) across steps; they decide which drop the server sells outside production.
     const params = new URLSearchParams(sp.toString());
-    if (to === "cart") params.delete("step");
+    if (to === "cart") { params.delete("step"); params.delete("r"); }
     else params.set("step", to);
     const qs = params.toString();
-    router.push(qs ? `${pathname}?${qs}` : pathname);
+    const url = qs ? `${pathname}?${qs}` : pathname;
+    if (replace) router.replace(url);
+    else router.push(url);
     window.scrollTo({ top: 0 });
   }, [router, pathname, sp]);
+  // Signed-in customers never see the email steps, so for them "back" from delivery is the cart.
+  const prevOf = (from: Step): Step => (customer && (from === "delivery" || from === "code" || from === "signin") ? "cart" : PREV[from] ?? "cart");
 
   // ---- inventory re-check + hold (PRD 3.3 / 3.8, D8) ----
   const [leftOverride, setLeftOverride] = useState<Record<string, number>>({});
@@ -119,8 +123,11 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
   useEffect(() => {
     if (!inCheckout) return;
     let h = readHold();
-    const status = reservationStatus(h, held);
-    if (status === "stale") {
+    const status = reservationStatus(h, held, parseReservationRef(sp.get("r")));
+    if (status === "adopt" && held) {
+      // Opened from the sign-in email in a new tab: the link names this browser's own reservation, and it still matches.
+      h = startHold({ expires: held.expiresAt, checkoutId: held.checkoutId, revision: held.revision });
+    } else if (status === "stale") {
       // Another tab took or replaced the browser's reservation: this tab must review the cart (PRD 3.3).
       clearHold();
       setHold(null);
@@ -141,48 +148,32 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
     const id = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [inCheckout, held]);
+  }, [inCheckout, held, sp]);
   const holdLeft = hold != null ? hold.expires - now : null;
   const holdExpired = inCheckout && (serverExpired || (holdLeft != null && holdLeft <= 0));
 
-  // ---- sign in (PRD 2.1; the magic link lands back here at the delivery step) ----
-  const [email, setEmail] = useState("");
-  const [code, setCode] = useState("");
-  const [authNotice, setAuthNotice] = useState<string | null>(null);
-  const [resendAt, setResendAt] = useState<number | null>(null);
-  useEffect(() => { if (step === "code") setResendAt(Date.now() + 30_000); }, [step]);
-  const resendLeft = resendAt ? Math.max(0, resendAt - now) : 0;
-  useEffect(() => {
-    // Already signed in: there is nothing to ask at the email steps.
-    if (customer && (step === "signin" || step === "code")) go("delivery");
-  }, [customer, step, go]);
-
-  async function requestCode() {
-    if (!email || busy) return;
-    setBusy(true);
-    setAuthNotice(null);
-    try {
+  // ---- sign in (PRD 2.1; the magic link lands back here at the delivery step, naming this browser's reservation) ----
+  const auth = useSignInFlow({
+    locale,
+    next: () => {
       const params = new URLSearchParams(sp.toString());
       params.set("step", "delivery");
-      const r = await requestSignInAction({ email, locale, next: `${pathname}?${params}` });
-      if (!r.ok) { setAuthNotice(r.error === "rate_limited" ? t.tooManyRequests : t.invalidEmail); return; }
-      setCode("");
-      setResendAt(Date.now() + 30_000);
-      if (step !== "code") go("code");
-    } finally { setBusy(false); }
-  }
-
-  async function submitCode() {
-    if (code.length !== 6 || busy) return;
-    setBusy(true);
-    setAuthNotice(null);
-    try {
-      const r = await verifyCodeAction({ email, code });
-      if (!r.ok) { setAuthNotice(r.error === "locked" ? t.codeLocked : r.error === "expired" ? t.codeExpired : t.codeInvalid); return; }
+      const h = readHold();
+      if (h?.checkoutId && h.revision != null) params.set("r", formatReservationRef({ checkoutId: h.checkoutId, revision: h.revision }));
+      return `${pathname}?${params}`;
+    },
+    onSignedIn: () => {
       router.refresh(); // pick up the session: the page re-renders with the customer and their saved details
-      go("delivery");
-    } finally { setBusy(false); }
-  }
+      go("delivery", true);
+    },
+  });
+  const email = auth.email;
+  useEffect(() => {
+    // Already signed in: the email steps don't apply, and shouldn't sit in history.
+    if (customer && (step === "signin" || step === "code")) go("delivery", true);
+    // The code screen without an address to verify (storage cleared): back to the email field.
+    else if (!customer && step === "code" && auth.hydrated && !auth.pending) go("signin", true);
+  }, [customer, step, auth.hydrated, auth.pending, go]);
 
   // ---- delivery ----
   const prefill = (c: CheckoutCustomer | null): Address => ({ name: c?.name ?? "", phone: c?.phone ?? "", postal: c?.postal ?? "", line1: c?.line1 ?? "", line2: c?.line2 ?? "" });
@@ -250,7 +241,7 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
         if (res.error === "hold_expired") { clearHold(); setServerExpired(true); }
         else if (res.error === "changed") { clearHold(); setNotice(t.cartChanged); go("cart"); }
         else if (res.error === "drop_closed") { clearHold(); setNotice(t.dropUnavailable); go("cart"); }
-        else if (res.error === "signed_out") { setAuthNotice(t.signedOut); go("signin"); }
+        else if (res.error === "signed_out") { auth.setNotice(t.signedOut); go("signin", true); }
         else if (res.error === "limit") { clearHold(); setNotice(t.limitReached(res.already, res.name, res.max)); go("cart"); }
         else { setNotice(t.orderFailed); setTouched(true); go("delivery"); }
         return;
@@ -279,7 +270,7 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
   const summaryTotal = step === "done" && placed ? placed.total : buying.total;
   const totalLabel = yen(summaryTotal, "¥[total]");
   const placeLabel = pay === "card" ? t.placeOrderCard(totalLabel) : t.placeOrderPaypay;
-  const backLabel = { signin: t.backToBoxes, code: t.useDifferentEmail, delivery: t.back, pay: t.backToDelivery }[step as "signin"] ?? t.back;
+  const backLabel = { signin: t.backToBoxes, code: t.useDifferentEmail, delivery: customer ? t.backToBoxes : t.back, pay: t.backToDelivery }[step as "signin"] ?? t.back;
   const doneEmail = placed?.email || customer?.email || email;
   const doneName = placed?.address.name ?? addr.name;
   const doneAddr = placed ? `${placed.hit.prefecture}${placed.hit.city}${placed.hit.town}${placed.address.line1}` : shortAddress;
@@ -325,7 +316,7 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
       <header className={s.header}>
         <div className={`container ${s.headerRow}`}>
           {isCart && <Link href={home} aria-label={t.backToShop} className={s.iconBtn}><ArrowLeftIcon /></Link>}
-          {inCheckout && <button type="button" aria-label={t.back} onClick={() => go(PREV[step] ?? "cart")} className={s.iconBtn}><ArrowLeftIcon /></button>}
+          {inCheckout && <button type="button" aria-label={t.back} onClick={() => go(prevOf(step))} className={s.iconBtn}><ArrowLeftIcon /></button>}
           {step === "done" && <span className={s.spacer} />}
           <Logo href={home} label={t.home} size="sm" />
           {inCheckout && <StepList cls={s.stepsTop} />}
@@ -352,7 +343,7 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
         {/* ===== Main column ===== */}
         <main className={s.main}>
           {inCheckout && !holdExpired && (
-            <button type="button" onClick={() => go(PREV[step] ?? "cart")} className={s.backBtn}><ArrowLeftIcon size={18} />{backLabel}</button>
+            <button type="button" onClick={() => go(prevOf(step))} className={s.backBtn}><ArrowLeftIcon size={18} />{backLabel}</button>
           )}
 
           {holdExpired ? (
@@ -375,11 +366,11 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
                 <div className={`stack ${s.narrow}`} style={{ gap: 16 }}>
                   <h1 className={`display ${s.h1sm}`}>{t.signInTitle}</h1>
                   <p className={s.lead}>{t.signInBody}</p>
-                  {authNotice && <div role="alert" className="note">{authNotice}</div>}
-                  <form className={s.form} onSubmit={(e) => { e.preventDefault(); requestCode(); }}>
+                  {auth.notice && <div role="alert" className="note">{auth.notice}</div>}
+                  <form className={s.form} onSubmit={(e) => { e.preventDefault(); void auth.request().then((ok) => { if (ok) go("code"); }); }}>
                     <label htmlFor="co-email" className="label">{t.emailAddress}</label>
-                    <input id="co-email" type="email" required autoComplete="email" placeholder="you@example.com" className="input" value={email} onChange={(e) => setEmail(e.target.value)} />
-                    <button type="submit" className={`btn btn-primary ${s.selfStart}`} style={{ marginTop: 6 }} disabled={busy}>{t.emailMeCode}</button>
+                    <input id="co-email" type="email" required autoComplete="email" placeholder="you@example.com" className="input" value={auth.email} onChange={(e) => auth.setEmail(e.target.value)} />
+                    <button type="submit" className={`btn btn-primary ${s.selfStart}`} style={{ marginTop: 6 }} disabled={auth.busy}>{t.emailMeCode}</button>
                   </form>
                   <div className={s.inline}><CheckIcon />{t.cartStays}</div>
                 </div>
@@ -389,20 +380,20 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
               {step === "code" && (
                 <div className={`stack ${s.narrow}`} style={{ gap: 16 }}>
                   <h1 className={`display ${s.h1sm}`}>{t.checkEmail}</h1>
-                  <p className={s.lead}>{rich(t.sentTo, email)}</p>
-                  {authNotice && <div role="alert" className="note">{authNotice}</div>}
-                  <form className={s.form} onSubmit={(e) => { e.preventDefault(); submitCode(); }}>
+                  <p className={s.lead}>{rich(t.sentTo, auth.email)}</p>
+                  {auth.notice && <div role="alert" className="note">{auth.notice}</div>}
+                  <form className={s.form} onSubmit={(e) => { e.preventDefault(); void auth.verify(); }}>
                     <label htmlFor="co-code" className="label">{t.sixDigit}</label>
                     <div className={s.codeRow}>
-                      <input id="co-code" type="text" inputMode="numeric" autoComplete="one-time-code" maxLength={6} placeholder="000000" className={`input ${s.codeInput}`} value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))} />
-                      <button type="submit" className="btn btn-primary" disabled={code.length !== 6 || busy}>{t.continue}</button>
+                      <input id="co-code" type="text" inputMode="numeric" autoComplete="one-time-code" maxLength={6} placeholder="000000" className={`input ${s.codeInput}`} value={auth.code} onChange={(e) => auth.setCode(e.target.value.replace(/\D/g, "").slice(0, 6))} />
+                      <button type="submit" className="btn btn-primary" disabled={auth.code.length !== 6 || auth.busy}>{t.continue}</button>
                     </div>
                   </form>
                   <div className={s.hideDesktop}><div className="note">{t.inAppTip}</div></div>
                   <div className={s.resendRow}>
                     <span>{t.didntGetIt}</span>
-                    <button type="button" className={s.resendBtn} disabled={resendLeft > 0 || busy} onClick={() => requestCode()}>
-                      {resendLeft > 0 ? t.resendIn(fmtCountdown(resendLeft)) : t.resend}
+                    <button type="button" className={s.resendBtn} disabled={auth.resendLeft > 0 || auth.busy} onClick={() => void auth.request()}>
+                      {auth.resendLeft > 0 ? t.resendIn(fmtCountdown(auth.resendLeft)) : t.resend}
                     </button>
                     <span className={`${s.expires} ${s.hideMobile}`}>{t.expires}</span>
                   </div>

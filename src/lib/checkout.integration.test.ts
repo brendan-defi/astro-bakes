@@ -66,6 +66,8 @@ const count = async (table: "orders" | "carts" | "inventory_holds") => Number((a
 
 describe.skipIf(!URL)("checkout write path", () => {
   beforeAll(async () => {
+    // A dedicated test database: start from nothing so regenerated migrations never collide with stale state.
+    await db.execute(sql`drop schema if exists public cascade; create schema public; drop schema if exists drizzle cascade`);
     await migrate(db, { migrationsFolder: "drizzle" });
     await seed(db);
   });

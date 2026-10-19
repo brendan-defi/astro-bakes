@@ -233,6 +233,13 @@ const en = {
   accountTitle: "Your account",
   signedInAs: (email: string) => `Signed in as ${email}`,
   signOut: "Sign out",
+  confirmSignInTitle: "Sign in on this device?",
+  confirmSignInBody: (masked: string) => `This link signs you in as ${masked}. Only continue if you asked for it.`,
+  confirmSignIn: "Yes, sign me in",
+  confirmReplaces: (email: string) => `You're currently signed in as ${email}. Continuing switches to the other account.`,
+  notYou: "Not you? Back to the shop",
+  linkInvalidTitle: "This link isn't valid",
+  requestNewLink: "Request a new one",
   limitReached: (already: number, name: string, max: number) => `You've already ordered ${already} × ${name} in this drop. The limit is ${max} of each box per person.`,
   // ---- scheduled / closed / no-drop homepage (design-ref/DROP-STATES.md) ----
   dropN: (n: number) => `Drop ${String(n).padStart(2, "0")}`,

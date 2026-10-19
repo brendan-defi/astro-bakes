@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { codeMatches, generateCode, generateToken, hashCode, hashSession, hashToken, normaliseEmail, safeNext } from "./auth-rules";
+import { codeMatches, flowMatches, generateCode, generateToken, hashCode, hashFlow, hashSession, hashToken, isSameOriginRequest, maskEmail, normaliseEmail, safeNext } from "./auth-rules";
 
 describe("auth rules", () => {
   it("generates six-digit codes with leading zeros and distinct URL-safe tokens", () => {
@@ -9,23 +9,63 @@ describe("auth rules", () => {
     expect(a).toMatch(/^[A-Za-z0-9_-]{43}$/);
   });
 
-  it("hashes tokens, sessions and codes differently, and salts codes by token id", () => {
-    expect(hashToken("x")).not.toBe(hashSession("x"));
+  it("hashes tokens, sessions, flows and codes differently, and salts codes by token id", () => {
+    expect(new Set([hashToken("x"), hashSession("x"), hashFlow("x")]).size).toBe(3);
     expect(hashCode("id-1", "123456")).not.toBe(hashCode("id-2", "123456"));
     expect(hashCode("id-1", "123456")).toBe(hashCode("id-1", "123456"));
   });
 
-  it("compares codes in constant time and tolerates separators", () => {
+  it("compares codes and flow secrets in constant time and tolerates separators in codes", () => {
     const h = hashCode("id-1", "042599");
     expect(codeMatches("id-1", "042599", h)).toBe(true);
     expect(codeMatches("id-1", "042 599", h)).toBe(true);
     expect(codeMatches("id-1", "042598", h)).toBe(false);
     expect(codeMatches("id-2", "042599", h)).toBe(false);
+    const f = hashFlow("secret");
+    expect(flowMatches("secret", f)).toBe(true);
+    expect(flowMatches("other", f)).toBe(false);
+    expect(flowMatches(null, f)).toBe(false);
+    expect(flowMatches("", f)).toBe(false);
   });
 
-  it("normalises emails and only allows same-site return paths", () => {
+  it("normalises emails and masks them for display", () => {
     expect(normaliseEmail("  You@Example.COM ")).toBe("you@example.com");
-    expect(safeNext("/en/checkout?step=delivery", "/en")).toBe("/en/checkout?step=delivery");
-    for (const bad of ["//evil.example", "https://evil.example", "/en\\\\x", "/en\nSet-Cookie:x", "", null, undefined]) expect(safeNext(bad as string, "/en")).toBe("/en");
+    expect(maskEmail("jane.doe@example.com")).toBe("j***@example.com");
+    expect(maskEmail("a@b.c")).toBe("a***@b.c");
+    expect(maskEmail("broken")).toBe("***");
+  });
+
+  it("only allows same-site return paths, rejecting hosts, schemes and every control character", () => {
+    expect(safeNext("/en/checkout?step=delivery&r=abc:1", "/en")).toBe("/en/checkout?step=delivery&r=abc:1");
+    expect(safeNext("/en#boxes", "/en")).toBe("/en#boxes");
+    for (const bad of [
+      "//evil.example",
+      "https://evil.example",
+      "/\\evil.example",
+      "/en\\x",
+      "/en\nSet-Cookie:x",
+      "/\t/attacker.test/path", // a tab that URL parsing would strip, leaving //attacker.test
+      "/\u0000/x",
+      "/\u007f/x",
+      "/en\r",
+      "",
+      null,
+      undefined,
+    ]) {
+      expect(safeNext(bad as string, "/en")).toBe("/en");
+    }
+    // the chosen path must stay on the dummy origin once resolved
+    expect(new URL(safeNext("/\t/attacker.test/path", "/en"), "https://astrobakes.xyz").origin).toBe("https://astrobakes.xyz");
+  });
+
+  it("recognises same-origin requests for the confirmation POST", () => {
+    expect(isSameOriginRequest({ secFetchSite: "same-origin" })).toBe(true);
+    expect(isSameOriginRequest({ secFetchSite: "none" })).toBe(true); // typed by the user
+    expect(isSameOriginRequest({ secFetchSite: "cross-site", origin: "https://astrobakes.xyz", host: "astrobakes.xyz" })).toBe(false);
+    expect(isSameOriginRequest({ origin: "https://astrobakes.xyz", host: "astrobakes.xyz" })).toBe(true);
+    expect(isSameOriginRequest({ origin: "https://astrobakes.xyz", forwardedHost: "astrobakes.xyz", host: "internal:3000" })).toBe(true);
+    expect(isSameOriginRequest({ origin: "https://evil.example", host: "astrobakes.xyz" })).toBe(false);
+    expect(isSameOriginRequest({ origin: "null", host: "astrobakes.xyz" })).toBe(false);
+    expect(isSameOriginRequest({})).toBe(false);
   });
 });
