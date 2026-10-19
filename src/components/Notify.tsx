@@ -1,10 +1,10 @@
-import { anonymousViewer, settings, type Locale, type Viewer } from "@/lib/data";
+import { anonymousViewer, type Locale, type Settings, type Viewer } from "@/lib/data";
 import { getStrings } from "@/lib/i18n";
 import { NotifyForm } from "./NotifyForm";
 import s from "./home.module.css";
 
 /** Notify-me capture (PRD 1.5). Signed-in, opted-in viewers see their preference instead. */
-export function Notify({ locale, viewer = anonymousViewer }: { locale: Locale; viewer?: Viewer }) {
+export function Notify({ locale, settings, viewer = anonymousViewer }: { locale: Locale; settings: Settings; viewer?: Viewer }) {
   const t = getStrings(locale);
   return (
     <section id="notify" className={s.notify}>

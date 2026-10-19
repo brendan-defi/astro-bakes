@@ -1,8 +1,8 @@
-import { settings, type Locale } from "@/lib/data";
+import type { Locale, Settings } from "@/lib/data";
 import { getStrings } from "@/lib/i18n";
 import s from "./home.module.css";
 
-export function Footer({ locale }: { locale: Locale }) {
+export function Footer({ locale, settings }: { locale: Locale; settings: Settings }) {
   const t = getStrings(locale);
   const p = `/${locale}`;
   const links: [string, string][] = [
