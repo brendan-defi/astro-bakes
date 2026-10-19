@@ -2,6 +2,7 @@ import { and, asc, eq, gt, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { boxes as boxesTable, dropBoxes as dropBoxesTable, drops as dropsTable, inventoryHolds, settings as settingsTable, type BoxRow, type DropBoxRow } from "@/db/schema";
 import { settings as defaultSettings, type Box, type Drop, type Locale, type Settings } from "./data";
+import { isUuid } from "./uuid";
 
 /**
  * Server-side reads for the homepage (PRD 1.1, 1.3): drops with their boxes,
@@ -24,10 +25,11 @@ const pick = (locale: Locale, en: string | null, ja: string | null) => (locale =
 
 /** Quantity under unexpired holds per drop box, leaving out the viewer's own cart so their reservation isn't counted against them. */
 async function activeHolds(excludeCartId: string | null): Promise<Map<string, number>> {
+  const exclude = isUuid(excludeCartId) ? excludeCartId : null;
   const rows = await getDb()
     .select({ dropBoxId: inventoryHolds.dropBoxId, qty: sql<number>`coalesce(sum(${inventoryHolds.qty}), 0)::int` })
     .from(inventoryHolds)
-    .where(and(gt(inventoryHolds.expiresAt, new Date()), sql`${inventoryHolds.cartId} is distinct from ${excludeCartId}::uuid`))
+    .where(and(gt(inventoryHolds.expiresAt, new Date()), sql`${inventoryHolds.cartId} is distinct from ${exclude}::uuid`))
     .groupBy(inventoryHolds.dropBoxId);
   return new Map(rows.map((r) => [r.dropBoxId, r.qty]));
 }

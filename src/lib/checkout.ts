@@ -5,6 +5,7 @@ import { addresses, carts, customers, dropBoxes, drops, inventoryHolds, orderIte
 import { effectiveState, settings as defaultSettings, type Locale } from "./data";
 import { demoEnabled } from "./demo";
 import { EMAIL, orderNumber, reconcile, validateDelivery, type DeliveryInput, type ReCheckChange } from "./checkout-rules";
+import { isUuid } from "./uuid";
 
 export { reconcile, orderNumber, validateDelivery } from "./checkout-rules";
 export type { ReCheckChange, Available, DeliveryInput } from "./checkout-rules";
@@ -33,7 +34,12 @@ export type { ReCheckChange, Available, DeliveryInput } from "./checkout-rules";
 
 export type Conn = Db | Parameters<Parameters<Db["transaction"]>[0]>[0];
 const DAY = 86_400_000;
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** A drop whose reservations may still be completed: anything an admin hasn't pulled (cancelled) or unpublished (draft). */
+function sellable(drop: { state: string; openAt: Date; closeAt: Date; shipAt: Date }, now: Date) {
+  const state = effectiveState({ ...drop, arriveAt: new Date(drop.shipAt.getTime() + DAY) } as Parameters<typeof effectiveState>[0], now);
+  return state !== "cancelled" && state !== "draft";
+}
 
 // ---------------------------------------------------------------- helpers
 
@@ -130,7 +136,7 @@ export async function startCheckout(input: StartInput, cartId: string | null): P
 
   return db.transaction(async (tx) => {
     // Lock order: cart, then drop, then the drop's boxes (see the module comment).
-    let cart = cartId && UUID.test(cartId) ? await lockCart(tx, cartId) : null;
+    let cart = isUuid(cartId) ? await lockCart(tx, cartId) : null;
     if (cart && cart.dropId !== drop.id) {
       await tx.delete(carts).where(eq(carts.id, cart.id)); // a leftover from another drop; its holds go with it
       cart = null;
@@ -179,9 +185,9 @@ export interface HeldCheckout {
 
 /** The browser's cart if it still has unexpired holds, whether or not new checkouts are allowed (PRD 3.8). */
 export async function heldCheckout(cartId: string | null): Promise<HeldCheckout | null> {
-  if (!cartId || !UUID.test(cartId)) return null;
+  if (!isUuid(cartId)) return null;
   const cart = await getDb().query.carts.findFirst({ where: eq(carts.id, cartId), with: { drop: true, holds: true } });
-  if (!cart || cart.holds.length === 0) return null;
+  if (!cart || cart.holds.length === 0 || !sellable(cart.drop, new Date())) return null;
   const expiresAt = Math.min(...cart.holds.map((h) => h.expiresAt.getTime()));
   if (expiresAt <= Date.now()) return null;
   return { checkoutId: cart.id, dropSlug: cart.drop.slug, items: cart.items, revision: cart.revision, expiresAt };
@@ -212,7 +218,7 @@ export interface PlacedOrder {
 
 export type PlaceResult =
   | { ok: true; order: PlacedOrder }
-  | { ok: false; error: "hold_expired" | "invalid" | "changed" }
+  | { ok: false; error: "hold_expired" | "invalid" | "changed" | "drop_closed" }
   | { ok: false; error: "limit"; box: string; name: string; max: number; already: number };
 
 export async function placeOrder(input: PlaceInput, cartId: string | null): Promise<PlaceResult> {
@@ -220,7 +226,7 @@ export async function placeOrder(input: PlaceInput, cartId: string | null): Prom
   const delivery = validateDelivery(input.delivery);
   const hit = delivery.hit;
   if (!EMAIL.test(email) || !delivery.ok || !hit || !Number.isInteger(input.revision)) return { ok: false, error: "invalid" };
-  if (!cartId || !UUID.test(cartId)) return { ok: false, error: "hold_expired" };
+  if (!isUuid(cartId)) return { ok: false, error: "hold_expired" };
   if (cartId !== input.checkoutId) return { ok: false, error: "changed" };
   const gift = input.gift?.trim().slice(0, 150) || null;
   const db = getDb();
@@ -237,6 +243,8 @@ export async function placeOrder(input: PlaceInput, cartId: string | null): Prom
     if (!drop || drop.slug !== input.dropId || holds.length === 0 || holds.some((h) => h.expiresAt <= now)) {
       return { ok: false as const, error: "hold_expired" as const };
     }
+    // Finishing after the normal close is allowed while the hold lasts (PRD 3.8); a cancelled drop is not.
+    if (!sellable(drop, now)) return { ok: false as const, error: "drop_closed" as const };
 
     // The account: found by email, or created unverified from the checkout until sign-in exists (PRD 2.2).
     // An existing customer's profile and saved address are never changed from an unverified checkout.

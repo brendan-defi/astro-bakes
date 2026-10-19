@@ -225,6 +225,28 @@ describe.skipIf(!URL)("checkout write path", () => {
     expect(await left(null)).toMatchObject({ "cookie-box": 7, "banana-bread": 3 });
   });
 
+  it("refuses to complete a reservation once the drop is cancelled, and stops offering it", async () => {
+    const id = await held();
+    await db.update(schema.drops).set({ state: "cancelled" }).where(eq(schema.drops.slug, DROP));
+    expect(await heldCheckout(id)).toBeNull();
+    expect(await placeOrder(input(id, 1, "cancelled@test.invalid"), id)).toEqual({ ok: false, error: "drop_closed" });
+    expect(await count("orders")).toBe(0);
+    expect(await sold("cookie-box")).toBe(13);
+    // A merely closed drop still lets the hold finish (PRD 3.8).
+    await db.update(schema.drops).set({ state: "closed" }).where(eq(schema.drops.slug, DROP));
+    expect(await heldCheckout(id)).not.toBeNull();
+    expect((await placeOrder(input(id, 1, "cancelled@test.invalid"), id)).ok).toBe(true);
+  });
+
+  it("treats a malformed cart id as no cart instead of failing the query", async () => {
+    const junk = "------------------------------------";
+    await expect(loadDrops("en", junk)).resolves.toBeTruthy();
+    expect(await heldCheckout(junk)).toBeNull();
+    expect(await placeOrder(input(junk, 1, "junk@test.invalid"), junk)).toEqual({ ok: false, error: "hold_expired" });
+    const r = await start({ "cookie-box": 1 }, junk);
+    expect(r.ok && r.checkoutId).toBeTruthy();
+  });
+
   it("markPaid is idempotent", async () => {
     const id = await held();
     const r = await placeOrder(input(id, 1, "idem@test.invalid"), id);

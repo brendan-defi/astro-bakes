@@ -204,6 +204,7 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held }: { locale: Loca
       if (!res.ok) {
         if (res.error === "hold_expired") { clearHold(); setServerExpired(true); }
         else if (res.error === "changed") { clearHold(); setNotice(t.cartChanged); go("cart"); }
+        else if (res.error === "drop_closed") { clearHold(); setNotice(t.dropUnavailable); go("cart"); }
         else if (res.error === "limit") { clearHold(); setNotice(t.limitReached(res.already, res.name, res.max)); go("cart"); }
         else { setNotice(t.orderFailed); setTouched(true); go("delivery"); }
         return;
