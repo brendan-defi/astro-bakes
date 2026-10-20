@@ -173,6 +173,8 @@ p { margin: 0; }
   padding: 0 10px;
   font-size: 12px; font-weight: 900;
 }
+/* Allergen pills double as toys (AllergenChips): tap one for a burst. Still plain text, so no focus or role. */
+.chip-toy { cursor: pointer; user-select: none; -webkit-user-select: none; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
 
 /* ---------- Inputs ---------- */
 .label { font-size: 14px; font-weight: 900; }

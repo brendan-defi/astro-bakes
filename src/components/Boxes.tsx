@@ -3,6 +3,7 @@ import type { Box, Drop, HomeData, Locale } from "@/lib/data";
 import { fmtDateTime, yen } from "@/lib/format";
 import { getStrings, type Strings } from "@/lib/i18n";
 import { ClockIcon } from "./icons";
+import { AllergenChips } from "./AllergenChips";
 import { BoxCard } from "./BoxCard";
 import { BoxPhoto } from "./BoxPhoto";
 import s from "./home.module.css";
@@ -47,7 +48,7 @@ function MenuCard({ box, upcoming, locale, t }: { box: Box; upcoming: Drop | nul
         <p className={s.boxContents}>{box.contents}</p>
         <div className={s.allergens}>
           <span className={s.lab}>{t.contains}</span>
-          {box.allergens.map((a) => <span key={a} className="chip-sm">{t.allergen(a)}</span>)}
+          <AllergenChips items={box.allergens.map((a) => ({ key: a, label: t.allergen(a) }))} />
         </div>
         <div className={s.menuFoot}>
           <ClockIcon size={18} />
