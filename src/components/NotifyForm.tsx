@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, type FormEvent, type ReactNode } from "react";
+import { useRef, useState, type FormEvent, type ReactNode } from "react";
 import type { Locale } from "@/lib/data";
 import { getStrings } from "@/lib/i18n";
+import { burst } from "@/lib/particles";
 import { CheckIcon } from "./icons";
 import s from "./home.module.css";
 
@@ -23,12 +24,15 @@ export function NotifyForm({ locale, id, label, button, consent, variant, extra 
   const t = getStrings(locale);
   const [email, setEmail] = useState("");
   const [done, setDone] = useState<string | null>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
   const hero = variant === "hero";
 
   function submit(e: FormEvent) {
     e.preventDefault();
     if (!email) return;
     // TODO: POST /api/subscribe → Subscriber(email, locale, source=homepage, consented_at)
+    // Fire from the button before the success state replaces it.
+    burst(buttonRef.current, { kind: ["star", "heart", "sprinkle"], count: 14, power: 420 });
     setDone(email);
   }
 
@@ -48,7 +52,7 @@ export function NotifyForm({ locale, id, label, button, consent, variant, extra 
       <label htmlFor={id} className="label">{label}</label>
       <div className={hero ? s.heroFormRow : s.notifyRow}>
         <input id={id} type="email" required autoComplete="email" placeholder="you@example.com" className="input" value={email} onChange={(e) => setEmail(e.target.value)} />
-        <button type="submit" className={`btn btn-primary ${hero ? s.heroBtn : s.notifyBtn}`}>{button}</button>
+        <button ref={buttonRef} type="submit" className={`btn btn-primary ${hero ? `sheen ${s.heroBtn}` : s.notifyBtn}`}>{button}</button>
       </div>
       {hero ? (
         <div className={s.heroFine}><span>{consent}</span>{extra}</div>

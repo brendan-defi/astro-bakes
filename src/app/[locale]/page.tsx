@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { getHome } from "@/lib/data";
+import { getHome, mockSource } from "@/lib/data";
 import { demoEnabled } from "@/lib/demo";
 import { loadCatalogue, loadDrops, loadSettings, loadViewerOrder } from "@/lib/drops";
 import { currentCustomer } from "@/lib/auth";
@@ -37,6 +37,9 @@ export default async function HomePage({ params, searchParams }: { params: Promi
   const [drops, catalogue, settings, me] = await Promise.all([loadDrops(locale, await cartIdFromCookie()), loadCatalogue(locale), loadSettings(), currentCustomer()]);
   const overrides = demoEnabled ? { state: one("state"), next: one("next"), viewer: one("viewer") } : {};
   let home = getHome(overrides, { drops, catalogue, settings });
+  // A forced state the database can't supply (no live drop between drops, e.g. ?state=open on a preview)
+  // falls back to the sample drops, so the open-drop UI can still be reviewed. Never in production.
+  if (overrides.state && home.state !== overrides.state) home = getHome(overrides, { ...mockSource, settings });
   if (me && !overrides.viewer) {
     // A real session beats the sample viewer: avatar, notification preference, and their order in the drop on show.
     const order = home.drop ? await loadViewerOrder(me.id, home.drop.id) : null;
@@ -51,7 +54,7 @@ export default async function HomePage({ params, searchParams }: { params: Promi
       <Hero locale={locale} home={home} />
       <Wave from="var(--lilac)" to="var(--ground)" />
       <Boxes locale={locale} home={home} />
-      <Wave from="var(--ground)" to="var(--butter)" />
+      <Wave from="var(--ground)" to="var(--butter)" reverse />
       <HowItWorks locale={locale} settings={settings} />
       <Wave from="var(--butter)" to="var(--pink-soft)" />
       <PartyOrders locale={locale} />

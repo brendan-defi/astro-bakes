@@ -30,6 +30,16 @@
   --fs-body: 16px;
   --fs-h1: 44px;
   --fs-h2: 38px;
+
+  /* Motion. --ease-spring overshoots and settles; the bezier is the fallback where linear() isn't supported (iOS < 17.2). */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --dur-boop: 450ms;
+}
+@supports (transition-timing-function: linear(0, 1)) {
+  :root {
+    --ease-spring: linear(0, 0.009, 0.035 2.1%, 0.141, 0.281 6.7%, 0.723 12.9%, 0.938 16.7%, 1.017, 1.077, 1.121, 1.149 24.3%, 1.159, 1.163, 1.161, 1.154 29.9%, 1.129 32.8%, 1.051 39.6%, 1.017 43.1%, 0.991, 0.977 51%, 0.974 53.8%, 0.975 57.1%, 0.997 69.8%, 1.003 76.9%, 1);
+  }
 }
 @media (min-width: 768px) {
   :root {
@@ -42,6 +52,8 @@
 }
 
 /* ---------- Base ---------- */
+/* Selected text cycles through the palette: SelectionColors moves --selection on to the next colour each time. */
+::selection { background: var(--selection, var(--pink)); color: var(--ink); }
 *, *::before, *::after { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; }
 body {
@@ -141,6 +153,18 @@ p { margin: 0; }
 .btn-secondary.raised:active:not(:disabled) { transform: translateY(2px); box-shadow: 0 2px 0 var(--ink); }
 .btn-secondary:hover { color: var(--ink); }
 .btn-block { display: flex; width: 100%; }
+/*
+ * An occasional sheen across a main button: a quick diagonal sweep, then a long rest.
+ * Painted under the label (z-index -1 inside the isolated button) so the text stays crisp.
+ */
+.sheen { position: relative; overflow: hidden; isolation: isolate; }
+@media (prefers-reduced-motion: no-preference) {
+  .sheen::after {
+    content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+    background: linear-gradient(105deg, transparent 30%, rgb(255 255 255 / 0.7) 47%, rgb(255 255 255 / 0.7) 53%, transparent 70%);
+    translate: -110% 0; animation: ab-sheen 6s ease-in-out 1.5s infinite;
+  }
+}
 .btn-text {
   background: none; border: 0; padding: 0; min-height: 44px;
   display: inline-flex; align-items: center; font-weight: 900; color: var(--ink);
@@ -163,6 +187,8 @@ p { margin: 0; }
   padding: 0 10px;
   font-size: 12px; font-weight: 900;
 }
+/* Decoration that doubles as a toy (allergen pills, CookieToy): tap one for a burst. Still decoration, so no focus or role. */
+.tap-toy { cursor: pointer; user-select: none; -webkit-user-select: none; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
 
 /* ---------- Inputs ---------- */
 .label { font-size: 14px; font-weight: 900; }
@@ -182,6 +208,8 @@ p { margin: 0; }
   outline: 3px solid var(--aqua);
   outline-offset: 2px;
 }
+/* A section that ScrollLink sends focus to: no ring round the whole section. */
+section[tabindex="-1"]:focus { outline: none; }
 textarea.input { height: auto; padding: 12px 16px; resize: vertical; }
 /* The native arrow sits hard against the border; draw our own chevron (ink, as a data URI can't read --ink) with room around it. */
 select.input {
@@ -207,7 +235,9 @@ select.input {
   padding: 0;
 }
 .stepper button.inc { background: var(--aqua); }
-.stepper button:active:not(:disabled) { transform: translateY(2px); box-shadow: 0 1px 0 var(--ink); }
+/* Squish on press, spring back on release. `scale` composes with the press-down transform. */
+.stepper button { transition: scale 400ms var(--ease-spring); }
+.stepper button:active:not(:disabled) { transform: translateY(2px); box-shadow: 0 1px 0 var(--ink); scale: 0.88; transition-duration: 60ms; }
 .stepper .qty {
   min-width: 40px; text-align: center;
   font-family: var(--font-display), sans-serif;
@@ -251,10 +281,15 @@ select.input {
 }
 
 /* ---------- Motion ---------- */
-@keyframes ab-ticker { from { transform: translateX(0); } to { transform: translateX(-50%); } }
-@keyframes ab-bob { 0%, 100% { transform: translateY(0) rotate(-3deg); } 50% { transform: translateY(-8px) rotate(2deg); } }
-@keyframes ab-spin { from { transform: rotate(0); } to { transform: rotate(360deg); } }
-@keyframes ab-pop { 0% { transform: scale(1); } 40% { transform: scale(1.18); } 100% { transform: scale(1); } }
+/*
+ * Keyframes live in the stylesheet that uses them. In a .module.css file Next (Lightning CSS) renames every
+ * animation name, references included, so a module can't reach a global @keyframes: the hero, ticker and
+ * cart badge animations were silently dead until each module got its own copy.
+ * Newer keyframes move the individual rotate/scale/translate properties, which compose with the
+ * transform: rotate(...) tilts all over the site instead of replacing them. Entrances are written
+ * "from" only, so with reduced motion the element simply sits in its final state.
+ */
+@keyframes ab-sheen { 0% { translate: -110% 0; } 16%, 100% { translate: 110% 0; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
 
 .sr-only {

@@ -1,13 +1,23 @@
 /* ===== Hero ===== */
-.hero { position: relative; background: var(--lilac); padding: 30px var(--gutter) 26px; }
+/* overflow-x: clip keeps the orbiting cookie from widening the page on narrow phones. */
+.hero { position: relative; background: var(--lilac); padding: 30px var(--gutter) 26px; overflow-x: clip; }
 .heroGrid { display: flex; flex-wrap: wrap; align-items: center; gap: 28px; }
 .heroText { flex: 1 1 320px; min-width: 0; display: flex; flex-direction: column; gap: 16px; align-items: flex-start; }
 .heroVisual { flex: 1 1 280px; min-width: 0; display: flex; justify-content: center; }
 .heroActions { flex: 1 1 100%; min-width: 0; display: flex; flex-direction: column; gap: 14px; }
 .eyebrowSticker {
+  position: relative; overflow: hidden; isolation: isolate;
   background: var(--butter); border: var(--border); border-radius: 10px;
   padding: 4px 12px; transform: rotate(-3deg); box-shadow: 3px 3px 0 var(--ink);
   font-family: var(--font-display), sans-serif; font-size: 14px; letter-spacing: 0.06em; text-transform: uppercase;
+}
+/* Holographic foil: bands of light turning slowly under the label. Off entirely under reduced motion. */
+@media (prefers-reduced-motion: no-preference) {
+  .eyebrowSticker::after {
+    content: ""; position: absolute; inset: -250% -10%; z-index: -1; pointer-events: none;
+    background: conic-gradient(transparent 0 8%, rgb(255 255 255 / 0.85) 16%, transparent 24% 42%, rgb(255 120 190 / 0.75) 50%, transparent 58% 74%, rgb(80 220 215 / 0.8) 82%, transparent 90%);
+    mix-blend-mode: overlay; animation: spin 9s linear infinite;
+  }
 }
 .h1 { text-shadow: 3px 3px 0 var(--white); }
 .h1 .outlined { color: var(--white); text-shadow: 3px 3px 0 var(--ink), -1.5px -1.5px 0 var(--ink), 1.5px -1.5px 0 var(--ink), -1.5px 1.5px 0 var(--ink); }
@@ -23,15 +33,30 @@
 .heroCta { min-height: 62px; margin-top: 4px; font-size: 22px; }
 
 /* Astro visual */
-.astro { position: relative; width: 100%; max-width: 330px; aspect-ratio: 1 / 1; }
-.astroMoon { position: absolute; inset: 4%; border-radius: 50%; background: var(--butter); border: var(--border); }
-.astroOrbit { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
-.astroPhoto { position: absolute; inset: 11%; width: 78%; height: 78%; object-fit: cover; border-radius: 50%; border: var(--border); }
-.astroCookie { position: absolute; left: -4%; bottom: 2%; width: 23%; height: 23%; animation: ab-bob 4s ease-in-out infinite; }
-.astroStar { position: absolute; right: 0; top: 0; width: 15%; height: 15%; animation: ab-spin 14s linear infinite; }
-.astroStar2 { display: none; position: absolute; left: 2%; top: 8%; width: 9%; height: 9%; }
+/*
+ * Layers, back to front: moon 1, back orbit 2, cookie on the back arc 3, photo 4, front orbit 5,
+ * cookie on the front arc 6, stars 7, bubble 8. The square is a size container so the orbiting
+ * cookie can be placed in cqw (1cqw = 1% of the square), however big the square is.
+ */
+.astro { position: relative; width: 100%; max-width: 330px; aspect-ratio: 1 / 1; isolation: isolate; container-type: inline-size; }
+.astroMoon { position: absolute; inset: 4%; border-radius: 50%; background: var(--butter); border: var(--border); z-index: 1; }
+/* The orbit svgs cover the whole square; let taps through to Astro. */
+.astroOrbit { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+.astroOrbitBack { z-index: 2; }
+.astroOrbitFront { z-index: 5; }
+.astroPhoto { position: absolute; inset: 11%; width: 78%; height: 78%; object-fit: cover; border-radius: 50%; border: var(--border); z-index: 4; }
+/* Tap Astro (HeroAstro): no text selection, image drag or tap flash. */
+.astroBoop { cursor: pointer; user-select: none; -webkit-user-select: none; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+/* A zero-size point the cookie is centred on: its translate is the cookie's centre, at rest bottom-left. */
+.orbiter { position: absolute; left: 0; top: 0; width: 0; height: 0; z-index: 6; pointer-events: none; translate: 7.5cqw 86.5cqw; }
+.astroCookie { position: absolute; left: -11.5cqw; top: -11.5cqw; width: 23cqw; height: 23cqw; animation: bob 4s ease-in-out infinite; pointer-events: auto; }
+/* Stars spin, twinkle and every few seconds do a little hop-and-wiggle (rotate/translate compose with the spin). */
+.astroStar { position: absolute; right: 0; top: 0; width: 15%; height: 15%; z-index: 7; animation: spin 14s linear infinite, twinkle 2.8s ease-in-out infinite, jiggle 3.4s ease-in-out infinite; }
+.astroStar2 { display: none; position: absolute; left: 2%; top: 8%; width: 9%; height: 9%; z-index: 7; animation: twinkle 3.6s ease-in-out 1.2s infinite, jiggle 3.4s ease-in-out 1.7s infinite; }
+/* Springs in from its tail (bottom-left corner) once the page has settled. */
 .bubble {
-  position: absolute; right: -2%; bottom: 10%; transform: rotate(4deg);
+  position: absolute; right: -2%; bottom: 10%; z-index: 8; transform: rotate(4deg); transform-origin: 0 100%;
+  animation: pop-in 650ms var(--ease-spring) 500ms both;
   background: var(--white); border: var(--border); border-radius: 18px 18px 18px 4px;
   box-shadow: 3px 3px 0 var(--ink); padding: 6px 12px;
   font-weight: 900; font-size: 14px; line-height: 1.3; max-width: 46%;
@@ -54,7 +79,7 @@
   .ticketValue { font-size: 18px; }
   .heroCta { align-self: flex-start; min-height: 68px; padding: 0 40px; margin-top: 8px; font-size: 26px; box-shadow: 0 7px 0 var(--ink); }
   .astro { max-width: 460px; }
-  .astroCookie { left: -6%; }
+  .orbiter { translate: 5.5cqw 86.5cqw; }
   .astroStar2 { display: block; }
   .bubble { right: -4%; bottom: 12%; border-radius: 20px 20px 20px 4px; box-shadow: 4px 4px 0 var(--ink); padding: 8px 16px; font-size: 17px; max-width: 44%; }
 }
@@ -107,7 +132,11 @@
 .boxesHead { display: flex; flex-direction: column; gap: 4px; }
 .boxesSub { font-size: 15px; font-weight: 700; }
 .boxGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); gap: 30px 24px; }
-.box { position: relative; display: flex; flex-direction: column; box-shadow: 6px 6px 0 var(--ink); }
+/* --tilt comes from the card's inline style; the separate rotate property lets hover straighten it. */
+.box {
+  position: relative; display: flex; flex-direction: column; box-shadow: 6px 6px 0 var(--ink); rotate: var(--tilt, 0deg);
+  transition: rotate 500ms var(--ease-spring), translate 500ms var(--ease-spring), box-shadow 200ms var(--ease-out);
+}
 .boxPhoto {
   position: relative; height: 190px; border-radius: 25px 25px 0 0; border-bottom: var(--border);
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
@@ -116,6 +145,9 @@
 .boxPhoto img { object-fit: cover; border-radius: inherit; }
 .burst { position: absolute; top: -18px; right: -10px; width: 84px; height: 84px; transform: rotate(12deg); }
 .burst svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+/* Only a few left: the sticker throbs and its star slowly turns (rotate/scale compose with its 12deg tilt). */
+.burstLow { animation: throb 1.8s ease-in-out infinite; }
+.burstLow svg { animation: spin 16s linear infinite; }
 .burstText { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; font-family: var(--font-display), sans-serif; line-height: 0.95; }
 .burstNum { font-size: 26px; }
 .burstLabel { font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; }
@@ -176,7 +208,11 @@
 .howHead { display: flex; flex-direction: column; gap: 2px; }
 .howHead .eyebrow { font-size: 14px; }
 .steps { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr)); gap: 18px; }
-.step { display: flex; gap: 14px; align-items: center; background: var(--white); border: var(--border); border-radius: 22px; box-shadow: 5px 5px 0 var(--ink); padding: 16px; }
+/* Tilted like the box cards (--tilt from the inline style), and lifts the same way on hover. */
+.step {
+  display: flex; gap: 14px; align-items: center; background: var(--white); border: var(--border); border-radius: 22px; box-shadow: 5px 5px 0 var(--ink); padding: 16px;
+  rotate: var(--tilt, 0deg); transition: rotate 500ms var(--ease-spring), translate 500ms var(--ease-spring), box-shadow 200ms var(--ease-out);
+}
 .stepNum { flex: none; width: 60px; height: 60px; border-radius: var(--radius-pill); border: var(--border); display: flex; align-items: center; justify-content: center; font-family: var(--font-display), sans-serif; font-size: 30px; }
 .stepTitle { font-family: var(--font-display), sans-serif; font-size: 20px; line-height: 1.15; }
 .stepBody { font-size: 14px; font-weight: 700; margin-top: 4px; }
@@ -222,6 +258,7 @@
 .p2 { transform: rotate(3deg) translateY(14px); box-shadow: 4px 4px 0 var(--aqua); }
 .p3 { transform: rotate(2deg); box-shadow: 4px 4px 0 var(--butter); }
 .p4 { transform: rotate(-3deg) translateY(14px); box-shadow: 4px 4px 0 var(--lilac); }
+.polaroid { transition: translate 450ms var(--ease-spring), scale 450ms var(--ease-spring); }
 @media (min-width: 768px) {
   .story { padding: 80px var(--gutter) 96px; }
   .storyInner { gap: 64px; }
@@ -269,8 +306,8 @@
 .partyBurst { position: absolute; top: 0; right: 0; width: 92px; height: 92px; transform: rotate(10deg); }
 .partyBurst svg { position: absolute; inset: 0; width: 100%; height: 100%; }
 .partyBurst span { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 20px; text-align: center; font-family: var(--font-display), sans-serif; font-size: 13px; line-height: 1; text-transform: uppercase; }
-.partyCookie { position: absolute; left: 0; bottom: 4px; width: 64px; height: 64px; animation: ab-bob 4s ease-in-out infinite; }
-.partyCookie2 { position: absolute; left: 52px; bottom: -6px; width: 42px; height: 42px; animation: ab-bob 4s ease-in-out -2s infinite; }
+.partyCookie { position: absolute; left: 0; bottom: 4px; width: 64px; height: 64px; animation: bob 4s ease-in-out infinite; }
+.partyCookie2 { position: absolute; left: 52px; bottom: -6px; width: 42px; height: 42px; animation: bob 4s ease-in-out -2s infinite; }
 @media (min-width: 768px) {
   .parties { padding: 64px var(--gutter) 84px; }
   .partiesInner { gap: 56px; }
@@ -343,6 +380,20 @@
   .copy { flex-basis: 100%; }
 }
 
+/* ===== Hover lifts (mouse and trackpad only; phones have no hover) ===== */
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .box:hover, .step:hover { rotate: 0deg; translate: 0 -6px; box-shadow: 10px 12px 0 var(--ink); }
+  .polaroid:hover { translate: 0 -10px; scale: 1.06; z-index: 1; }
+}
+
 /* Titan One has no Japanese glyphs, so JA labels set in it use Zen Maru Gothic 900 (handoff p.13). */
 :lang(ja) :is(.bubble, .ticketValue, .ticketSub, .orderMain, .partiesBody, .partiesFine, .partyValue) { word-break: auto-phrase; }
 :lang(ja) .eyebrowSticker, :lang(ja) .partyTicketHead, :lang(ja) .partyBurst span, :lang(ja) .partyValue, :lang(ja) .cartLink, :lang(ja) .orderView, :lang(ja) .burstLabel, :lang(ja) .stamp, :lang(ja) .howMany, :lang(ja) .stepTitle, :lang(ja) .lineTitle { font-family: var(--font-body), sans-serif; font-weight: 900; }
+
+/* Keyframes for this module (a module can't use global ones; see globals.css). */
+@keyframes spin { from { transform: rotate(0); } to { transform: rotate(360deg); } }
+@keyframes bob { 0%, 100% { transform: translateY(0) rotate(-3deg); } 50% { transform: translateY(-8px) rotate(2deg); } }
+@keyframes twinkle { 0%, 100% { scale: 1; opacity: 1; } 50% { scale: 0.72; opacity: 0.75; } }
+@keyframes jiggle { 0%, 62%, 100% { rotate: 0deg; translate: 0 0; } 68% { rotate: -16deg; translate: 0 -5px; } 74% { rotate: 13deg; translate: 0 -2px; } 80% { rotate: -8deg; translate: 0 -3px; } 86% { rotate: 4deg; translate: 0 0; } 92% { rotate: -1deg; } }
+@keyframes pop-in { from { scale: 0; opacity: 0; } }
+@keyframes throb { 50% { scale: 1.08; } }

@@ -1,0 +1,5 @@
+.wave { display: block; height: 30px; overflow: hidden; }
+/* 11 waves drawn, 10 visible: slide the whole svg one wave (1/11 of its width) and start over. */
+.wave svg { display: block; width: calc(100% * 11 / 10); height: 100%; animation: drift 7s linear infinite; }
+.reverse svg { animation-direction: reverse; }
+@keyframes drift { to { translate: calc(-100% / 11) 0; } }

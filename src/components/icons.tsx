@@ -36,22 +36,29 @@ export const CameraIcon = ({ size = 28, ...p }: P) => (
 export const CardIcon = ({ size = 22, ...p }: P) => (
   <svg {...base(size, p)} strokeWidth={2.2}><rect x="3" y="6" width="18" height="13" rx="2.5" /><path d="M3 10h18" /></svg>
 );
+/* Shape geometry shared with the particle art in lib/particle-art.ts. */
+/** Paw on a 24×24 box: toe centres (each a 2.2×2.8 ellipse) and the pad. */
+export const PAW_TOES = [[6, 10], [10, 5.5], [14.5, 5.5], [18.5, 10]] as const;
+export const PAW_PAD = "M12.2 11c-3 0-5.7 3.2-5.7 6 0 1.8 1.4 2.8 3 2.8 1.2 0 1.8-.6 2.7-.6s1.5.6 2.7.6c1.6 0 3-1 3-2.8 0-2.8-2.7-6-5.7-6z";
+/** Five-point star on a 48×48 box. */
+export const STAR_PATH = "M24 2 l6.2 13.4 14.6 1.8 -10.8 10 2.9 14.5 -12.9 -7.3 -12.9 7.3 2.9 -14.5 -10.8 -10 14.6 -1.8z";
+/** Cookie on a 64×64 box: dough colour, chip colour and chips as [cx, cy, r]. */
+export const COOKIE = { dough: "#E8B56A", chip: "#6B3E26", chips: [[22, 24, 5], [40, 20, 4], [43, 38, 5.5], [26, 43, 4.5], [32, 31, 3]] } as const;
+
 export const PawIcon = ({ size = 28, ...p }: P) => (
   <svg viewBox="0 0 24 24" width={size} height={size} fill="currentColor" aria-hidden {...p}>
-    <ellipse cx="6" cy="10" rx="2.2" ry="2.8" /><ellipse cx="10" cy="5.5" rx="2.2" ry="2.8" /><ellipse cx="14.5" cy="5.5" rx="2.2" ry="2.8" /><ellipse cx="18.5" cy="10" rx="2.2" ry="2.8" />
-    <path d="M12.2 11c-3 0-5.7 3.2-5.7 6 0 1.8 1.4 2.8 3 2.8 1.2 0 1.8-.6 2.7-.6s1.5.6 2.7.6c1.6 0 3-1 3-2.8 0-2.8-2.7-6-5.7-6z" />
+    {PAW_TOES.map(([cx, cy]) => <ellipse key={`${cx},${cy}`} cx={cx} cy={cy} rx="2.2" ry="2.8" />)}
+    <path d={PAW_PAD} />
   </svg>
 );
-
-const STAR_PATH = "M24 2 l6.2 13.4 14.6 1.8 -10.8 10 2.9 14.5 -12.9 -7.3 -12.9 7.3 2.9 -14.5 -10.8 -10 14.6 -1.8z";
 export const StarShape = ({ fill = "var(--aqua)", strokeWidth = 3, ...p }: SVGProps<SVGSVGElement> & { fill?: string; strokeWidth?: number }) => (
   <svg viewBox="0 0 48 48" aria-hidden {...p}><path d={STAR_PATH} fill={fill} stroke="var(--ink)" strokeWidth={strokeWidth} strokeLinejoin="round" /></svg>
 );
 
 export const CookieShape = (p: SVGProps<SVGSVGElement>) => (
   <svg viewBox="0 0 64 64" aria-hidden {...p}>
-    <circle cx="32" cy="32" r="28" fill="#E8B56A" stroke="var(--ink)" strokeWidth="4" />
-    <circle cx="22" cy="24" r="5" fill="#6B3E26" /><circle cx="40" cy="20" r="4" fill="#6B3E26" /><circle cx="43" cy="38" r="5.5" fill="#6B3E26" /><circle cx="26" cy="43" r="4.5" fill="#6B3E26" /><circle cx="32" cy="31" r="3" fill="#6B3E26" />
+    <circle cx="32" cy="32" r="28" fill={COOKIE.dough} stroke="var(--ink)" strokeWidth="4" />
+    {COOKIE.chips.map(([cx, cy, r]) => <circle key={`${cx},${cy}`} cx={cx} cy={cy} r={r} fill={COOKIE.chip} />)}
   </svg>
 );
 

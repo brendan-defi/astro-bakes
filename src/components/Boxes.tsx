@@ -1,7 +1,9 @@
+import type { CSSProperties } from "react";
 import type { Box, Drop, HomeData, Locale } from "@/lib/data";
 import { fmtDateTime, yen } from "@/lib/format";
 import { getStrings, type Strings } from "@/lib/i18n";
 import { ClockIcon } from "./icons";
+import { AllergenChips } from "./AllergenChips";
 import { BoxCard } from "./BoxCard";
 import { BoxPhoto } from "./BoxPhoto";
 import s from "./home.module.css";
@@ -33,7 +35,7 @@ export function Boxes({ locale, home }: { locale: Locale; home: HomeData }) {
 /** Box card when no drop is open: no stepper, no stock, just when ordering opens. */
 function MenuCard({ box, upcoming, locale, t }: { box: Box; upcoming: Drop | null; locale: Locale; t: Strings }) {
   return (
-    <article className={`card ${s.box}`} style={{ transform: `rotate(${box.tilt})` }}>
+    <article className={`card ${s.box}`} style={{ "--tilt": box.tilt } as CSSProperties}>
       <BoxPhoto box={box} placeholder={`${t.productPhoto} — ${box.name}`}>
         <span className={`${s.boxTag} ${upcoming ? s.boxTagButter : ""}`}>{upcoming ? t.inNextDrop : t.backNextDrop}</span>
       </BoxPhoto>
@@ -46,7 +48,7 @@ function MenuCard({ box, upcoming, locale, t }: { box: Box; upcoming: Drop | nul
         <p className={s.boxContents}>{box.contents}</p>
         <div className={s.allergens}>
           <span className={s.lab}>{t.contains}</span>
-          {box.allergens.map((a) => <span key={a} className="chip-sm">{t.allergen(a)}</span>)}
+          <AllergenChips items={box.allergens.map((a) => ({ key: a, label: t.allergen(a) }))} />
         </div>
         <div className={s.menuFoot}>
           <ClockIcon size={18} />

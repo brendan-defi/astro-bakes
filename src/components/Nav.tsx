@@ -27,7 +27,7 @@ export function Nav({ locale, showCart = false, viewer = anonymousViewer }: { lo
         <div className={styles.right}>
           <LangToggle locale={locale} hrefFor={swap} />
           {showCart && (
-            <Link href={`/${locale}/checkout${demoQuery}`} aria-label={t.cart} className={styles.cart}>
+            <Link href={`/${locale}/checkout${demoQuery}`} aria-label={t.cart} className={styles.cart} data-cart-target>
               <CartIcon />
               {hydrated && count > 0 && <span key={count} className={styles.badge}>{count}</span>}
             </Link>

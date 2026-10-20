@@ -15,7 +15,7 @@ export function CartBar({ locale }: { locale: Locale }) {
   if (!hydrated || count === 0) return null;
   return (
     <div id="cart" className={s.cartBar}>
-      <Link href={`/${locale}/checkout${demoQuery}`} className={s.cartLink}>
+      <Link href={`/${locale}/checkout${demoQuery}`} className={`sheen ${s.cartLink}`} data-cart-target>
         <span>
           {t.boxCount(count)} · {yen(subtotal)}{" "}
           <span className={s.fee}>{shippingFee === 0 ? t.shippingIncluded : t.shippingSuffix(yen(shippingFee, "¥[fee]"))}</span>
