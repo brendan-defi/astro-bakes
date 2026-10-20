@@ -3,7 +3,7 @@ import { dateRange, DETAILS_MAX, isShortNotice, NAME_MAX, noticeDays, tokyoDay, 
 
 // 2026-10-20 23:30 JST: late enough that UTC is still on the 20th but Tokyo is about to roll over.
 const NOW = new Date("2026-10-20T14:30:00Z");
-const ok: CustomOrderInput = { name: "Hanako", email: "hanako@example.com", eventDate: "2026-11-14", partySize: "20to50", occasion: "office", details: "40 cookies, half matcha." };
+const ok: CustomOrderInput = { name: "Hanako", email: "hanako@example.com", eventDate: "2026-11-14", partySize: "20to50", packaging: "sealed", occasion: "office", details: "40 cookies, half matcha." };
 const fields = (over: Partial<CustomOrderInput>) => { const r = validateCustomOrder({ ...ok, ...over }, NOW); return r.ok ? [] : r.fields; };
 
 describe("tokyoDay / dateRange", () => {
@@ -29,7 +29,7 @@ describe("validateCustomOrder", () => {
   });
 
   it("reports every missing field at once", () => {
-    expect(validateCustomOrder({ name: "", email: "", eventDate: "", partySize: "", details: "" }, NOW)).toEqual({ ok: false, fields: ["name", "email", "eventDate", "partySize", "details"] });
+    expect(validateCustomOrder({ name: "", email: "", eventDate: "", partySize: "", packaging: "", details: "" }, NOW)).toEqual({ ok: false, fields: ["name", "email", "eventDate", "partySize", "packaging", "details"] });
   });
 
   it("takes dates from a week out (Tokyo) up to a year out", () => {
@@ -48,6 +48,11 @@ describe("validateCustomOrder", () => {
 
   it("only takes the listed party sizes", () => {
     expect(fields({ partySize: "1000" })).toEqual(["partySize"]);
+  });
+
+  it("needs one of the two packaging choices", () => {
+    expect(fields({ packaging: "unsealed" })).toEqual([]);
+    expect(fields({ packaging: "gift-wrapped" })).toEqual(["packaging"]);
   });
 
   it("drops an unknown occasion instead of failing (it's optional)", () => {
@@ -70,7 +75,7 @@ describe("validateCustomOrder", () => {
   });
 
   it("survives non-string values from a hand-made request", () => {
-    const junk = { name: 1, email: null, eventDate: {}, partySize: [], details: undefined } as unknown as CustomOrderInput;
-    expect(validateCustomOrder(junk, NOW)).toEqual({ ok: false, fields: ["name", "email", "eventDate", "partySize", "details"] });
+    const junk = { name: 1, email: null, eventDate: {}, partySize: [], packaging: 2, details: undefined } as unknown as CustomOrderInput;
+    expect(validateCustomOrder(junk, NOW)).toEqual({ ok: false, fields: ["name", "email", "eventDate", "partySize", "packaging", "details"] });
   });
 });

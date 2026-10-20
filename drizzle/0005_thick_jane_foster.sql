@@ -5,6 +5,7 @@ CREATE TABLE "custom_order_requests" (
 	"locale" "locale" DEFAULT 'en' NOT NULL,
 	"event_date" date NOT NULL,
 	"party_size" text NOT NULL,
+	"packaging" text NOT NULL,
 	"occasion" text,
 	"details" text NOT NULL,
 	"customer_id" uuid,

@@ -413,6 +413,8 @@ export const customOrderRequests = pgTable(
     eventDate: date({ mode: "string" }).notNull(),
     /** upTo20 · 20to50 · 50to100 · over100 */
     partySize: text().notNull(),
+    /** unsealed (party-ready, on parchment in catering boxes) · sealed (each cookie heat-sealed and labelled) */
+    packaging: text().notNull(),
     /** birthday · office · wedding · other; null when they didn't say. */
     occasion: text(),
     details: text().notNull(),

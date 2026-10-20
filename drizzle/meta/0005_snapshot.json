@@ -1,5 +1,5 @@
 {
-  "id": "fd60b875-b236-4766-a70c-579ff53ba486",
+  "id": "2284b17f-070b-415c-a29b-22ccfc5c0c27",
   "prevId": "5204cf1f-cbf2-4f7b-bd89-a8e4a5593c54",
   "version": "7",
   "dialect": "postgresql",
@@ -574,6 +574,12 @@
         },
         "party_size": {
           "name": "party_size",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "packaging": {
+          "name": "packaging",
           "type": "text",
           "primaryKey": false,
           "notNull": true

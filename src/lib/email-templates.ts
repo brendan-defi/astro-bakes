@@ -134,6 +134,7 @@ export function customOrderRequestEmail(opts: { request: CustomOrderRequest; loc
     ["Date", day],
     ["Notice", `${noticeDays} days${noticeDays < PREFERRED_DAYS_AHEAD ? " (under two weeks)" : ""}`],
     ["People", people],
+    ["Packaging", en.packagings[r.packaging]],
     ["Occasion", r.occasion ? en.occasions[r.occasion] : "Not given"],
     ["Wrote in", locale === "ja" ? "Japanese (日本語)" : "English"],
   ];

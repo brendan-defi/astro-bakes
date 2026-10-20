@@ -3,18 +3,18 @@
 import Link from "next/link";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { submitCustomOrderAction } from "@/app/[locale]/custom-orders/actions";
-import { DETAILS_MAX, isShortNotice, NAME_MAX, OCCASIONS, PARTY_SIZES, validateCustomOrder, type CustomOrderField } from "@/lib/custom-order-rules";
+import { DETAILS_MAX, isShortNotice, NAME_MAX, OCCASIONS, PACKAGINGS, PARTY_SIZES, validateCustomOrder, type CustomOrderField } from "@/lib/custom-order-rules";
 import type { Locale } from "@/lib/data";
 import { getStrings } from "@/lib/i18n";
 import { CheckIcon, WarningIcon } from "./icons";
 import s from "./parties.module.css";
 
-interface Values { name: string; email: string; eventDate: string; partySize: string; occasion: string; details: string; website: string }
+interface Values { name: string; email: string; eventDate: string; partySize: string; packaging: string; occasion: string; details: string; website: string }
 
 /** The custom-orders form: one screen, checked with the same rules as the server, with an in-place thank-you. */
 export function CustomOrderForm({ locale, initial, dateMin, dateMax }: { locale: Locale; initial: { name: string; email: string }; dateMin: string; dateMax: string }) {
   const t = getStrings(locale);
-  const [v, setV] = useState<Values>({ ...initial, eventDate: "", partySize: "", occasion: "", details: "", website: "" });
+  const [v, setV] = useState<Values>({ ...initial, eventDate: "", partySize: "", packaging: "", occasion: "", details: "", website: "" });
   const [tried, setTried] = useState(false);
   const [serverFields, setServerFields] = useState<CustomOrderField[]>([]);
   const [busy, setBusy] = useState(false);
@@ -25,8 +25,8 @@ export function CustomOrderForm({ locale, initial, dateMin, dateMax }: { locale:
 
   const check = (x: Values) => { const r = validateCustomOrder(x); return r.ok ? [] : r.fields; };
   const bad = new Set<CustomOrderField>([...(tried ? check(v) : []), ...serverFields]);
-  const errorText: Record<CustomOrderField, string> = { name: t.errName, email: t.errEmail, eventDate: t.errEventDate, partySize: t.errPartySize, details: t.errDetails };
-  const ids: Record<CustomOrderField, string> = { name: "co-name", email: "co-email", eventDate: "co-date", partySize: "co-size", details: "co-details" };
+  const errorText: Record<CustomOrderField, string> = { name: t.errName, email: t.errEmail, eventDate: t.errEventDate, partySize: t.errPartySize, packaging: t.errPackaging, details: t.errDetails };
+  const ids: Record<CustomOrderField, string> = { name: "co-name", email: "co-email", eventDate: "co-date", partySize: "co-size", packaging: "co-pack", details: "co-details" };
   const invalid = (f: CustomOrderField) => (bad.has(f) ? { "aria-invalid": true as const, "aria-describedby": `${ids[f]}-err` } : {});
   // A valid date under two weeks out is allowed, with a warning that it may not work out.
   const shortNotice = !bad.has("eventDate") && /^\d{4}-\d{2}-\d{2}$/.test(v.eventDate) && v.eventDate >= dateMin && isShortNotice(v.eventDate);
@@ -100,6 +100,21 @@ export function CustomOrderForm({ locale, initial, dateMin, dateMax }: { locale:
           ))}
         </div>
         {error("partySize")}
+      </fieldset>
+      <fieldset className={s.fieldset} aria-describedby={bad.has("packaging") ? "co-pack-err" : undefined}>
+        <legend className="label">{t.packagingLabel}</legend>
+        <div className={s.packOptions}>
+          {PACKAGINGS.map((k, i) => (
+            <label key={k} className={s.packOption}>
+              <input id={i === 0 ? "co-pack" : undefined} type="radio" name="packaging" value={k} checked={v.packaging === k} onChange={() => set({ packaging: k })}
+                aria-labelledby={`co-pack-${k}`} aria-describedby={`co-pack-${k}-desc`} />
+              <span className={s.packDot} aria-hidden />
+              <span id={`co-pack-${k}`} className={s.packTitle}>{t.packagings[k]}</span>
+              <span id={`co-pack-${k}-desc`} className={s.packDesc}>{t.packagingDescs[k]}</span>
+            </label>
+          ))}
+        </div>
+        {error("packaging")}
       </fieldset>
       <fieldset className={s.fieldset}>
         <legend className="label">{t.occasionLabel} <span className="ja">{t.optional}</span></legend>

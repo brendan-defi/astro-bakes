@@ -11,6 +11,9 @@ export const PARTY_SIZES = ["upTo20", "20to50", "50to100", "over100"] as const;
 export type PartySize = (typeof PARTY_SIZES)[number];
 export const OCCASIONS = ["birthday", "office", "wedding", "other"] as const;
 export type Occasion = (typeof OCCASIONS)[number];
+/** Party-ready: unsealed on parchment in catering boxes. Sealed: each cookie heat-sealed with an ingredient label. */
+export const PACKAGINGS = ["unsealed", "sealed"] as const;
+export type Packaging = (typeof PACKAGINGS)[number];
 
 export const NAME_MAX = 100;
 export const DETAILS_MAX = 2000;
@@ -30,17 +33,19 @@ export interface CustomOrderInput {
   /** "2026-11-14" from <input type="date">: a Tokyo calendar day. */
   eventDate: string;
   partySize: string;
+  packaging: string;
   occasion?: string | null;
   details: string;
 }
 
-export type CustomOrderField = "name" | "email" | "eventDate" | "partySize" | "details";
+export type CustomOrderField = "name" | "email" | "eventDate" | "partySize" | "packaging" | "details";
 
 export interface CustomOrderRequest {
   name: string;
   email: string;
   eventDate: string;
   partySize: PartySize;
+  packaging: Packaging;
   occasion: Occasion | null;
   details: string;
 }
@@ -83,6 +88,7 @@ export function validateCustomOrder(input: CustomOrderInput, now = new Date()): 
   const email = normaliseEmail(str(input.email));
   const eventDate = str(input.eventDate).trim();
   const partySize = str(input.partySize);
+  const packaging = str(input.packaging);
   const occasion = str(input.occasion);
   const details = str(input.details).replace(/\r\n?/g, "\n").replace(CONTROL, "").trim();
   const { min, max } = dateRange(now);
@@ -92,6 +98,7 @@ export function validateCustomOrder(input: CustomOrderInput, now = new Date()): 
   if (!EMAIL.test(email) || email.length > 254) fields.push("email");
   if (!isRealDay(eventDate) || eventDate < min || eventDate > max) fields.push("eventDate");
   if (!(PARTY_SIZES as readonly string[]).includes(partySize)) fields.push("partySize");
+  if (!(PACKAGINGS as readonly string[]).includes(packaging)) fields.push("packaging");
   if (!details || details.length > DETAILS_MAX) fields.push("details");
   if (fields.length) return { ok: false, fields };
   return {
@@ -101,6 +108,7 @@ export function validateCustomOrder(input: CustomOrderInput, now = new Date()): 
       email,
       eventDate,
       partySize: partySize as PartySize,
+      packaging: packaging as Packaging,
       occasion: (OCCASIONS as readonly string[]).includes(occasion) ? (occasion as Occasion) : null,
       details,
     },

@@ -21,7 +21,7 @@ let failSends = false;
 
 const NOW = new Date("2026-10-20T03:00:00Z");
 const input = (over: Partial<CustomOrderSubmission> = {}): CustomOrderSubmission => ({
-  name: "Hanako", email: "hanako@test.invalid", eventDate: "2026-11-14", partySize: "20to50", occasion: "birthday", details: "40 cookies, please.", locale: "ja", ...over,
+  name: "Hanako", email: "hanako@test.invalid", eventDate: "2026-11-14", partySize: "20to50", packaging: "sealed", occasion: "birthday", details: "40 cookies, please.", locale: "ja", ...over,
 });
 const rows = () => db.select().from(schema.customOrderRequests);
 
@@ -51,13 +51,14 @@ describe.skipIf(!URL)("custom orders", () => {
   it("stores the request and emails the owner, with replies going to the customer", async () => {
     expect(await submitCustomOrder(input({ email: " Hanako@Test.Invalid " }), { ip: "203.0.113.7", now: NOW })).toEqual({ ok: true });
     const [row] = await rows();
-    expect(row).toMatchObject({ name: "Hanako", email: "hanako@test.invalid", locale: "ja", eventDate: "2026-11-14", partySize: "20to50", occasion: "birthday", details: "40 cookies, please." });
+    expect(row).toMatchObject({ name: "Hanako", email: "hanako@test.invalid", locale: "ja", eventDate: "2026-11-14", partySize: "20to50", packaging: "sealed", occasion: "birthday", details: "40 cookies, please." });
     expect(row.ipHash).toMatch(/^[0-9a-f]{64}$/);
     expect(row.notifiedAt).not.toBeNull();
     expect(sent).toHaveLength(1);
     expect(sent[0]).toMatchObject({ to: "hello@astrobakes.xyz", replyTo: "hanako@test.invalid", type: "custom_order_request", idempotencyKey: `custom-order/${row.id}` });
     expect(sent[0].text).toContain("Wrote in: Japanese");
     expect(sent[0].text).toContain("Notice: 25 days\n");
+    expect(sent[0].text).toContain("Packaging: Individually sealed");
   });
 
   it("sends to the custom_order_email setting when there is one", async () => {

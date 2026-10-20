@@ -20,6 +20,7 @@ function fillIn() {
   type(t.emailAddress, "hanako@example.com");
   type(t.partyDate, DATE);
   fireEvent.click(screen.getByLabelText(t.partySizes["20to50"]));
+  fireEvent.click(screen.getByLabelText(t.packagings.sealed));
   fireEvent.click(screen.getByLabelText(t.occasions.wedding));
   type(t.partyDetails, "A tower of cookies, please.");
 }
@@ -32,7 +33,7 @@ describe("CustomOrderForm", () => {
   it("shows what's missing, focuses the first gap, and sends nothing", () => {
     mount();
     send();
-    for (const msg of [t.errName, t.errEmail, t.errEventDate, t.errPartySize, t.errDetails]) expect(screen.getByText(msg)).toBeTruthy();
+    for (const msg of [t.errName, t.errEmail, t.errEventDate, t.errPartySize, t.errPackaging, t.errDetails]) expect(screen.getByText(msg)).toBeTruthy();
     expect(document.activeElement?.id).toBe("co-name");
     expect(screen.getByLabelText(t.yourName).getAttribute("aria-invalid")).toBe("true");
     expect(actions.submitCustomOrderAction).not.toHaveBeenCalled();
@@ -67,6 +68,14 @@ describe("CustomOrderForm", () => {
     expect(await screen.findByText(t.requestSentBody("Hanako", "hanako@example.com"))).toBeTruthy();
   });
 
+  it("offers both packaging choices with the owner's descriptions", () => {
+    mount();
+    const sealed = screen.getByRole("radio", { name: t.packagings.sealed });
+    expect(sealed.getAttribute("aria-describedby")).toBe("co-pack-sealed-desc");
+    expect(document.getElementById("co-pack-sealed-desc")?.textContent).toBe(t.packagingDescs.sealed);
+    expect(screen.getByRole("radio", { name: t.packagings.unsealed })).toBeTruthy();
+  });
+
   it("clears a field's error as soon as it's fixed", () => {
     mount();
     send();
@@ -82,7 +91,7 @@ describe("CustomOrderForm", () => {
     send();
     await screen.findByText(t.requestSentTitle);
     expect(actions.submitCustomOrderAction).toHaveBeenCalledWith({
-      name: "Hanako", email: "hanako@example.com", eventDate: DATE, partySize: "20to50", occasion: "wedding", details: "A tower of cookies, please.", website: "", locale: "en",
+      name: "Hanako", email: "hanako@example.com", eventDate: DATE, partySize: "20to50", packaging: "sealed", occasion: "wedding", details: "A tower of cookies, please.", website: "", locale: "en",
     });
     expect(screen.getByText(t.requestSentBody("Hanako", "hanako@example.com"))).toBeTruthy();
     await waitFor(() => expect(document.activeElement?.textContent).toBe(t.requestSentTitle));
@@ -93,6 +102,7 @@ describe("CustomOrderForm", () => {
     mount({ name: "Signed In", email: "me@example.com" });
     type(t.partyDate, DATE);
     fireEvent.click(screen.getByLabelText(t.partySizes.upTo20));
+    fireEvent.click(screen.getByLabelText(t.packagings.unsealed));
     type(t.partyDetails, "Cookies.");
     send();
     await screen.findByText(t.requestSentTitle);

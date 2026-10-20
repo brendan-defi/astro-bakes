@@ -22,13 +22,14 @@ describe("signInEmail", () => {
 });
 
 describe("customOrderRequestEmail", () => {
-  const request = { name: "Hanako <b>", email: "hanako@example.com", eventDate: "2026-11-14", partySize: "20to50" as const, occasion: "office" as const, details: "Half matcha.\nNo nuts <script>" };
+  const request = { name: "Hanako <b>", email: "hanako@example.com", eventDate: "2026-11-14", partySize: "20to50" as const, packaging: "unsealed" as const, occasion: "office" as const, details: "Half matcha.\nNo nuts <script>" };
   it("gives the owner the date, size and who it's from at a glance, in English", () => {
     const m = customOrderRequestEmail({ request, locale: "ja", noticeDays: 25 });
     expect(m.subject).toBe("Party request: Sat, Nov 14, 2026 · 20–50 people · Hanako <b>");
     expect(m.text).toContain("Notice: 25 days\n");
     expect(m.text).toContain("It isn't an order until you confirm it");
     expect(m.text).toContain("Occasion: Office or team");
+    expect(m.text).toContain("Packaging: Party-ready (unsealed)");
     expect(m.text).toContain("Wrote in: Japanese (日本語)");
     expect(m.text).toContain("Half matcha.\nNo nuts <script>");
     expect(m.html).toContain('lang="en"');
