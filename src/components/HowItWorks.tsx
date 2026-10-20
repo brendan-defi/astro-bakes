@@ -30,7 +30,7 @@ export function HowItWorks({ locale, settings }: { locale: Locale; settings: Set
         </ol>
         <div className={s.chips}>
           <span className="chip">{t.chipArea}</span>
-          <span className="chip">{t.chipShipping(yen(settings.shippingFee, "¥[fee]"))}</span>
+          <span className="chip">{settings.shippingFee === 0 ? t.chipShippingIncluded : t.chipShipping(yen(settings.shippingFee, "¥[fee]"))}</span>
           <span className="chip">{t.chipCancel}</span>
         </div>
       </div>

@@ -14,7 +14,7 @@ import * as schema from "./schema";
 const JST = (iso: string) => new Date(iso + "+09:00");
 
 const SETTINGS: { key: string; value: unknown }[] = [
-  { key: "shipping_fee", value: 800 }, // placeholder until the owner sets it (PRD 4.9)
+  { key: "shipping_fee", value: 0 }, // 0 = shipping included in the box price (D19, 2026-10-20); a non-zero fee shows as its own line
   { key: "shipping_area", value: "Tokyo 23 wards" },
   { key: "instagram_url", value: "https://instagram.com" },
   { key: "line_url", value: "#notify" },

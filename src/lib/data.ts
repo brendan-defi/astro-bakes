@@ -44,7 +44,7 @@ export interface Drop {
 }
 
 export interface Settings {
-  /** Flat shipping fee per order, tax-inclusive (D19). null renders "¥[fee]". */
+  /** Shipping fee per order, tax-inclusive. 0 means shipping is included in the box price (D19, 2026-10-20) and the fee line is hidden; null renders "¥[fee]". */
   shippingFee: number | null;
   shippingArea: string;
   instagramUrl: string;
@@ -69,7 +69,7 @@ const JST = (iso: string) => new Date(iso + "+09:00");
 const DAY = 86_400_000;
 
 export const settings: Settings = {
-  shippingFee: 800, // placeholder — final fee comes from Settings 4.9
+  shippingFee: 0, // shipping is included in the box price (D19, 2026-10-20)
   shippingArea: "Tokyo 23 wards",
   instagramUrl: "https://instagram.com",
   lineUrl: "#notify",

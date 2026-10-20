@@ -57,7 +57,7 @@ export default async function OrderPage({ params }: { params: Promise<{ locale: 
               <div className={a.lines}>
                 {order.lines.map((l) => <div key={l.slug} className={a.line}><span>{l.name} × {l.qty} <span className={s.sub12}>({yen(l.unitPrice)} {t.each})</span></span><span>{yen(l.lineTotal)}</span></div>)}
                 <div className={a.line} style={{ borderTop: "2px dashed var(--ink)", paddingTop: 8, marginTop: 4 }}><span>{t.subtotal}</span><span>{yen(order.subtotal)}</span></div>
-                <div className={a.line}><span>{t.shipping}</span><span>{yen(order.shippingFee)}</span></div>
+                {order.shippingFee > 0 && <div className={a.line}><span>{t.shipping}</span><span>{yen(order.shippingFee)}</span></div>}
                 <div className={a.line} style={{ fontWeight: 900 }}><span>{t.total} <span className={s.sub12}>{t.taxIncl}</span></span><span>{yen(order.total)}</span></div>
               </div>
             </section>
@@ -70,7 +70,7 @@ export default async function OrderPage({ params }: { params: Promise<{ locale: 
                 {order.trackingNumber && <><dt>{t.tracking}</dt><dd>{order.trackingNumber}</dd></>}
                 {order.refund && <><dt>{t.refund}</dt><dd>{yen(order.refund.amount)} · {order.refund.issued ? t.refundIssued : t.refundPending}</dd></>}
               </dl>
-              {live && <div className={s.shipLine}><TruckIcon size={20} />{t.shipsByYamato(fmtDate(order.shipAt, locale), fmtDate(order.arriveAt, locale))}</div>}
+              {live && <div className={s.shipLine}><TruckIcon size={20} />{t.shipsByPost(fmtDate(order.shipAt, locale), fmtDate(order.arriveAt, locale))}</div>}
             </section>
 
             {order.canCancel ? (

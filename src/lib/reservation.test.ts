@@ -46,6 +46,7 @@ describe("reservedLines / totals", () => {
       ["banana-bread", 2, 1000],
     ]);
     expect(totals(lines, 800)).toEqual({ count: 3, subtotal: 2000, total: 2800 });
+    expect(totals(lines, 0)).toEqual({ count: 3, subtotal: 2000, total: 2000 }); // shipping included (D19)
     expect(totals(lines, null).total).toBeNull();
     expect(totals([], 800)).toEqual({ count: 0, subtotal: 0, total: null });
   });

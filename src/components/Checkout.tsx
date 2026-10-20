@@ -262,8 +262,9 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
 
   // ---- derived ----
   const shipLine = drop ? t.shipsArrives(fmtDate(drop.shipAt, locale), fmtDate(drop.arriveAt, locale)) : "";
-  const shipLineYamato = drop ? t.shipsByYamato(fmtDate(drop.shipAt, locale), fmtDate(drop.arriveAt, locale)) : "";
+  const shipLinePost = drop ? t.shipsByPost(fmtDate(drop.shipAt, locale), fmtDate(drop.arriveAt, locale)) : "";
   const feeLabel = yen(cart.shippingFee, "¥[fee]");
+  const feeIncluded = cart.shippingFee === 0; // D19: shipping is in the box price, so no fee line
   // In the checkout steps the summary is the server's reservation (what placeOrder will buy); the cart step edits the local cart.
   const buyingLines = inCheckout && held ? reservedLines(held.items, cart.boxes) : cart.lines;
   const buying = { lines: buyingLines, ...totals(buyingLines, cart.shippingFee) };
@@ -335,7 +336,7 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
       {(step === "signin" || step === "code" || step === "delivery") && (
         <div className={s.pinned}>
           <div style={{ minWidth: 0 }}>
-            <div className={s.l1}>{t.boxCount(buying.count)} · {yen(buying.subtotal)} <span className={s.sub13}>{t.plusShipping}</span></div>
+            <div className={s.l1}>{t.boxCount(buying.count)} · {yen(buying.subtotal)} <span className={s.sub13}>{feeIncluded ? t.shippingIncluded : t.plusShipping}</span></div>
             <div className={s.l2}>{shipLine}</div>
           </div>
           <TruckIcon />
@@ -361,7 +362,7 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
             <>
               {/* ---- Cart ---- */}
               {isCart && (
-                <CartStep t={t} cart={cart} changes={changes} maxFor={maxFor} shipLineYamato={shipLineYamato} feeLabel={feeLabel} totalLabel={totalLabel} onCheckout={onCheckout} home={home} demo={demo} closed={!drop} notice={notice} busy={busy} />
+                <CartStep t={t} cart={cart} changes={changes} maxFor={maxFor} shipLinePost={shipLinePost} feeLabel={feeLabel} totalLabel={totalLabel} onCheckout={onCheckout} home={home} demo={demo} closed={!drop} notice={notice} busy={busy} />
               )}
 
               {/* ---- Sign in ---- */}
@@ -497,7 +498,7 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
                         </div>
                       ))}
                       <div className={`${s.tr}`} style={{ borderTop: "2px dashed var(--ink)", paddingTop: 8, marginTop: 2 }}><span>{t.subtotal}</span><span className={s.v}>{yen(buying.subtotal)}</span></div>
-                      <div className={s.tr}><span>{t.shipping}</span><span className={s.v}>{feeLabel}</span></div>
+                      {!feeIncluded && <div className={s.tr}><span>{t.shipping}</span><span className={s.v}>{feeLabel}</span></div>}
                       <div className={`${s.tr} ${s.trTotal}`} style={{ borderTop: 0, paddingTop: 0, marginTop: 0 }}><span className={s.k}>{t.total} <span className={s.sub12}>{t.taxIncl}</span></span><span className={s.v}>{totalLabel}</span></div>
                     </section>
                   </div>
@@ -510,7 +511,7 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
                     <div className="w9">{addr.name}</div>
                     <div style={{ fontSize: 15 }}>{addressLine}<br />{addr.phone}</div>
                     {giftText && <div className={s.giftNote}><span className="w9">{t.giftCard}</span> {giftText}</div>}
-                    <div className={s.shipLine}><TruckIcon size={20} />{shipLineYamato}</div>
+                    <div className={s.shipLine}><TruckIcon size={20} />{shipLinePost}</div>
                   </section>
 
                   <section aria-label={t.payWith} className={s.paySection}>
@@ -560,7 +561,7 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
                       {[
                         { bg: "var(--pink)", date: drop ? fmtDate(drop.closeAt, locale) : null, m: t.next1, d: t.dropCloses, sub: t.next1Sub },
                         { bg: "var(--butter)", date: null, m: t.next2, d: `${t.bakeDay}`, d2: t.allAtOnce, sub: t.next2Sub },
-                        { bg: "var(--aqua)", date: drop ? fmtDate(drop.shipAt, locale) : null, m: t.next3, d: t.shipsByYamatoShort, sub: t.next3Sub },
+                        { bg: "var(--aqua)", date: drop ? fmtDate(drop.shipAt, locale) : null, m: t.next3, d: t.shipsByPostShort, sub: t.next3Sub },
                         { bg: "var(--lilac)", date: drop ? fmtDate(drop.arriveAt, locale) : null, m: t.next4, d: t.arrivesShort, sub: t.next4Sub(doneName) },
                       ].map((it, i) => (
                         <li key={i} className={s.nextItem}>
@@ -598,7 +599,7 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
               </div>
             )}
             <div className={`${s.tr} ${s.trSub}`}><span>{t.subtotal} · {t.boxCount(summaryCount)}</span><span className={s.v}>{yen(summarySubtotal)}</span></div>
-            <div className={s.tr}><span>{t.shipping} <span className={s.sub13}>{t.shippingFlatShort}</span></span><span className={s.v}>{feeLabel}</span></div>
+            {!feeIncluded && <div className={s.tr}><span>{t.shipping} <span className={s.sub13}>{t.shippingFlatShort}</span></span><span className={s.v}>{feeLabel}</span></div>}
             <div className={`${s.tr} ${s.trTotal}`}><span className={s.k}>{t.total} <span className={s.sub12}>{t.taxIncl}</span></span><span className={s.v}>{totalLabel}</span></div>
             <div className={s.summaryStrip}><TruckIcon size={20} />{shipLine}</div>
           </section>
@@ -630,9 +631,9 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
 }
 
 /* ---------------- Cart step ---------------- */
-function CartStep({ t, cart, changes, maxFor, shipLineYamato, feeLabel, totalLabel, onCheckout, home, demo, closed, notice, busy }: {
+function CartStep({ t, cart, changes, maxFor, shipLinePost, feeLabel, totalLabel, onCheckout, home, demo, closed, notice, busy }: {
   t: Strings; cart: ReturnType<typeof useCart>; changes: Change[] | null; maxFor: (b: Box) => number;
-  shipLineYamato: string; feeLabel: string; totalLabel: string; onCheckout: () => void; home: string; demo: string | null;
+  shipLinePost: string; feeLabel: string; totalLabel: string; onCheckout: () => void; home: string; demo: string | null;
   closed: boolean; notice: string | null; busy: boolean;
 }) {
   const gone = changes?.filter((c): c is Extract<Change, { kind: "gone" }> => c.kind === "gone") ?? [];
@@ -725,10 +726,10 @@ function CartStep({ t, cart, changes, maxFor, shipLineYamato, feeLabel, totalLab
       <div className={s.mobileOnly}>
         <div className={s.totals}>
           <div className={s.tr}><span>{t.subtotal}</span><span className={s.v}>{yen(cart.subtotal)}</span></div>
-          <div className={s.tr}><span>{t.shipping} <span className={s.sub13}>{t.shippingFlat}</span></span><span className={s.v}>{feeLabel}</span></div>
+          {cart.shippingFee !== 0 && <div className={s.tr}><span>{t.shipping} <span className={s.sub13}>{t.shippingFlat}</span></span><span className={s.v}>{feeLabel}</span></div>}
           <div className={`${s.tr} ${s.trTotal}`}><span className={s.k}>{t.total} <span className={s.sub12}>{t.taxIncl}</span></span><span className={s.v}>{totalLabel}</span></div>
         </div>
-        <InfoStrip><span>{shipLineYamato}</span></InfoStrip>
+        <InfoStrip><span>{shipLinePost}</span></InfoStrip>
         <button type="button" onClick={onCheckout} disabled={cart.count === 0 || busy} className="btn btn-primary btn-block" style={{ minHeight: 62, fontSize: 21 }}>{t.checkout}</button>
         <p className={s.primaryNote}>{t.holdNote}</p>
       </div>

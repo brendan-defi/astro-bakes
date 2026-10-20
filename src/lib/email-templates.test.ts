@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { orderConfirmationEmail } from "./email-templates";
 import { customOrderRequestEmail, signInEmail } from "./email-templates";
 
 describe("signInEmail", () => {
@@ -46,5 +47,26 @@ describe("customOrderRequestEmail", () => {
   it("flags requests with under two weeks' notice", () => {
     expect(customOrderRequestEmail({ request, locale: "en", noticeDays: 13 }).text).toContain("Notice: 13 days (under two weeks)");
     expect(customOrderRequestEmail({ request, locale: "en", noticeDays: 14 }).text).toContain("Notice: 14 days\n");
+  });
+});
+
+describe("orderConfirmationEmail", () => {
+  const order = { number: "AB-003-017", lines: [{ name: "4 Cookie Box", qty: 2, lineTotal: 2000 }], subtotal: 2000, shippingFee: 0, total: 2000, shipToName: "Hanako", addressLine: "〒153-0061 東京都目黒区中目黒1-2-3", shipDate: "Sun, Oct 25", arriveDate: "Mon, Oct 26", closeDateTime: "Sun, Oct 18 · 21:00 JST", giftMessage: null };
+  it("leaves the shipping line out when shipping is included, and names Japan Post", () => {
+    const en = orderConfirmationEmail({ locale: "en", order });
+    expect(en.html).not.toContain("Shipping");
+    expect(en.text).toContain("Subtotal ¥2,000 / Total ¥2,000");
+    expect(en.text).toContain("by Japan Post");
+    expect(en.text).not.toContain("Yamato");
+    const ja = orderConfirmationEmail({ locale: "ja", order });
+    expect(ja.html).not.toContain("送料");
+    expect(ja.text).toContain("小計 ¥2,000 / 合計 ¥2,000");
+    expect(ja.html).toContain("日本郵便");
+    expect(ja.html).not.toContain("ヤマト");
+  });
+  it("still shows a fee when one is set", () => {
+    const en = orderConfirmationEmail({ locale: "en", order: { ...order, shippingFee: 800, total: 2800 } });
+    expect(en.html).toContain("Shipping");
+    expect(en.text).toContain("Subtotal ¥2,000 / Shipping ¥800 / Total ¥2,800");
   });
 });
