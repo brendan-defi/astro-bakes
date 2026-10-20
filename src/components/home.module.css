@@ -113,6 +113,7 @@
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
   font-size: 13px; font-weight: 900;
 }
+.boxPhoto img { object-fit: cover; border-radius: inherit; }
 .burst { position: absolute; top: -18px; right: -10px; width: 84px; height: 84px; transform: rotate(12deg); }
 .burst svg { position: absolute; inset: 0; width: 100%; height: 100%; }
 .burstText { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; font-family: var(--font-display), sans-serif; line-height: 0.95; }
@@ -215,8 +216,7 @@
 .igBtn { align-self: flex-start; min-height: 48px; padding: 0 20px; box-shadow: 0 4px 0 var(--pink); font-weight: 900; font-size: var(--fs-body); }
 .polaroids { flex: 1 1 320px; min-width: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px 14px; color: var(--ink); }
 .polaroid { margin: 0; background: var(--white); padding: 8px 8px 6px; border-radius: 6px; }
-.polaroid img, .polaroidPh { display: block; width: 100%; aspect-ratio: 1 / 1; object-fit: cover; border-radius: 3px; }
-.polaroidPh { display: flex; align-items: center; justify-content: center; text-align: center; padding: 10px; font-size: 12px; font-weight: 900; }
+.polaroid img { display: block; width: 100%; height: auto; aspect-ratio: 1 / 1; object-fit: cover; border-radius: 3px; }
 .polaroid figcaption { text-align: center; font-size: 13px; font-weight: 900; padding-top: 4px; }
 .p1 { transform: rotate(-4deg); box-shadow: 4px 4px 0 var(--pink); }
 .p2 { transform: rotate(3deg) translateY(14px); box-shadow: 4px 4px 0 var(--aqua); }

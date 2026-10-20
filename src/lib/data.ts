@@ -24,6 +24,8 @@ export interface Box {
   left: number;
   /** Per-customer limit for this drop (D7). */
   maxPerCustomer: number;
+  /** The first of the box's photos; cards show a placeholder until one exists (D4). */
+  photo?: string;
   tint: string;
   tilt: string;
 }
@@ -82,6 +84,7 @@ export const boxes: Box[] = [
     price: 1000,
     left: 7,
     maxPerCustomer: 5,
+    photo: "/images/boxes/cookie-box.jpg",
     tint: "var(--pink-soft)",
     tilt: "-1.2deg",
     desc: "All four signature cookies. Thick and soft in the middle.",

@@ -1,8 +1,9 @@
 import type { Box, Drop, HomeData, Locale } from "@/lib/data";
 import { fmtDateTime, yen } from "@/lib/format";
 import { getStrings, type Strings } from "@/lib/i18n";
-import { CameraIcon, ClockIcon } from "./icons";
+import { ClockIcon } from "./icons";
 import { BoxCard } from "./BoxCard";
+import { BoxPhoto } from "./BoxPhoto";
 import s from "./home.module.css";
 
 /** Boxes: the ordering UI while open, otherwise the menu (PRD 1.3). */
@@ -33,11 +34,9 @@ export function Boxes({ locale, home }: { locale: Locale; home: HomeData }) {
 function MenuCard({ box, upcoming, locale, t }: { box: Box; upcoming: Drop | null; locale: Locale; t: Strings }) {
   return (
     <article className={`card ${s.box}`} style={{ transform: `rotate(${box.tilt})` }}>
-      <div className={s.boxPhoto} style={{ background: box.tint }}>
-        <CameraIcon />
-        <span>{t.productPhoto} — {box.name}</span>
+      <BoxPhoto box={box} placeholder={`${t.productPhoto} — ${box.name}`}>
         <span className={`${s.boxTag} ${upcoming ? s.boxTagButter : ""}`}>{upcoming ? t.inNextDrop : t.backNextDrop}</span>
-      </div>
+      </BoxPhoto>
       <div className={s.boxBody}>
         <div className={s.boxTitleRow}>
           <h3 className={`display ${s.boxName}`}>{box.name}</h3>

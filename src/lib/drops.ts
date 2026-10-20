@@ -46,6 +46,7 @@ function toBox(box: BoxRow, locale: Locale, i: number, inDrop?: Pick<DropBoxRow,
     // remaining = cap − sold − active holds (D8, D6)
     left: inDrop ? Math.max(0, inDrop.cap - inDrop.soldQty - held) : box.defaultCap,
     maxPerCustomer: inDrop?.maxPerCustomer ?? box.defaultMaxPerCustomer,
+    photo: box.photos[0],
     tint: p.tint,
     tilt: p.tilt,
   };
