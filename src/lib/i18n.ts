@@ -15,7 +15,13 @@ const en = {
   cart: "Cart",
   signIn: "Sign in",
   // page metadata
+  metaTitle: "Astro Bakes · American-style bakes from Nakameguro",
+  /** Every other page's title; %s is the page. */
+  metaTitleTemplate: "%s · Astro Bakes",
   metaDescription: "American-style bakes, launched one drop at a time. Baked in Nakameguro, delivered across Tokyo's 23 wards.",
+  ogImageAlt: "Astro Bakes: American-style bakes, launched one drop at a time.",
+  checkoutTitle: "Checkout",
+  orderPageTitle: (n: string) => `Order ${n}`,
   // hero
   heroTitleA: "American-style bakes, ",
   heroTitleB: "launched one drop at a time.",
@@ -363,7 +369,12 @@ const ja: Strings = {
   cart: "カート",
   signIn: "ログイン",
   // page metadata
+  metaTitle: "Astro Bakes｜中目黒のアメリカンスタイル焼き菓子",
+  metaTitleTemplate: "%s｜Astro Bakes",
   metaDescription: "アメリカンスタイルの焼き菓子を、ドロップ限定で。中目黒で焼いて、東京23区内へお届けします。",
+  ogImageAlt: "Astro Bakes：アメリカンな焼き菓子を、ドロップでお届け。",
+  checkoutTitle: "ご注文手続き",
+  orderPageTitle: (n: string) => `ご注文 ${n}`,
   // hero
   heroTitleA: "アメリカンな焼き菓子を、",
   heroTitleB: "ドロップでお届け。",

@@ -1,9 +1,11 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { currentCustomer } from "@/lib/auth";
 import { loadOrders } from "@/lib/account";
 import { fmtDate, yen } from "@/lib/format";
 import { getStrings, isLocale } from "@/lib/i18n";
+import { privatePage, stringsFor } from "@/lib/metadata";
 import { signOutAction } from "../auth/actions";
 import { Logo } from "@/components/Logo";
 import { ArrowLeftIcon } from "@/components/icons";
@@ -12,6 +14,11 @@ import { OptInToggle } from "@/components/account/OptInToggle";
 import { StatusPill } from "@/components/account/StatusPill";
 import s from "@/components/checkout.module.css";
 import a from "@/components/account.module.css";
+
+export async function generateMetadata({ params }: { params: Promise<{ locale: string }> }): Promise<Metadata> {
+  const { locale } = await params;
+  return privatePage(stringsFor(locale).accountTitle);
+}
 
 /** The account page (PRD 2.3–2.6): orders, profile, notification preference, sign out. */
 export default async function AccountPage({ params }: { params: Promise<{ locale: string }> }) {

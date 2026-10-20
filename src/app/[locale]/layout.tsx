@@ -1,17 +1,41 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Titan_One, Pacifico, Zen_Maru_Gothic } from "next/font/google";
 import { notFound } from "next/navigation";
-import { getStrings, isLocale } from "@/lib/i18n";
+import { isLocale } from "@/lib/i18n";
+import { SITE_URL, stringsFor } from "@/lib/metadata";
 import "../globals.css";
 
 const display = Titan_One({ weight: "400", subsets: ["latin"], variable: "--font-display", display: "swap" });
 const logo = Pacifico({ weight: "400", subsets: ["latin"], variable: "--font-logo", display: "swap" });
 const body = Zen_Maru_Gothic({ weight: ["500", "700", "900"], subsets: ["latin"], variable: "--font-body", display: "swap" });
 
+/**
+ * Site-wide metadata. Most visitors arrive from Instagram and LINE links, so the
+ * link preview (title, description, opengraph-image.tsx) matters most.
+ */
 export async function generateMetadata({ params }: { params: Promise<{ locale: string }> }): Promise<Metadata> {
   const { locale } = await params;
-  return { title: "Astro Bakes", description: getStrings(isLocale(locale) ? locale : "en").metaDescription };
+  const t = stringsFor(locale);
+  const [ogLocale, otherOgLocale] = locale === "ja" ? ["ja_JP", "en_US"] : ["en_US", "ja_JP"];
+  return {
+    metadataBase: new URL(SITE_URL),
+    applicationName: "Astro Bakes",
+    title: { default: t.metaTitle, template: t.metaTitleTemplate },
+    description: t.metaDescription,
+    openGraph: {
+      type: "website",
+      siteName: "Astro Bakes",
+      title: t.metaTitle,
+      description: t.metaDescription,
+      locale: ogLocale,
+      alternateLocale: otherOgLocale,
+    },
+    twitter: { card: "summary_large_image" },
+  };
 }
+
+/** Ink, like the ticker at the top of every page, so a phone's browser bar runs into it. */
+export const viewport: Viewport = { themeColor: "#2a1b5e" };
 
 export function generateStaticParams() {
   return [{ locale: "en" }, { locale: "ja" }];

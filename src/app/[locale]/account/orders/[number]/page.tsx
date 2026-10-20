@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { currentCustomer } from "@/lib/auth";
@@ -7,12 +8,18 @@ import { settings as defaultSettings } from "@/lib/data";
 import { fmtDate, fmtDateTime, yen } from "@/lib/format";
 import { loadSettings } from "@/lib/drops";
 import { getStrings, isLocale } from "@/lib/i18n";
+import { privatePage, stringsFor } from "@/lib/metadata";
 import { Logo } from "@/components/Logo";
 import { ArrowLeftIcon, TruckIcon } from "@/components/icons";
 import { CancelOrderButton, ReorderButton } from "@/components/account/OrderButtons";
 import { StatusPill } from "@/components/account/StatusPill";
 import s from "@/components/checkout.module.css";
 import a from "@/components/account.module.css";
+
+export async function generateMetadata({ params }: { params: Promise<{ locale: string; number: string }> }): Promise<Metadata> {
+  const { locale, number } = await params;
+  return privatePage(stringsFor(locale).orderPageTitle(number));
+}
 
 /** One order (PRD 2.5): items, address, dates, gift message, payment, tracking, cancel while open, order again. */
 export default async function OrderPage({ params }: { params: Promise<{ locale: string; number: string }> }) {

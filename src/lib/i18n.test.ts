@@ -37,6 +37,7 @@ const SAMPLES: Samples = {
   cancelPolicy: ["Sun, Oct 18 · 21:00 JST"],
   placeOrderCard: ["¥2,300"],
   confirmed: ["AB-003-017", "you@example.com"],
+  orderPageTitle: ["AB-003-017"],
   toAddress: ["Hanako", "1-2-3 Nakameguro"],
   next4Sub: ["Hanako"],
   signedInAs: ["you@example.com"],
@@ -75,7 +76,7 @@ function texts(s: Strings, k: keyof Strings): [string, string][] {
 /** Identical in both languages on purpose: Japanese-only on the EN page too (tagline, 税込, legal page titles, the address example) or a brand name. */
 const SAME = new Set<keyof Strings>(["heroTagline", "taxIncl", "tokushoho", "privacy", "terms", "buildingPlaceholder", "instagram", "line", "copyright", "paypay"]);
 /** Helpers that reshape their input rather than carry copy; tested on their own below. */
-const HELPERS = new Set<keyof Strings>(["boxNames", "tickerSentence"]);
+const HELPERS = new Set<keyof Strings>(["boxNames", "tickerSentence", "metaTitleTemplate"]);
 /** Hiragana, katakana or kanji. */
 const JAPANESE = /[぀-ヿ一-鿿]/;
 
@@ -116,6 +117,14 @@ describe("templates at their boundaries", () => {
     expect(en.tickerStatus(3, 4, "OCT 25")).toBe("Drop 03 is open. Closes in 4 days. Ships OCT 25.");
     expect(ja.tickerStatus(3, 0, "10月25日")).toBe("ドロップ03受付中。本日締切。10月25日発送。");
     expect(ja.tickerStatus(3, 4, "10月25日")).toBe("ドロップ03受付中。締切まであと4日。10月25日発送。");
+  });
+
+  it("puts the brand after each page title, once, with the language's own separator", () => {
+    const title = (template: string, page: string) => template.replace("%s", page);
+    expect(en.metaTitleTemplate.split("%s")).toHaveLength(2);
+    expect(ja.metaTitleTemplate.split("%s")).toHaveLength(2);
+    expect(title(en.metaTitleTemplate, en.checkoutTitle)).toBe("Checkout · Astro Bakes");
+    expect(title(ja.metaTitleTemplate, ja.checkoutTitle)).toBe("ご注文手続き｜Astro Bakes");
   });
 
   it("joins the ticker into one sentence per language", () => {

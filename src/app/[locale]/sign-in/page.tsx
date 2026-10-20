@@ -1,11 +1,18 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { notFound } from "next/navigation";
 import { currentCustomer } from "@/lib/auth";
 import { signInDestination } from "@/lib/auth-rules";
 import { isLocale } from "@/lib/i18n";
+import { privatePage, stringsFor } from "@/lib/metadata";
 import { SignIn } from "@/components/SignIn";
 
 type Query = Record<string, string | string[] | undefined>;
+
+export async function generateMetadata({ params }: { params: Promise<{ locale: string }> }): Promise<Metadata> {
+  const { locale } = await params;
+  return privatePage(stringsFor(locale).signIn);
+}
 
 export default async function SignInPage({ params, searchParams }: { params: Promise<{ locale: string }>; searchParams: Promise<Query> }) {
   const { locale } = await params;
