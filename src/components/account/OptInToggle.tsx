@@ -11,21 +11,35 @@ export function OptInToggle({ locale, initial }: { locale: Locale; initial: bool
   const t = getStrings(locale);
   const [on, setOn] = useState(initial);
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   async function change(next: boolean) {
-    setOn(next);
+    const previous = on;
+    setOn(next); // optimistic, reverted below if the server didn't take it
     setBusy(true);
+    setError(null);
     try {
       const r = await setMarketingOptInAction(next);
-      if (!r.ok) setOn(!next);
-    } finally { setBusy(false); }
+      if (!r.ok) {
+        setOn(previous);
+        setError(t.saveFailed);
+      }
+    } catch {
+      setOn(previous);
+      setError(t.saveFailed);
+    } finally {
+      setBusy(false);
+    }
   }
   return (
-    <label className={a.toggle}>
-      <input type="checkbox" checked={on} disabled={busy} onChange={(e) => void change(e.target.checked)} />
-      <span className={a.toggleText}>
-        <span className="w9">{t.optInLabel}</span>
-        <span className="small w7">{t.optInConsent}</span>
-      </span>
-    </label>
+    <>
+      <label className={a.toggle}>
+        <input type="checkbox" checked={on} disabled={busy} onChange={(e) => void change(e.target.checked)} />
+        <span className={a.toggleText}>
+          <span className="w9">{t.optInLabel}</span>
+          <span className="small w7">{t.optInConsent}</span>
+        </span>
+      </label>
+      {error && <span className={a.status} role="alert">{error}</span>}
+    </>
   );
 }

@@ -268,6 +268,8 @@ const en = {
   saveChanges: "Save changes",
   saved: "Saved.",
   orderFailedGeneric: "Something went wrong. Please try again.",
+  saveFailed: "That didn't save. Check your connection and try again.",
+  requestFailed: "We couldn't reach the server. This page shows the current state of your order; try again if it's still not cancelled.",
   limitReached: (already: number, name: string, max: number) => `You've already ordered ${already} × ${name} in this drop. The limit is ${max} of each box per person.`,
   // ---- scheduled / closed / no-drop homepage (design-ref/DROP-STATES.md) ----
   dropN: (n: number) => `Drop ${String(n).padStart(2, "0")}`,

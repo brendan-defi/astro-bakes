@@ -39,7 +39,11 @@ export function ProfileForm({ locale, initial }: { locale: Locale; initial: Prof
         if (v.locale !== locale) router.push(`/${v.locale}/account`);
         router.refresh();
       }
-    } finally { setBusy(false); }
+    } catch {
+      setStatus("error");
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
@@ -96,7 +100,7 @@ export function ProfileForm({ locale, initial }: { locale: Locale; initial: Prof
       <div className={a.actions}>
         <button type="submit" className="btn btn-primary" disabled={busy}>{t.saveChanges}</button>
         {status === "saved" && <span className={a.status} role="status">{t.saved}</span>}
-        {status === "error" && <span className={a.status} role="alert">{t.orderFailedGeneric}</span>}
+        {status === "error" && <span className={a.status} role="alert">{t.saveFailed}</span>}
       </div>
     </form>
   );

@@ -22,7 +22,9 @@ export function orderStatus(orderState: OrderState, dropState: DropState): Order
       return "delivered";
     case "paid":
     case "packed":
-      return dropState === "baking" || dropState === "shipped" ? "baking" : "confirmed";
+      // Once the drop has gone into the oven the order is at least baking; a shipped or completed
+      // drop doesn't promote this order, because shipping and delivery are confirmed per order.
+      return dropState === "baking" || dropState === "shipped" || dropState === "complete" ? "baking" : "confirmed";
   }
 }
 

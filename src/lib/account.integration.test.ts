@@ -133,7 +133,9 @@ describe.skipIf(!URL)("account", () => {
     const number = await order(c, { "cookie-box": 1 });
     expect((await loadOrder(c, number, "en"))!.reorder).toBeNull(); // nothing open by the clock
     await setDrop("open", new Date(Date.now() + 3_600_000));
-    expect((await loadOrder(c, number, "en"))!.reorder).toEqual({ dropId: DROP, items: { "cookie-box": 1 } });
+    const reorder = (await loadOrder(c, number, "en"))!.reorder;
+    expect(reorder).toMatchObject({ dropId: DROP, items: { "cookie-box": 1 } });
+    expect(reorder!.boxes.map((b) => b.id)).toEqual(["cookie-box", "banana-bread", "sampler-box"]);
   });
 
   it("updates the profile and saved address with the checkout's rules, and the preference", async () => {

@@ -71,7 +71,7 @@ export const settings: Settings = {
   shippingArea: "Tokyo 23 wards",
   instagramUrl: "https://instagram.com",
   lineUrl: "#notify",
-  contactEmail: "hello@astrobakes.example",
+  contactEmail: "hello@astrobakes.xyz",
   holdMinutes: 10,
 };
 

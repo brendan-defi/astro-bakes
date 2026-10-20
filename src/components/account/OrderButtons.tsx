@@ -3,8 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { cancelOrderAction } from "@/app/[locale]/account/actions";
-import { storageKey } from "@/lib/cart";
-import type { Locale } from "@/lib/data";
+import { mergeQuantities, storageKey, type Quantities } from "@/lib/cart";
+import type { Box, Locale } from "@/lib/data";
 import { getStrings } from "@/lib/i18n";
 import a from "../account.module.css";
 
@@ -20,9 +20,20 @@ export function CancelOrderButton({ locale, number }: { locale: Locale; number: 
     setNotice(null);
     try {
       const r = await cancelOrderAction(number);
-      if (!r.ok) { setNotice(r.error === "closed" ? t.cancelClosed : t.orderFailedGeneric); setConfirming(false); return; }
+      if (!r.ok) {
+        setNotice(r.error === "closed" ? t.cancelClosed : t.orderFailedGeneric);
+        setConfirming(false);
+      }
+      // Success or not, the page re-reads the order so what's shown is what the server has.
       router.refresh();
-    } finally { setBusy(false); }
+    } catch {
+      // The request itself failed: the outcome is unknown, so show the server's view of the order.
+      setNotice(t.requestFailed);
+      setConfirming(false);
+      router.refresh();
+    } finally {
+      setBusy(false);
+    }
   }
   if (!confirming) {
     return (
@@ -44,8 +55,8 @@ export function CancelOrderButton({ locale, number }: { locale: Locale; number: 
   );
 }
 
-/** "Order again": puts the same boxes in the cart for the open drop and goes to the checkout (PRD 2.5). */
-export function ReorderButton({ locale, dropId, items }: { locale: Locale; dropId: string; items: Record<string, number> }) {
+/** "Order again": adds the same boxes to the cart for the open drop, keeping what's already there, then goes to the checkout (PRD 2.5). */
+export function ReorderButton({ locale, dropId, items, boxes }: { locale: Locale; dropId: string; items: Quantities; boxes: Box[] }) {
   const t = getStrings(locale);
   const router = useRouter();
   return (
@@ -53,7 +64,10 @@ export function ReorderButton({ locale, dropId, items }: { locale: Locale; dropI
       type="button"
       className="btn btn-primary"
       onClick={() => {
-        try { window.localStorage.setItem(storageKey(dropId), JSON.stringify(items)); } catch {}
+        const key = storageKey(dropId);
+        let existing: Quantities = {};
+        try { existing = JSON.parse(window.localStorage.getItem(key) ?? "{}") as Quantities; } catch {}
+        try { window.localStorage.setItem(key, JSON.stringify(mergeQuantities(existing, items, boxes))); } catch {}
         router.push(`/${locale}/checkout`);
       }}
     >

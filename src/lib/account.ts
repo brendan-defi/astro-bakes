@@ -2,7 +2,7 @@ import "server-only";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { getDb, type Db } from "@/db";
 import { addresses, customers, dropBoxes, drops, inventoryHolds, orders, refunds } from "@/db/schema";
-import { effectiveState, type Locale } from "./data";
+import { effectiveState, type Box, type Locale } from "./data";
 import { validateDelivery, type DeliveryInput } from "./checkout-rules";
 import { sendEmail } from "./email";
 import { orderCancelledEmail, orderConfirmationEmail, type OrderEmailData } from "./email-templates";
@@ -57,8 +57,8 @@ export interface OrderDetail extends OrderSummary {
   arriveAt: Date;
   closeAt: Date;
   refund: { amount: number; issued: boolean } | null;
-  /** The same boxes in the currently open drop, when there is one (PRD 2.5 "Order again"). */
-  reorder: { dropId: string; items: Record<string, number> } | null;
+  /** The same boxes in the currently open drop, when there is one (PRD 2.5 "Order again"), with that drop's boxes for clamping. */
+  reorder: { dropId: string; items: Record<string, number>; boxes: Box[] } | null;
 }
 
 const addressLine = (o: { postalCode: string; prefecture: string; city: string; town: string | null; line1: string; line2: string | null }) =>
@@ -94,7 +94,7 @@ export async function loadOrder(customerId: string, number: string, locale: Loca
   // "Order again": the same boxes in whatever drop is open right now, if it carries them all.
   const open = (await loadDrops(locale)).find((d) => effectiveState(d, now) === "open") ?? null;
   const onSale = open ? new Set(open.boxes.map((b) => b.id)) : null;
-  const reorder = open && onSale && summary.lines.every((l) => onSale.has(l.slug)) ? { dropId: open.id, items: Object.fromEntries(summary.lines.map((l) => [l.slug, l.qty])) } : null;
+  const reorder = open && onSale && summary.lines.every((l) => onSale.has(l.slug)) ? { dropId: open.id, items: Object.fromEntries(summary.lines.map((l) => [l.slug, l.qty])), boxes: open.boxes } : null;
   const refund = o.refunds[0] ? { amount: o.refunds[0].amount, issued: !!o.refunds[0].issuedAt } : null;
   return {
     ...summary,

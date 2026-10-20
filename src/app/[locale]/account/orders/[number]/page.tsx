@@ -76,7 +76,7 @@ export default async function OrderPage({ params }: { params: Promise<{ locale: 
 
             {order.reorder && (
               <div className={a.actions}>
-                <ReorderButton locale={locale} dropId={order.reorder.dropId} items={order.reorder.items} />
+                <ReorderButton locale={locale} dropId={order.reorder.dropId} items={order.reorder.items} boxes={order.reorder.boxes} />
                 <span className={a.status}>{t.orderAgainHint}</span>
               </div>
             )}
