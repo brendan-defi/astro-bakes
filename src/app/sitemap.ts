@@ -3,7 +3,7 @@ import { locales } from "@/lib/i18n";
 import { SITE_URL } from "@/lib/metadata";
 
 /** Public pages, one entry per language, each listing its translations. */
-const PAGES = ["", "/custom-orders"];
+const PAGES = ["", "/faq", "/legal/tokushoho", "/legal/privacy", "/legal/terms", "/custom-orders"];
 
 export default function sitemap(): MetadataRoute.Sitemap {
   return PAGES.flatMap((path) => {

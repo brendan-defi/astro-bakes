@@ -7,6 +7,7 @@ import { getStrings } from "@/lib/i18n";
 import { useCart } from "@/lib/cart";
 import { useDemoQuery } from "@/lib/demo-query";
 import { CartIcon } from "./icons";
+import { LangToggle } from "./LangToggle";
 import { Logo } from "./Logo";
 import styles from "./Nav.module.css";
 
@@ -24,13 +25,7 @@ export function Nav({ locale, showCart = false, viewer = anonymousViewer }: { lo
         <span className={styles.logoSm}><Logo href={`/${locale}`} label={t.home} size="sm" /></span>
         <span className={styles.logoLg}><Logo href={`/${locale}`} label={t.home} size="lg" /></span>
         <div className={styles.right}>
-          <div role="group" aria-label={t.language} className={styles.lang}>
-            {(["ja", "en"] as Locale[]).map((l) => (
-              <Link key={l} href={swap(l)} aria-current={l === locale ? "true" : undefined} className={`${styles.langBtn} ${l === locale ? styles.langOn : ""}`}>
-                {l.toUpperCase()}
-              </Link>
-            ))}
-          </div>
+          <LangToggle locale={locale} hrefFor={swap} />
           {showCart && (
             <Link href={`/${locale}/checkout${demoQuery}`} aria-label={t.cart} className={styles.cart}>
               <CartIcon />

@@ -107,5 +107,9 @@ export async function loadSettings(): Promise<Settings> {
     lineUrl: str("line_url", defaultSettings.lineUrl),
     contactEmail: str("contact_email", defaultSettings.contactEmail),
     holdMinutes: num("hold_minutes", defaultSettings.holdMinutes) ?? defaultSettings.holdMinutes,
+    legalSellerName: str("legal_seller_name", defaultSettings.legalSellerName),
+    legalOperator: str("legal_operator", defaultSettings.legalOperator),
+    legalAddress: str("legal_address", defaultSettings.legalAddress),
+    legalPhone: str("legal_phone", defaultSettings.legalPhone),
   };
 }

@@ -20,6 +20,11 @@ const SETTINGS: { key: string; value: unknown }[] = [
   { key: "line_url", value: "#notify" },
   { key: "contact_email", value: "hello@astrobakes.xyz" },
   { key: "hold_minutes", value: 10 },
+  // 特商法 seller fields (PRD 4.9 → 1.8). Empty renders the "disclosed on request" wording; the owner sets the real values.
+  { key: "legal_seller_name", value: "" },
+  { key: "legal_operator", value: "" },
+  { key: "legal_address", value: "" },
+  { key: "legal_phone", value: "" },
 ];
 
 const ITEMS = [
