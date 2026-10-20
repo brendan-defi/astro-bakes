@@ -27,6 +27,16 @@ describe("lookupPostal", () => {
   it("resolves a skyscraper's per-floor codes to its neighbourhood", () => {
     expect(lookupPostal("1006810")).toMatchObject({ city: "千代田区", town: "大手町" }); // 大手町ＪＡビル（１０階）
     expect(lookupPostal("1006890")).toMatchObject({ city: "千代田区", town: "大手町" }); // 地階・階層不明
+    expect(lookupPostal("1006837")).toMatchObject({ town: "大手町" }); // top floor
+  });
+
+  it("rejects floor codes Japan Post never assigned, even under a known building", () => {
+    // 大手町ＪＡビル has 01–37 and 90; review found 100-6899 and 100-6800 slipping through on the shared prefix.
+    for (const code of ["1006800", "1006838", "1006889", "1006899"]) expect(lookupPostal(code)).toBeNull();
+    // A building with a gap in its floors (01–10, 15–49, 90).
+    expect(lookupPostal("1055510")).toMatchObject({ town: "虎ノ門" });
+    expect(lookupPostal("1055512")).toBeNull();
+    expect(lookupPostal("1055515")).toMatchObject({ town: "虎ノ門" });
   });
 
   it("treats a ward's catch-all code as not found, since it carries no neighbourhood for the label", () => {

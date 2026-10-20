@@ -58,11 +58,27 @@ const bare = (town) => town.replace(/（.*$/, "");
 
 const codes = {};
 const buildingNames = new Map();
+const floorSuffixes = new Map();
 for (const r of inWards) {
   // A ward's catch-all code has no town, so the label would lack one; treat it as not found.
   if (r.town === "以下に掲載がない場合") continue;
-  if (FLOOR.test(r.town)) buildingNames.set(r.code.slice(0, 5), [r.jis, bare(r.town)]);
-  else codes[r.code] = [wardIndex.get(r.jis), bare(r.town)];
+  if (FLOOR.test(r.town)) {
+    const prefix = r.code.slice(0, 5);
+    buildingNames.set(prefix, [r.jis, bare(r.town)]);
+    floorSuffixes.set(prefix, [...(floorSuffixes.get(prefix) ?? []), Number(r.code.slice(5))]);
+  } else codes[r.code] = [wardIndex.get(r.jis), bare(r.town)];
+}
+
+/** [1, 2, 3, 90] → "01-03,90": the floor codes Japan Post assigned, so unassigned ones stay unknown. */
+function ranges(suffixes) {
+  const pad = (n) => String(n).padStart(2, "0");
+  const out = [];
+  for (const n of [...suffixes].sort((a, b) => a - b)) {
+    const last = out.at(-1);
+    if (last && n === last[1] + 1) last[1] = n;
+    else out.push([n, n]);
+  }
+  return out.map(([a, b]) => (a === b ? pad(a) : `${pad(a)}-${pad(b)}`)).join(",");
 }
 
 // Skyscrapers have a code per floor sharing five digits. Their town is the building name run onto
@@ -75,11 +91,11 @@ for (const [prefix, [jis, name]] of buildingNames) {
   const town = (townsByWard.get(w) ?? []).filter((t) => t && name.startsWith(t)).sort((a, b) => b.length - a.length)[0];
   if (!town) throw new Error(`No neighbourhood found for building ${name} (${prefix}xx)`);
   if (Object.keys(codes).some((c) => c.startsWith(prefix))) throw new Error(`Floor prefix ${prefix} is shared with ordinary codes`);
-  buildings[prefix] = [w, town];
+  buildings[prefix] = [w, town, ranges(floorSuffixes.get(prefix))];
 }
 
 const prefixes = [...new Set(inWards.map((r) => r.code.slice(0, 3)))].sort();
-const entries = (o) => Object.entries(o).sort(([a], [b]) => a.localeCompare(b)).map(([k, [w, t]]) => `  "${k}": [${w}, ${JSON.stringify(t)}],`).join("\n");
+const entries = (o) => Object.entries(o).sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => `  "${k}": [${v.map((x) => JSON.stringify(x)).join(", ")}],`).join("\n");
 
 writeFileSync(
   OUT,
@@ -96,8 +112,8 @@ export const CODES: Readonly<Record<string, readonly [number, string]>> = {
 ${entries(codes)}
 };
 
-/** Skyscrapers with a postal code per floor: first five digits → [index into WARDS, neighbourhood]. */
-export const BUILDINGS: Readonly<Record<string, readonly [number, string]>> = {
+/** Skyscrapers with a postal code per floor: first five digits → [index into WARDS, neighbourhood, assigned last two digits]. */
+export const BUILDINGS: Readonly<Record<string, readonly [number, string, string]>> = {
 ${entries(buildings)}
 };
 `,

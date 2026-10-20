@@ -19,11 +19,20 @@ export function normalisePostal(input: string): string {
   return input.replace(/[^0-9０-９]/g, "").replace(/[０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xfee0));
 }
 
+/** Whether a two-digit floor suffix is in a building's assigned ranges ("01-37,90"). */
+function assigned(ranges: string, suffix: number): boolean {
+  return ranges.split(",").some((r) => {
+    const [from, to = from] = r.split("-").map(Number);
+    return suffix >= from && suffix <= to;
+  });
+}
+
 export function lookupPostal(input: string): PostalHit | null {
   const key = normalisePostal(input);
   if (key.length !== 7) return null;
-  // Skyscrapers have a code per floor; they share the building's first five digits.
-  const found = CODES[key] ?? BUILDINGS[key.slice(0, 5)];
+  // Skyscrapers have a code per floor under the building's first five digits; only the floors Japan Post assigned exist.
+  const building = BUILDINGS[key.slice(0, 5)];
+  const found = CODES[key] ?? (building && assigned(building[2], Number(key.slice(5))) ? building : undefined);
   if (!found) return null;
   const [wardCode, city, wardEn] = WARDS[found[0]];
   return { prefecture: "東京都", city, town: found[1], wardEn, wardCode, deliverable: true };
