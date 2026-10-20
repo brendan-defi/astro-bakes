@@ -3,7 +3,8 @@ import { EMAIL, normaliseEmail } from "./auth-rules";
 /**
  * Party and custom order requests (the owner's "want cookies at your next
  * party?" form). Pure rules shared by the form and the server, so both agree on
- * what a valid request is. A request books nothing: the owner replies by email.
+ * what a valid request is. A request is not an order: the owner checks whether
+ * it's doable and confirms by email.
  */
 
 export const PARTY_SIZES = ["upTo20", "20to50", "50to100", "over100"] as const;
@@ -13,6 +14,9 @@ export type Occasion = (typeof OCCASIONS)[number];
 
 export const NAME_MAX = 100;
 export const DETAILS_MAX = 2000;
+/** The owner needs at least a week to plan and bake; two weeks is what they'd like. */
+export const MIN_DAYS_AHEAD = 7;
+export const PREFERRED_DAYS_AHEAD = 14;
 /** The furthest ahead a party date can be. */
 export const MAX_DAYS_AHEAD = 365;
 export const RATE_WINDOW_HOURS = 24;
@@ -49,9 +53,19 @@ export function tokyoDay(now: Date, offset = 0): string {
   return new Date(now.getTime() + 9 * 3_600_000 + offset * DAY).toISOString().slice(0, 10);
 }
 
-/** The dates the form offers: tomorrow (nobody can bake for a party today) to a year out. */
+/** The dates the form offers: a week out (the minimum notice) to a year out. */
 export function dateRange(now = new Date()): { min: string; max: string } {
-  return { min: tokyoDay(now, 1), max: tokyoDay(now, MAX_DAYS_AHEAD) };
+  return { min: tokyoDay(now, MIN_DAYS_AHEAD), max: tokyoDay(now, MAX_DAYS_AHEAD) };
+}
+
+/** Whole Tokyo days from today to the party: the notice the owner is getting. */
+export function noticeDays(eventDate: string, now = new Date()): number {
+  return Math.round((Date.parse(`${eventDate}T00:00:00Z`) - Date.parse(`${tokyoDay(now)}T00:00:00Z`)) / DAY);
+}
+
+/** Allowed, but under the two weeks the owner prefers: the form warns that it may not work out. */
+export function isShortNotice(eventDate: string, now = new Date()): boolean {
+  return noticeDays(eventDate, now) < PREFERRED_DAYS_AHEAD;
 }
 
 const str = (v: unknown) => (typeof v === "string" ? v : "");

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { submitCustomOrderAction } from "@/app/[locale]/custom-orders/actions";
-import { DETAILS_MAX, NAME_MAX, OCCASIONS, PARTY_SIZES, validateCustomOrder, type CustomOrderField } from "@/lib/custom-order-rules";
+import { DETAILS_MAX, isShortNotice, NAME_MAX, OCCASIONS, PARTY_SIZES, validateCustomOrder, type CustomOrderField } from "@/lib/custom-order-rules";
 import type { Locale } from "@/lib/data";
 import { getStrings } from "@/lib/i18n";
 import { CheckIcon, WarningIcon } from "./icons";
@@ -28,6 +28,8 @@ export function CustomOrderForm({ locale, initial, dateMin, dateMax }: { locale:
   const errorText: Record<CustomOrderField, string> = { name: t.errName, email: t.errEmail, eventDate: t.errEventDate, partySize: t.errPartySize, details: t.errDetails };
   const ids: Record<CustomOrderField, string> = { name: "co-name", email: "co-email", eventDate: "co-date", partySize: "co-size", details: "co-details" };
   const invalid = (f: CustomOrderField) => (bad.has(f) ? { "aria-invalid": true as const, "aria-describedby": `${ids[f]}-err` } : {});
+  // A valid date under two weeks out is allowed, with a warning that it may not work out.
+  const shortNotice = !bad.has("eventDate") && /^\d{4}-\d{2}-\d{2}$/.test(v.eventDate) && v.eventDate >= dateMin && isShortNotice(v.eventDate);
   const error = (f: CustomOrderField) => bad.has(f) && <span id={`${ids[f]}-err`} className={s.err}><WarningIcon size={16} />{errorText[f]}</span>;
 
   useEffect(() => { if (sent) sentRef.current?.focus(); }, [sent]);
@@ -82,8 +84,10 @@ export function CustomOrderForm({ locale, initial, dateMin, dateMax }: { locale:
       </div>
       <div className={`field ${s.dateField}`}>
         <label htmlFor="co-date" className="label">{t.partyDate}</label>
-        <input id="co-date" type="date" required min={dateMin} max={dateMax} className={`input ${bad.has("eventDate") ? s.inputError : ""}`} value={v.eventDate} onChange={(e) => set({ eventDate: e.target.value })} {...invalid("eventDate")} />
-        {error("eventDate")}
+        <input id="co-date" type="date" required min={dateMin} max={dateMax} className={`input ${bad.has("eventDate") ? s.inputError : ""}`} value={v.eventDate} onChange={(e) => set({ eventDate: e.target.value })}
+          aria-describedby={[bad.has("eventDate") ? "co-date-err" : "co-date-hint", shortNotice ? "co-date-short" : ""].join(" ").trim()} aria-invalid={bad.has("eventDate") || undefined} />
+        {bad.has("eventDate") ? error("eventDate") : <span id="co-date-hint" className="hint">{t.partyDateHint}</span>}
+        {shortNotice && <span id="co-date-short" className={s.shortNotice}><WarningIcon size={16} />{t.shortNotice}</span>}
       </div>
       <fieldset className={s.fieldset} aria-describedby={bad.has("partySize") ? "co-size-err" : undefined}>
         <legend className="label">{t.partySizeLabel}</legend>
@@ -119,7 +123,10 @@ export function CustomOrderForm({ locale, initial, dateMin, dateMax }: { locale:
         <input id="co-website" type="text" tabIndex={-1} autoComplete="off" value={v.website} onChange={(e) => set({ website: e.target.value })} />
       </div>
       {notice && <div role="alert" className="note">{notice}</div>}
-      <button type="submit" className={`btn btn-primary ${s.submit}`} disabled={busy}>{t.sendRequest}</button>
+      <div className={s.sendRow}>
+        <p className={s.notOrder}>{t.requestNotOrder}</p>
+        <button type="submit" className={`btn btn-primary ${s.submit}`} disabled={busy}>{t.sendRequest}</button>
+      </div>
     </form>
   );
 }

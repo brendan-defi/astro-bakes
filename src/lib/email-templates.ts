@@ -1,4 +1,4 @@
-import type { CustomOrderRequest } from "./custom-order-rules";
+import { PREFERRED_DAYS_AHEAD, type CustomOrderRequest } from "./custom-order-rules";
 import type { Locale } from "./data";
 import { getStrings } from "./i18n";
 
@@ -122,8 +122,8 @@ export function orderCancelledEmail(opts: { locale: Locale; number: string; tota
  * for the owner, and it says which language the customer wrote in); the send sets
  * Reply-To to the customer, so answering is just hitting reply.
  */
-export function customOrderRequestEmail(opts: { request: CustomOrderRequest; locale: Locale }): Email {
-  const { request: r, locale } = opts;
+export function customOrderRequestEmail(opts: { request: CustomOrderRequest; locale: Locale; noticeDays: number }): Email {
+  const { request: r, locale, noticeDays } = opts;
   const en = getStrings("en");
   // A calendar day, not an instant: format it in UTC so no timezone shifts it.
   const day = new Intl.DateTimeFormat("en-US", { timeZone: "UTC", weekday: "short", month: "short", day: "numeric", year: "numeric" }).format(new Date(`${r.eventDate}T00:00:00Z`));
@@ -132,17 +132,18 @@ export function customOrderRequestEmail(opts: { request: CustomOrderRequest; loc
     ["Name", r.name],
     ["Email", r.email],
     ["Date", day],
+    ["Notice", `${noticeDays} days${noticeDays < PREFERRED_DAYS_AHEAD ? " (under two weeks)" : ""}`],
     ["People", people],
     ["Occasion", r.occasion ? en.occasions[r.occasion] : "Not given"],
     ["Wrote in", locale === "ja" ? "Japanese (日本語)" : "English"],
   ];
-  const subject = `Party order request: ${day} · ${people} · ${r.name}`;
+  const subject = `Party request: ${day} · ${people} · ${r.name}`;
   const table = rows.map(([k, v]) => `<tr><td style="padding:4px 12px 4px 0;font-weight:700;white-space:nowrap;vertical-align:top">${k}</td><td style="padding:4px 0">${esc(v)}</td></tr>`).join("");
-  const body = `<p style="margin:0 0 14px">New party / custom order request from the website.</p>
+  const body = `<p style="margin:0 0 14px">New party / custom order request from the website. It isn't an order until you confirm it with them by email.</p>
 <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 14px;font-size:15px">${table}</table>
 <p style="margin:0 0 6px;font-weight:700">What they have in mind</p>
 <p style="margin:0 0 18px;padding:12px 14px;background:#FFF5FA;border:1px dashed #2A1B5E;border-radius:12px">${esc(r.details).replace(/\n/g, "<br>")}</p>
 <p style="margin:0;font-size:14px">Reply to this email to answer ${esc(r.name)} directly. Nothing has been booked or charged.</p>`;
-  const text = `New party / custom order request from the website.\n\n${rows.map(([k, v]) => `${k}: ${v}`).join("\n")}\n\nWhat they have in mind:\n${r.details}\n\nReply to this email to answer ${r.name} directly. Nothing has been booked or charged.`;
+  const text = `New party / custom order request from the website. It isn't an order until you confirm it with them by email.\n\n${rows.map(([k, v]) => `${k}: ${v}`).join("\n")}\n\nWhat they have in mind:\n${r.details}\n\nReply to this email to answer ${r.name} directly. Nothing has been booked or charged.`;
   return { subject, html: layout("en", subject, body), text };
 }

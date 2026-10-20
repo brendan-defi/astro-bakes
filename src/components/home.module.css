@@ -344,5 +344,5 @@
 }
 
 /* Titan One has no Japanese glyphs, so JA labels set in it use Zen Maru Gothic 900 (handoff p.13). */
-:lang(ja) :is(.bubble, .ticketValue, .ticketSub, .orderMain, .partiesBody, .partyValue) { word-break: auto-phrase; }
+:lang(ja) :is(.bubble, .ticketValue, .ticketSub, .orderMain, .partiesBody, .partiesFine, .partyValue) { word-break: auto-phrase; }
 :lang(ja) .eyebrowSticker, :lang(ja) .partyTicketHead, :lang(ja) .partyBurst span, :lang(ja) .partyValue, :lang(ja) .cartLink, :lang(ja) .orderView, :lang(ja) .burstLabel, :lang(ja) .stamp, :lang(ja) .howMany, :lang(ja) .stepTitle, :lang(ja) .lineTitle { font-family: var(--font-body), sans-serif; font-weight: 900; }

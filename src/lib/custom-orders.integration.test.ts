@@ -57,6 +57,7 @@ describe.skipIf(!URL)("custom orders", () => {
     expect(sent).toHaveLength(1);
     expect(sent[0]).toMatchObject({ to: "hello@astrobakes.xyz", replyTo: "hanako@test.invalid", type: "custom_order_request", idempotencyKey: `custom-order/${row.id}` });
     expect(sent[0].text).toContain("Wrote in: Japanese");
+    expect(sent[0].text).toContain("Notice: 25 days\n");
   });
 
   it("sends to the custom_order_email setting when there is one", async () => {

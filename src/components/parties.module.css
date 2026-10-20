@@ -18,7 +18,8 @@
 
 .form { display: flex; flex-direction: column; gap: 20px; }
 .row2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr)); gap: 20px 16px; }
-.dateField { max-width: 280px; }
+.dateField { max-width: 420px; }
+.dateField :global(.input) { max-width: 280px; }
 .fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
 .fieldset legend { padding: 0; margin-bottom: 8px; }
 .options { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -34,6 +35,10 @@
 .inputError { border-color: #c0392b; }
 .err { display: flex; align-items: center; gap: 6px; margin-top: 2px; color: #c0392b; font-size: 13px; font-weight: 900; }
 .err svg { flex: none; }
+.shortNotice { display: flex; align-items: center; gap: 6px; align-self: flex-start; margin-top: 4px; background: var(--butter); border: var(--border-thin); border-radius: 12px; padding: 6px 10px; font-size: 13px; font-weight: 900; }
+.shortNotice svg { flex: none; }
+.sendRow { display: flex; flex-direction: column; gap: 12px; padding-top: 16px; border-top: 2px dashed var(--lilac); }
+.notOrder { font-size: 14px; font-weight: 700; }
 .submit { align-self: stretch; }
 .hp { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
 
@@ -57,4 +62,4 @@
   .submit { align-self: flex-start; padding: 0 36px; }
 }
 
-:lang(ja) :is(.title, .lead, .asideTitle, .nextItem, .sentTitle, .sentBody) { word-break: auto-phrase; }
+:lang(ja) :is(.title, .lead, .asideTitle, .nextItem, .sentTitle, .sentBody, .notOrder, .shortNotice) { word-break: auto-phrase; }

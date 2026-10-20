@@ -6,7 +6,7 @@ import { hashIp } from "./auth-rules";
 import { settings as defaultSettings, type Locale } from "./data";
 import { sendEmail } from "./email";
 import { customOrderRequestEmail } from "./email-templates";
-import { RATE_PER_EMAIL, RATE_PER_IP, RATE_WINDOW_HOURS, validateCustomOrder, type CustomOrderField, type CustomOrderInput } from "./custom-order-rules";
+import { noticeDays, RATE_PER_EMAIL, RATE_PER_IP, RATE_WINDOW_HOURS, validateCustomOrder, type CustomOrderField, type CustomOrderInput } from "./custom-order-rules";
 
 /**
  * The custom-orders form's write path. The request is stored first, so nothing
@@ -59,7 +59,7 @@ export async function submitCustomOrder(input: CustomOrderSubmission, ctx: Submi
   if (!id) return { ok: false, error: "rate_limited" };
 
   const sent = await sendEmail({
-    ...customOrderRequestEmail({ request: r, locale }),
+    ...customOrderRequestEmail({ request: r, locale, noticeDays: noticeDays(r.eventDate, ctx.now) }),
     to: await ownerInbox(),
     replyTo: r.email,
     type: "custom_order_request",

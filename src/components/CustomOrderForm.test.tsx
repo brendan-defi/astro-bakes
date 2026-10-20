@@ -1,5 +1,6 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { tokyoDay } from "@/lib/custom-order-rules";
 import { getStrings } from "@/lib/i18n";
 import { CustomOrderForm } from "./CustomOrderForm";
 
@@ -35,6 +36,35 @@ describe("CustomOrderForm", () => {
     expect(document.activeElement?.id).toBe("co-name");
     expect(screen.getByLabelText(t.yourName).getAttribute("aria-invalid")).toBe("true");
     expect(actions.submitCustomOrderAction).not.toHaveBeenCalled();
+  });
+
+  it("asks for a week's notice and warns when a date is under two weeks away", () => {
+    mount();
+    expect(screen.getByText(t.partyDateHint)).toBeTruthy();
+    type(t.partyDate, tokyoDay(new Date(), 10));
+    expect(screen.getByText(t.shortNotice)).toBeTruthy();
+    expect(screen.getByLabelText(t.partyDate).getAttribute("aria-describedby")).toBe("co-date-hint co-date-short");
+    type(t.partyDate, tokyoDay(new Date(), 20));
+    expect(screen.queryByText(t.shortNotice)).toBeNull();
+  });
+
+  it("refuses a date less than a week away", () => {
+    mount();
+    fillIn();
+    type(t.partyDate, tokyoDay(new Date(), 6));
+    send();
+    expect(screen.getByText(t.errEventDate)).toBeTruthy();
+    expect(screen.queryByText(t.shortNotice)).toBeNull();
+    expect(actions.submitCustomOrderAction).not.toHaveBeenCalled();
+  });
+
+  it("says it's a request, not an order, before and after sending", async () => {
+    actions.submitCustomOrderAction.mockResolvedValue({ ok: true });
+    mount();
+    expect(screen.getByText(t.requestNotOrder)).toBeTruthy();
+    fillIn();
+    send();
+    expect(await screen.findByText(t.requestSentBody("Hanako", "hanako@example.com"))).toBeTruthy();
   });
 
   it("clears a field's error as soon as it's fixed", () => {
