@@ -4,9 +4,12 @@ import { useCallback, useEffect, useState } from "react";
 import { requestSignInAction, verifyCodeAction } from "@/app/[locale]/auth/actions";
 import type { Locale } from "./data";
 import { getStrings } from "./i18n";
+import { motionOK } from "./motion";
 
 /** Per-tab sign-in state, so a refresh of the "check your email" screen keeps the address and the resend timer. */
 const KEY = "ab-auth-pending";
+/** How long the code field's "you're in" moment plays before the page moves on (none under reduced motion). */
+export const CELEBRATE_MS = 1100;
 
 interface Pending {
   email: string;
@@ -43,6 +46,10 @@ export function useSignInFlow({ locale, next, onSignedIn }: { locale: Locale; ne
   const [hydrated, setHydrated] = useState(false);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  /** The code was accepted; the caller is about to move on. */
+  const [verified, setVerified] = useState(false);
+  /** Codes turned down so far, so the field can shake once for each. */
+  const [misses, setMisses] = useState(0);
   const [now, setNow] = useState(() => Date.now());
   const [resendAt, setResendAt] = useState(0);
 
@@ -88,11 +95,15 @@ export function useSignInFlow({ locale, next, onSignedIn }: { locale: Locale; ne
       const r = await verifyCodeAction({ email, code });
       if (!r.ok) {
         setNotice(r.error === "locked" ? t.codeLocked : r.error === "expired" ? t.codeExpired : t.codeInvalid);
+        setMisses((n) => n + 1);
         return false;
       }
       // Clear the stored address but leave `pending` set: the caller navigates away, and flipping it first would
       // let a "code screen without an address" guard fire in the render before the navigation lands.
       writePending(null);
+      setVerified(true);
+      // Stay busy while the field celebrates, so nothing can be sent twice.
+      if (motionOK()) await new Promise((done) => window.setTimeout(done, CELEBRATE_MS));
       onSignedIn(r.next);
       return true;
     } finally {
@@ -106,7 +117,8 @@ export function useSignInFlow({ locale, next, onSignedIn }: { locale: Locale; ne
     setPending(false);
     setCode("");
     setNotice(null);
+    setVerified(false);
   }, []);
 
-  return { email, setEmail, code, setCode, pending, hydrated, busy, notice, setNotice, resendLeft: Math.max(0, resendAt - now), request, verify, reset };
+  return { email, setEmail, code, setCode, pending, hydrated, busy, notice, setNotice, verified, misses, resendLeft: Math.max(0, resendAt - now), request, verify, reset };
 }

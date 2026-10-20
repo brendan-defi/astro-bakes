@@ -172,11 +172,14 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
   });
   const email = auth.email;
   useEffect(() => {
-    // Already signed in: the email steps don't apply, and shouldn't sit in history.
-    if (customer && (step === "signin" || step === "code")) go("delivery", true);
+    // Already signed in: the email steps don't apply, and shouldn't sit in history. Not while a code is being checked or
+    // celebrated, though: the session arrives with the check's re-render, and onSignedIn moves on once the moment has played.
+    if (customer && (step === "signin" || step === "code")) {
+      if (!auth.busy && !auth.verified) go("delivery", true);
+    }
     // The code screen without an address to verify (storage cleared): back to the email field.
     else if (!customer && step === "code" && auth.hydrated && !auth.pending) go("signin", true);
-  }, [customer, step, auth.hydrated, auth.pending, go]);
+  }, [customer, step, auth.hydrated, auth.pending, auth.busy, auth.verified, go]);
 
   // ---- delivery ----
   const prefill = (c: CheckoutCustomer | null): Address => ({ name: c?.name ?? "", phone: c?.phone ?? "", postal: c?.postal ?? "", line1: c?.line1 ?? "", line2: c?.line2 ?? "" });
@@ -400,7 +403,7 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
                   <form className={s.form} onSubmit={(e) => { e.preventDefault(); void auth.verify(); }}>
                     <label htmlFor="co-code" className="label">{t.sixDigit}</label>
                     <div className={s.codeRow}>
-                      <CodeInput id="co-code" value={auth.code} onChange={auth.setCode} />
+                      <CodeInput id="co-code" value={auth.code} onChange={auth.setCode} doneLabel={t.codeAccepted} checking={auth.busy} done={auth.verified} misses={auth.misses} />
                       <button type="submit" className="btn btn-primary" disabled={auth.code.length !== 6 || auth.busy}>{t.continue}</button>
                     </div>
                   </form>

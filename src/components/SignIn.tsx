@@ -62,7 +62,7 @@ export function SignIn({ locale, next, error }: { locale: Locale; next: string; 
               <form className={s.form} onSubmit={submit(auth.verify)}>
                 <label htmlFor="si-code" className="label">{t.sixDigit}</label>
                 <div className={s.codeRow}>
-                  <CodeInput id="si-code" value={auth.code} onChange={auth.setCode} />
+                  <CodeInput id="si-code" value={auth.code} onChange={auth.setCode} doneLabel={t.codeAccepted} checking={auth.busy} done={auth.verified} misses={auth.misses} />
                   <button type="submit" className="btn btn-primary" disabled={auth.code.length !== 6 || auth.busy}>{t.continue}</button>
                 </div>
               </form>

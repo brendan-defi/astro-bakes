@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { notFound } from "next/navigation";
 import { currentCustomer } from "@/lib/auth";
@@ -20,6 +21,10 @@ export default async function SignInPage({ params, searchParams }: { params: Pro
   const q = await searchParams;
   const one = (k: string) => (Array.isArray(q[k]) ? q[k][0] : q[k]);
   const next = signInDestination(one("next"), locale);
-  if (await currentCustomer()) redirect(next);
+  // Someone already signed in skips this page. Except when this render is the code check's own: setting the session
+  // cookie in that Server Action re-renders the page, and the client wants to play its "you're in" moment before moving
+  // on itself. (Next marks action requests with this header; without it we'd just redirect straight away, as before.)
+  const fromAction = (await headers()).has("next-action");
+  if (!fromAction && (await currentCustomer())) redirect(next);
   return <SignIn locale={locale} next={next} error={one("error") ?? null} />;
 }
