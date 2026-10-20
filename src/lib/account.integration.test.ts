@@ -8,6 +8,7 @@ import * as schema from "@/db/schema";
 import { closeDb } from "@/db";
 import { seed } from "@/db/seed";
 import { cancelOrder, loadOrder, loadOrders, setMarketingOptIn, updateProfile } from "@/lib/account";
+import { mergeQuantities } from "@/lib/cart";
 import { placeOrder, startCheckout } from "@/lib/checkout";
 import { setEmailTransport, type OutgoingEmail } from "@/lib/email";
 
@@ -136,6 +137,20 @@ describe.skipIf(!URL)("account", () => {
     const reorder = (await loadOrder(c, number, "en"))!.reorder;
     expect(reorder).toMatchObject({ dropId: DROP, items: { "cookie-box": 1 } });
     expect(reorder!.boxes.map((b) => b.id)).toEqual(["cookie-box", "banana-bread", "sampler-box"]);
+  });
+
+  it("'order again' doesn't count the viewer's own reservation against them, like the homepage and checkout", async () => {
+    const c = await customer("reserved@test.invalid");
+    const number = await order(c, { "cookie-box": 1 }); // seeded 13 sold + 1 = 14 of 20, so 6 left
+    await setDrop("open", new Date(Date.now() + 3_600_000));
+    const mine = await startCheckout({ dropId: DROP, items: { "cookie-box": 5 }, flags: { state: "open" } }, null); // this browser's cart holds 5
+    if (!mine.ok || !mine.checkoutId) throw new Error("expected holds");
+    const cookiesLeft = async (cartId: string | null) => (await loadOrder(c, number, "en", cartId))!.reorder!.boxes.find((b) => b.id === "cookie-box")!.left;
+    expect(await cookiesLeft(null)).toBe(1); // another browser sees the 5 reserved
+    expect(await cookiesLeft(mine.checkoutId)).toBe(6); // the reserving browser doesn't
+    // So "Order again" tops that cart up to the per-customer limit rather than shrinking it to 1.
+    const { boxes } = (await loadOrder(c, number, "en", mine.checkoutId))!.reorder!;
+    expect(mergeQuantities({ "cookie-box": 5 }, { "cookie-box": 1 }, boxes)).toEqual({ "cookie-box": 5 });
   });
 
   it("updates the profile and saved address with the checkout's rules, and the preference", async () => {

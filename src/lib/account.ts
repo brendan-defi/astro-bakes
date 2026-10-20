@@ -86,13 +86,14 @@ export async function loadOrders(customerId: string, locale: Locale): Promise<Or
   return rows.map((o) => toSummary(o, locale, now));
 }
 
-export async function loadOrder(customerId: string, number: string, locale: Locale): Promise<OrderDetail | null> {
+/** `excludeCartId` is the viewer's own checkout cookie, so "order again" isn't clamped by their own reservation (same as the homepage and checkout). */
+export async function loadOrder(customerId: string, number: string, locale: Locale, excludeCartId: string | null = null): Promise<OrderDetail | null> {
   const o = await getDb().query.orders.findFirst({ where: and(eq(orders.customerId, customerId), eq(orders.number, number)), with: { ...withItems, refunds: true } });
   if (!o) return null;
   const now = new Date();
   const summary = toSummary(o, locale, now);
   // "Order again": the same boxes in whatever drop is open right now, if it carries them all.
-  const open = (await loadDrops(locale)).find((d) => effectiveState(d, now) === "open") ?? null;
+  const open = (await loadDrops(locale, excludeCartId)).find((d) => effectiveState(d, now) === "open") ?? null;
   const onSale = open ? new Set(open.boxes.map((b) => b.id)) : null;
   const reorder = open && onSale && summary.lines.every((l) => onSale.has(l.slug)) ? { dropId: open.id, items: Object.fromEntries(summary.lines.map((l) => [l.slug, l.qty])), boxes: open.boxes } : null;
   const refund = o.refunds[0] ? { amount: o.refunds[0].amount, issued: !!o.refunds[0].issuedAt } : null;

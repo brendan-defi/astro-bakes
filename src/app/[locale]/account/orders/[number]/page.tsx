@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { currentCustomer } from "@/lib/auth";
 import { loadOrder } from "@/lib/account";
+import { cartIdFromCookie } from "@/lib/cart-cookie";
 import { settings as defaultSettings } from "@/lib/data";
 import { fmtDate, fmtDateTime, yen } from "@/lib/format";
 import { loadSettings } from "@/lib/drops";
@@ -19,7 +20,7 @@ export default async function OrderPage({ params }: { params: Promise<{ locale: 
   if (!isLocale(locale)) notFound();
   const me = await currentCustomer();
   if (!me) redirect(`/${locale}/sign-in?next=${encodeURIComponent(`/${locale}/account/orders/${number}`)}`);
-  const [order, settings] = await Promise.all([loadOrder(me.id, number, locale), loadSettings().catch(() => defaultSettings)]);
+  const [order, settings] = await Promise.all([loadOrder(me.id, number, locale, await cartIdFromCookie()), loadSettings().catch(() => defaultSettings)]);
   if (!order) notFound();
   const t = getStrings(locale);
   const home = `/${locale}`;
