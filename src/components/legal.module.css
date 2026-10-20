@@ -18,3 +18,14 @@
   .row { grid-template-columns: 200px 1fr; gap: 16px; padding: 14px 20px; }
   .row dd { font-size: 16px; }
 }
+
+/* FAQ (PRD 1.7): each question is a card. */
+.faqList { display: flex; flex-direction: column; gap: 14px; }
+.faqItem { background: var(--white); border: var(--border); border-radius: var(--radius-panel); padding: 16px 18px; display: flex; flex-direction: column; gap: 8px; scroll-margin-top: 16px; }
+.faqItem p { font-size: 15px; font-weight: 500; line-height: 1.75; }
+.faqQ { font-size: 19px; line-height: 1.2; }
+@media (min-width: 768px) {
+  .faqItem { padding: 20px 24px; }
+  .faqItem p { font-size: 16px; }
+  .faqQ { font-size: 22px; }
+}
