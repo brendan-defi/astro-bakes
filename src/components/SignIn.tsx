@@ -7,6 +7,7 @@ import type { Locale } from "@/lib/data";
 import { fmtCountdown } from "@/lib/format";
 import { getStrings } from "@/lib/i18n";
 import { useSignInFlow } from "@/lib/use-sign-in";
+import { CodeInput } from "./CodeInput";
 import { ArrowLeftIcon, CheckIcon } from "./icons";
 import { Logo } from "./Logo";
 import s from "./checkout.module.css";
@@ -61,7 +62,7 @@ export function SignIn({ locale, next, error }: { locale: Locale; next: string; 
               <form className={s.form} onSubmit={submit(auth.verify)}>
                 <label htmlFor="si-code" className="label">{t.sixDigit}</label>
                 <div className={s.codeRow}>
-                  <input id="si-code" type="text" inputMode="numeric" autoComplete="one-time-code" maxLength={6} placeholder="000000" className={`input ${s.codeInput}`} value={auth.code} onChange={(e) => auth.setCode(e.target.value.replace(/\D/g, "").slice(0, 6))} />
+                  <CodeInput id="si-code" value={auth.code} onChange={auth.setCode} />
                   <button type="submit" className="btn btn-primary" disabled={auth.code.length !== 6 || auth.busy}>{t.continue}</button>
                 </div>
               </form>

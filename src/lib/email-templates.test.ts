@@ -8,7 +8,7 @@ describe("signInEmail", () => {
       const m = signInEmail({ locale, link, code: "042599", minutes: 15 });
       expect(m.subject).toContain("042599");
       expect(m.html).toContain(link);
-      expect(m.html).toContain("0 4 2 5 9 9");
+      expect(m.html).toContain(">042599</p>"); // one word, so one tap copies all of it
       expect(m.text).toContain("042599");
       expect(m.text).toContain(link);
       expect(m.html).toContain(`lang="${locale}"`);

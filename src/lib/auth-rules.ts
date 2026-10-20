@@ -1,4 +1,5 @@
 import { createHash, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
+import { CODE_LENGTH } from "./sign-in-code";
 
 /**
  * Pure pieces of magic-link + code sign-in (D13, PRD 2.1, 5.4), kept free of
@@ -7,7 +8,6 @@ import { createHash, randomBytes, randomInt, timingSafeEqual } from "node:crypto
 
 export const TOKEN_MINUTES = 15;
 export const SESSION_DAYS = 90;
-export const CODE_LENGTH = 6;
 /** Wrong-code attempts before a token is dead and a new email is needed. */
 export const MAX_CODE_ATTEMPTS = 5;
 /** Sign-in emails allowed per address and per IP in the window (PRD 5.4). */
