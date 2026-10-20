@@ -17,7 +17,7 @@ function animationNames(css: string): string[] {
     for (const part of value.split(",")) {
       for (const raw of part.trim().split(/\s+/)) {
         const token = raw.replace(/!important$/, "");
-        if (!token || KEYWORDS.has(token) || /^[\d.]+m?s$/.test(token) || /^(var|cubic-bezier|linear|steps)\(/.test(token) || /^[\d.]+$/.test(token)) continue;
+        if (!token || KEYWORDS.has(token) || /^-?[\d.]+m?s$/.test(token) || /^(var|cubic-bezier|linear|steps)\(/.test(token) || /^[\d.]+$/.test(token)) continue;
         names.add(token);
       }
     }
