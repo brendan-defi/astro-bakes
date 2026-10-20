@@ -10,7 +10,7 @@ import { demoEnabled } from "@/lib/demo";
 import { fmtCountdown, fmtDate, fmtDateTime, yen } from "@/lib/format";
 import { getStrings, type Strings } from "@/lib/i18n";
 import { useCart, type CartLine } from "@/lib/cart";
-import { lookupPostal, normalisePostal, type PostalHit } from "@/lib/postal";
+import { lookupPostal, normalisePostal, outsideWards, type PostalHit } from "@/lib/postal";
 import { clearHold, readHold, startHold, type Hold } from "@/lib/hold";
 import { formatReservationRef, parseReservationRef, reservationStatus, reservedLines, totals, type Reservation } from "@/lib/reservation";
 import { ArrowLeftIcon, CardIcon, CheckIcon, ClockIcon, StarShape, TruckIcon, WarningIcon } from "./icons";
@@ -442,7 +442,7 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
                               : <div className={s.badPill}><WarningIcon size={15} />{t.outsideArea}</div>}
                           </>
                         ) : (
-                          <div className={s.addr} style={{ opacity: postalTried ? 1 : 0.5 }}>{postalTried ? <span className={s.badPill}><WarningIcon size={15} />{t.postalNotFound}</span> : "—"}</div>
+                          <div className={s.addr} style={{ opacity: postalTried ? 1 : 0.5 }}>{postalTried ? <span className={s.badPill}><WarningIcon size={15} />{outsideWards(addr.postal) ? t.outsideArea : t.postalNotFound}</span> : "—"}</div>
                         )}
                       </div>
                       <div className="field">

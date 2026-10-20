@@ -66,9 +66,22 @@ describe("validateDelivery", () => {
   });
 
   it("rejects unknown and out-of-area postal codes (D20)", () => {
-    expect(validateDelivery({ ...good, postal: "999-9999" }).errors).toEqual(["postal"]);
+    expect(validateDelivery({ ...good, postal: "153-0099" }).errors).toEqual(["postal"]);
     expect(validateDelivery({ ...good, postal: "180-0004" }).errors).toEqual(["area"]);
     expect(validateDelivery({ ...good, postal: "231-0001" }).errors).toEqual(["area"]);
+    expect(validateDelivery({ ...good, postal: "999-9999" }).errors).toEqual(["area"]);
+  });
+
+  it("rejects a skyscraper floor code that doesn't exist, and accepts one that does", () => {
+    expect(validateDelivery({ ...good, postal: "100-6899" }).errors).toEqual(["postal"]);
+    expect(validateDelivery({ ...good, postal: "100-6800" }).errors).toEqual(["postal"]);
+    expect(validateDelivery({ ...good, postal: "100-6810" })).toMatchObject({ ok: true, hit: { city: "千代田区", town: "大手町" } });
+    expect(validateDelivery({ ...good, postal: "100-6890" }).ok).toBe(true);
+  });
+
+  it("accepts any real address in the 23 wards, not just the old sample codes", () => {
+    expect(validateDelivery({ ...good, postal: "153-0062" })).toMatchObject({ ok: true, hit: { city: "目黒区", town: "三田" } });
+    expect(validateDelivery({ ...good, postal: "160-0023" })).toMatchObject({ ok: true, hit: { city: "新宿区", town: "西新宿" } });
   });
 
   it("does not crash on a missing payload", () => {

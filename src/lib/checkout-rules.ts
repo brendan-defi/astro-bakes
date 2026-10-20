@@ -1,4 +1,4 @@
-import { lookupPostal, normalisePostal } from "./postal";
+import { lookupPostal, normalisePostal, outsideWards } from "./postal";
 
 /**
  * The pure rules behind the checkout write path (PRD 3.3, 3.4, D7, D20).
@@ -55,7 +55,7 @@ export function validateDelivery(d: DeliveryInput) {
   if (!d?.name?.trim()) errors.push("name");
   if (!d?.phone?.trim()) errors.push("phone");
   if (!d?.line1?.trim()) errors.push("line1");
-  if (!hit) errors.push("postal");
+  if (!hit) errors.push(outsideWards(postal) ? "area" : "postal");
   else if (!hit.deliverable) errors.push("area");
   return { ok: errors.length === 0, errors, postal, hit };
 }

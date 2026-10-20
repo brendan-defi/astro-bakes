@@ -1,0 +1,121 @@
+#!/usr/bin/env node
+/**
+ * Regenerates src/lib/postal-tokyo23.ts from Japan Post's postal code data (KEN_ALL, UTF-8 edition).
+ * Japan Post updates it at the end of each month; rerun every few months, or when a customer's code isn't found.
+ *
+ *   pnpm postal:update                          download the latest data (needs `unzip`)
+ *   pnpm postal:update path/to/utf_ken_all.csv  use a CSV you already have
+ *
+ * The data is free to use and redistribute. Japan Post's download page rewrites its links in the
+ * browser, so the zip's real address is DATA_URL rather than the href on that page.
+ */
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+const DATA_URL = "https://www.post.japanpost.jp/service/search/zipcode/download/utf/zip/utf_ken_all.zip";
+const OUT = new URL("../src/lib/postal-tokyo23.ts", import.meta.url);
+
+/** JIS municipality codes 13101–13123, in order, with English names (KEN_ALL has kana only). */
+const WARDS = [
+  ["13101", "千代田区", "Chiyoda-ku"], ["13102", "中央区", "Chuo-ku"], ["13103", "港区", "Minato-ku"],
+  ["13104", "新宿区", "Shinjuku-ku"], ["13105", "文京区", "Bunkyo-ku"], ["13106", "台東区", "Taito-ku"],
+  ["13107", "墨田区", "Sumida-ku"], ["13108", "江東区", "Koto-ku"], ["13109", "品川区", "Shinagawa-ku"],
+  ["13110", "目黒区", "Meguro-ku"], ["13111", "大田区", "Ota-ku"], ["13112", "世田谷区", "Setagaya-ku"],
+  ["13113", "渋谷区", "Shibuya-ku"], ["13114", "中野区", "Nakano-ku"], ["13115", "杉並区", "Suginami-ku"],
+  ["13116", "豊島区", "Toshima-ku"], ["13117", "北区", "Kita-ku"], ["13118", "荒川区", "Arakawa-ku"],
+  ["13119", "板橋区", "Itabashi-ku"], ["13120", "練馬区", "Nerima-ku"], ["13121", "足立区", "Adachi-ku"],
+  ["13122", "葛飾区", "Katsushika-ku"], ["13123", "江戸川区", "Edogawa-ku"],
+];
+const wardIndex = new Map(WARDS.map(([code], i) => [code, i]));
+
+function readCsv(path) {
+  if (path) return readFileSync(path, "utf8");
+  const dir = mkdtempSync(join(tmpdir(), "ken-all-"));
+  execFileSync("curl", ["-sSfL", "-o", join(dir, "ken_all.zip"), DATA_URL]);
+  return execFileSync("unzip", ["-p", join(dir, "ken_all.zip")], { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+}
+
+// Columns: 0 JIS code, 2 postal code, 6 prefecture, 7 municipality, 8 town (README at Japan Post's download page).
+const rows = readCsv(process.argv[2])
+  .split(/\r?\n/)
+  .filter(Boolean)
+  .map((line) => {
+    const f = line.split(",").map((s) => s.replace(/^"|"$/g, ""));
+    if (f.length !== 15) throw new Error(`Unexpected row shape: ${line}`);
+    return { jis: f[0], code: f[2], city: f[7], town: f[8] };
+  });
+const inWards = rows.filter((r) => wardIndex.has(r.jis));
+for (const [code, name] of WARDS) {
+  const r = inWards.find((x) => x.jis === code);
+  if (!r || r.city !== name) throw new Error(`Ward ${code} should be ${name}, found ${r?.city}`);
+}
+
+const FLOOR = /（(?:[０-９0-9]+階|地階・階層不明)）$/;
+/** 芝（１〜３丁目）→ 芝: the customer types the chome with the street number. */
+const bare = (town) => town.replace(/（.*$/, "");
+
+const codes = {};
+const buildingNames = new Map();
+const floorSuffixes = new Map();
+for (const r of inWards) {
+  // A ward's catch-all code has no town, so the label would lack one; treat it as not found.
+  if (r.town === "以下に掲載がない場合") continue;
+  if (FLOOR.test(r.town)) {
+    const prefix = r.code.slice(0, 5);
+    buildingNames.set(prefix, [r.jis, bare(r.town)]);
+    floorSuffixes.set(prefix, [...(floorSuffixes.get(prefix) ?? []), Number(r.code.slice(5))]);
+  } else codes[r.code] = [wardIndex.get(r.jis), bare(r.town)];
+}
+
+/** [1, 2, 3, 90] → "01-03,90": the floor codes Japan Post assigned, so unassigned ones stay unknown. */
+function ranges(suffixes) {
+  const pad = (n) => String(n).padStart(2, "0");
+  const out = [];
+  for (const n of [...suffixes].sort((a, b) => a - b)) {
+    const last = out.at(-1);
+    if (last && n === last[1] + 1) last[1] = n;
+    else out.push([n, n]);
+  }
+  return out.map(([a, b]) => (a === b ? pad(a) : `${pad(a)}-${pad(b)}`)).join(",");
+}
+
+// Skyscrapers have a code per floor sharing five digits. Their town is the building name run onto
+// the neighbourhood (大手町ＪＡビル); keep the neighbourhood and let the customer give the building in line 2.
+const townsByWard = new Map();
+for (const [w, town] of Object.values(codes)) townsByWard.set(w, [...(townsByWard.get(w) ?? []), town]);
+const buildings = {};
+for (const [prefix, [jis, name]] of buildingNames) {
+  const w = wardIndex.get(jis);
+  const town = (townsByWard.get(w) ?? []).filter((t) => t && name.startsWith(t)).sort((a, b) => b.length - a.length)[0];
+  if (!town) throw new Error(`No neighbourhood found for building ${name} (${prefix}xx)`);
+  if (Object.keys(codes).some((c) => c.startsWith(prefix))) throw new Error(`Floor prefix ${prefix} is shared with ordinary codes`);
+  buildings[prefix] = [w, town, ranges(floorSuffixes.get(prefix))];
+}
+
+const prefixes = [...new Set(inWards.map((r) => r.code.slice(0, 3)))].sort();
+const entries = (o) => Object.entries(o).sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => `  "${k}": [${v.map((x) => JSON.stringify(x)).join(", ")}],`).join("\n");
+
+writeFileSync(
+  OUT,
+  `// Generated by scripts/postal-tokyo23.mjs from Japan Post's KEN_ALL on ${new Date().toISOString().slice(0, 10)}. Do not edit by hand.
+
+/** The 23 wards: JIS municipality code, name, English name. */
+export const WARDS: readonly (readonly [code: string, name: string, en: string])[] = ${JSON.stringify(WARDS)};
+
+/** First three digits of every postal code in the 23 wards. A code starting any other way is outside them. */
+export const WARD_PREFIXES: ReadonlySet<string> = new Set(${JSON.stringify(prefixes)});
+
+/** Postal code → [index into WARDS, neighbourhood]. */
+export const CODES: Readonly<Record<string, readonly [number, string]>> = {
+${entries(codes)}
+};
+
+/** Skyscrapers with a postal code per floor: first five digits → [index into WARDS, neighbourhood, assigned last two digits]. */
+export const BUILDINGS: Readonly<Record<string, readonly [number, string, string]>> = {
+${entries(buildings)}
+};
+`,
+);
+console.log(`${Object.keys(codes).length} codes, ${Object.keys(buildings).length} buildings, ${prefixes.length} prefixes → ${OUT.pathname}`);
