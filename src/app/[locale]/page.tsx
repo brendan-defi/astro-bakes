@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getHome } from "@/lib/data";
 import { demoEnabled } from "@/lib/demo";
@@ -18,6 +19,12 @@ import { CartBar } from "@/components/CartBar";
 import { CartProvider } from "@/lib/cart";
 
 type Query = Record<string, string | string[] | undefined>;
+
+/** The two homepages are translations of each other; / picks one from the browser (proxy.ts). Title and preview come from the layout. */
+export async function generateMetadata({ params }: { params: Promise<{ locale: string }> }): Promise<Metadata> {
+  const { locale } = await params;
+  return { alternates: { canonical: `/${locale}`, languages: { en: "/en", ja: "/ja", "x-default": "/" } } };
+}
 
 export default async function HomePage({ params, searchParams }: { params: Promise<{ locale: string }>; searchParams: Promise<Query> }) {
   const { locale } = await params;

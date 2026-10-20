@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import { isLocale } from "@/lib/i18n";
@@ -9,8 +10,14 @@ import { currentCustomer } from "@/lib/auth";
 import { Checkout, type CheckoutCustomer, type CheckoutDrop } from "@/components/Checkout";
 import { CartProvider } from "@/lib/cart";
 import { cartIdFromCookie } from "@/lib/cart-cookie";
+import { privatePage, stringsFor } from "@/lib/metadata";
 
 type Query = Record<string, string | string[] | undefined>;
+
+export async function generateMetadata({ params }: { params: Promise<{ locale: string }> }): Promise<Metadata> {
+  const { locale } = await params;
+  return privatePage(stringsFor(locale).checkoutTitle);
+}
 
 export default async function CheckoutPage({ params, searchParams }: { params: Promise<{ locale: string }>; searchParams: Promise<Query> }) {
   const { locale } = await params;

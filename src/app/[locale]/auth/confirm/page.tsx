@@ -1,13 +1,20 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { currentCustomer, peekLink } from "@/lib/auth";
 import { getStrings, isLocale } from "@/lib/i18n";
+import { privatePage, stringsFor } from "@/lib/metadata";
 import { confirmLinkAction } from "../actions";
 import { Logo } from "@/components/Logo";
 import { ArrowLeftIcon } from "@/components/icons";
 import s from "@/components/checkout.module.css";
 
 type Query = Record<string, string | string[] | undefined>;
+
+export async function generateMetadata({ params }: { params: Promise<{ locale: string }> }): Promise<Metadata> {
+  const { locale } = await params;
+  return privatePage(stringsFor(locale).signIn);
+}
 
 /** Shown when a sign-in link is opened in a browser that didn't request it: confirm before any session changes. */
 export default async function ConfirmPage({ params, searchParams }: { params: Promise<{ locale: string }>; searchParams: Promise<Query> }) {
