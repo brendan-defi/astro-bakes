@@ -50,6 +50,13 @@ export function sanitize(qty: Quantities, boxes: Box[]): Quantities {
   return out;
 }
 
+/** Add quantities to a saved cart ("Order again", PRD 2.5), clamped to what can still be bought; nothing already there is lost. */
+export function mergeQuantities(existing: Quantities, add: Quantities, boxes: Box[]): Quantities {
+  const merged: Quantities = { ...sanitize(existing, boxes) };
+  for (const [id, n] of Object.entries(add)) merged[id] = (merged[id] ?? 0) + n;
+  return sanitize(merged, boxes);
+}
+
 /** ?demo=cart / ?demo=soldout sample carts; development and previews only (see demo.ts). */
 const DEMO_CARTS: Record<string, Quantities> = {
   cart: { "cookie-box": 1, "banana-bread": 1 },

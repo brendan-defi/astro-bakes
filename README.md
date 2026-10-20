@@ -41,7 +41,7 @@ pnpm db:seed       # load the sample catalogue, Drop 03 / 04, settings, sample c
 pnpm db:studio     # browse the data
 ```
 
-The homepage reads drops, boxes and settings from the database (`src/lib/drops.ts`). Tables: customers, addresses, subscribers, auth_tokens, sessions, notification_log, drops, boxes, items, box_items, drop_boxes, settings, carts, inventory_holds, orders, order_items.
+The homepage reads drops, boxes and settings from the database (`src/lib/drops.ts`). Tables: customers, addresses, subscribers, auth_tokens, sessions, notification_log, refunds, drops, boxes, items, box_items, drop_boxes, settings, carts, inventory_holds, orders, order_items.
 
 ## Sign-in
 
@@ -52,6 +52,10 @@ Magic link + 6-digit code (D13, PRD 2.1), in `src/lib/auth.ts` with the pure rul
 - **Rate limits** are checked and consumed under per-email and per-IP advisory locks, so a burst of concurrent requests gets exactly the allowance.
 - **Checkout** places orders for the signed-in customer only; the confirmed delivery details become their saved profile and address (PRD 2.3). The magic link lands back on the checkout at the delivery step with the cart intact: its return path names this browser's reservation (`?r=<checkoutId>:<revision>`), which a fresh tab adopts only if it still matches the server exactly. The pending email and resend timer live per tab so a refresh of the code screen keeps working.
 - **Email** goes through Resend (D23, Vercel Marketplace resource `resend-email-coquelicot-diamond`, Tokyo region) via `src/lib/email.ts`; every send is recorded in `notification_log`. The sending domain needs Resend's DKIM and SPF records at GoDaddy before `hello@astrobakes.xyz` can send; until then set `EMAIL_FROM="Astro Bakes <onboarding@resend.dev>"` for testing to your own address.
+
+## Account
+
+`/account` (PRD 2.3–2.6, `src/lib/account.ts`): order history with the customer-facing status (Confirmed → Baking → Shipped → Delivered, Baking derived from the drop state), each order's page with items, address, dates, gift message, payment method and tracking, **cancel while the drop is open** (D22: order cancelled, stock returned, a `refunds` row recorded as owed until Stripe issues it, cancellation email), **order again** when the open drop carries the same boxes, the notification toggle (PRD 2.4), and name/phone/address/language editing with the same postal rules as the checkout. The order confirmation email (PRD 3.6) is sent after an order is placed. Email change and account deletion (PRD 2.6) are not built yet.
 
 ## Checkout write path
 

@@ -1,7 +1,7 @@
 import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { ReactNode } from "react";
-import { CartProvider, maxFor, sanitize, storageKey, useCart } from "./cart";
+import { CartProvider, maxFor, mergeQuantities, sanitize, storageKey, useCart } from "./cart";
 import type { Box } from "./data";
 
 const box = (over: Partial<Box> & { id: string }): Box => ({
@@ -36,6 +36,15 @@ describe("maxFor / sanitize", () => {
 
   it("drops unknown ids and junk, clamps the rest", () => {
     expect(sanitize({ "cookie-box": 9, "banana-bread": 2, "sampler-box": 1, ghost: 4, bad: Number.NaN }, boxes)).toEqual({ "cookie-box": 5, "banana-bread": 2 });
+  });
+});
+
+describe("mergeQuantities", () => {
+  it("adds to what is already there and clamps the result (PRD 2.5 'Order again')", () => {
+    expect(mergeQuantities({ "banana-bread": 1 }, { "cookie-box": 2 }, boxes)).toEqual({ "banana-bread": 1, "cookie-box": 2 });
+    expect(mergeQuantities({ "cookie-box": 4 }, { "cookie-box": 4 }, boxes)).toEqual({ "cookie-box": 5 }); // per-customer limit
+    expect(mergeQuantities({ "banana-bread": 2 }, { "banana-bread": 2 }, boxes)).toEqual({ "banana-bread": 3 }); // stock
+    expect(mergeQuantities({ ghost: 3 }, { "sampler-box": 1 }, boxes)).toEqual({}); // unknown and sold out drop out
   });
 });
 

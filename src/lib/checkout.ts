@@ -6,6 +6,7 @@ import { effectiveState, settings as defaultSettings, type Locale } from "./data
 import { demoEnabled } from "./demo";
 import { orderNumber, reconcile, validateDelivery, type DeliveryInput, type ReCheckChange } from "./checkout-rules";
 import { isUuid } from "./uuid";
+import { sendOrderConfirmation } from "./account";
 
 export { reconcile, orderNumber, validateDelivery } from "./checkout-rules";
 export type { ReCheckChange, Available, DeliveryInput } from "./checkout-rules";
@@ -222,6 +223,13 @@ export type PlaceResult =
 
 /** `customerId` is the signed-in customer (D12); an order is never placed for an unverified email. */
 export async function placeOrder(input: PlaceInput, cartId: string | null, customerId: string | null): Promise<PlaceResult> {
+  const result = await placeOrderTx(input, cartId, customerId);
+  // The confirmation email goes after the transaction commits (PRD 3.6); the Stripe webhook will take this over.
+  if (result.ok && result.orderId) await sendOrderConfirmation(result.orderId).catch((e) => console.error("order confirmation failed", e));
+  return result;
+}
+
+async function placeOrderTx(input: PlaceInput, cartId: string | null, customerId: string | null): Promise<PlaceResult & { orderId?: string }> {
   const delivery = validateDelivery(input.delivery);
   const hit = delivery.hit;
   if (!isUuid(customerId)) return { ok: false, error: "signed_out" };
@@ -332,6 +340,7 @@ export async function placeOrder(input: PlaceInput, cartId: string | null, custo
     const name = (l: (typeof lines)[number]) => (input.locale === "ja" && l.nameJa) || l.nameEn;
     return {
       ok: true as const,
+      orderId: order.id,
       order: { number, lines: lines.map((l) => ({ name: name(l), qty: l.qty, lineTotal: l.qty * l.unitPrice })), subtotal, shippingFee, total, email },
     };
   });

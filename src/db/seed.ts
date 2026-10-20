@@ -18,7 +18,7 @@ const SETTINGS: { key: string; value: unknown }[] = [
   { key: "shipping_area", value: "Tokyo 23 wards" },
   { key: "instagram_url", value: "https://instagram.com" },
   { key: "line_url", value: "#notify" },
-  { key: "contact_email", value: "hello@astrobakes.example" },
+  { key: "contact_email", value: "hello@astrobakes.xyz" },
   { key: "hold_minutes", value: 10 },
 ];
 
