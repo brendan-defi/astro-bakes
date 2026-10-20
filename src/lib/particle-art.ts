@@ -5,7 +5,7 @@ import { COOKIE, PAW_PAD, PAW_TOES, STAR_PATH } from "@/components/icons";
  * The SVG strings are our own constants (never user input), parsed once per kind and cloned per particle.
  */
 
-export type ParticleKind = "egg" | "milk" | "wheat" | "walnut" | "cookie" | "crumb" | "sprinkle" | "heart" | "paw" | "star";
+export type ParticleKind = "egg" | "milk" | "wheat" | "cookie" | "crumb" | "sprinkle" | "heart" | "paw" | "star";
 
 const INK = "var(--ink)";
 /** Colours a tintable particle (sprinkles, stars) picks from at random. */
@@ -27,11 +27,6 @@ const ART: Record<ParticleKind, { svg: string; size: number; tints?: readonly st
   wheat: {
     size: 32,
     svg: `<svg viewBox="0 0 32 32"><path d="M16 30V9" stroke="${INK}" stroke-width="2.2" stroke-linecap="round"/><g fill="#f2c14e" stroke="${INK}" stroke-width="1.8"><ellipse cx="16" cy="6.5" rx="2.6" ry="4"/>${grains}</g></svg>`,
-  },
-  walnut: {
-    // A kernel half: two wrinkled lobes (a whole shell read as a coffee bean).
-    size: 30,
-    svg: `<svg viewBox="0 0 32 32"><path d="M16 6.5c-1.4-2.2-4.6-2.6-6.5-1-1.6-.4-3.6.6-4 2.6-1.8.9-2.4 3.2-1.4 4.9-1.2 1.6-.8 4 .9 5-.3 2 1 3.9 3 4.1.6 1.9 2.7 2.9 4.5 2.2 1 1.6 2.6 2.3 3.5 1.2.9 1.1 2.5.4 3.5-1.2 1.8.7 3.9-.3 4.5-2.2 2-.2 3.3-2.1 3-4.1 1.7-1 2.1-3.4.9-5 1-1.7.4-4-1.4-4.9-.4-2-2.4-3-4-2.6-1.9-1.6-5.1-1.2-6.5 1z" fill="#e2b276" stroke="${INK}" stroke-width="2.2" stroke-linejoin="round"/><g fill="none" stroke="${INK}" stroke-width="1.6" stroke-linecap="round"><path d="M16 7v18"/><path d="M11.5 9.5c-1.5 1.2-1 3 .6 3.6M8.5 14.5c1.7.6 1.5 2.6 3.4 3M11 20.5c1-1 2.6-.6 3 .8M20.5 9.5c1.5 1.2 1 3-.6 3.6M23.5 14.5c-1.7.6-1.5 2.6-3.4 3M21 20.5c-1-1-2.6-.6-3 .8" opacity=".7"/></g></svg>`,
   },
   cookie: {
     size: 26,
@@ -86,11 +81,6 @@ const ALLERGEN_KINDS: Record<string, ParticleKind> = {
   milk: "milk",
   wheat: "wheat",
   buckwheat: "wheat",
-  walnut: "walnut",
-  peanut: "walnut",
-  almond: "walnut",
-  cashew: "walnut",
-  macadamia: "walnut",
 };
 export function allergenKind(allergen: string): ParticleKind {
   return ALLERGEN_KINDS[allergen.trim().toLowerCase()] ?? "sprinkle";

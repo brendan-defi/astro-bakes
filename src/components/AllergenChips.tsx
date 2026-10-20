@@ -5,7 +5,7 @@ import { allergenKind } from "@/lib/particle-art";
 import { burst } from "@/lib/particles";
 
 /**
- * The "Contains" pills on a box card. Tapping one throws its ingredient out (eggs, milk, wheat, walnuts).
+ * The "Contains" pills on a box card. Tapping one throws its ingredient out (eggs, milk bottles, wheat; sprinkles otherwise).
  * The effect is purely decorative, so the pills stay plain text: no tab stop, nothing extra announced.
  * Labels arrive translated, because a server-rendered card can't hand a function to a client component.
  */

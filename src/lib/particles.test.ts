@@ -77,10 +77,9 @@ describe("particleNode", () => {
 });
 
 describe("allergenKind", () => {
-  it("throws each allergen's ingredient, nuts and grains included, and sprinkles for the rest", () => {
-    expect(["Egg", " MILK ", "Wheat", "Walnut"].map(allergenKind)).toEqual(["egg", "milk", "wheat", "walnut"]);
-    expect(["peanut", "almond", "buckwheat"].map(allergenKind)).toEqual(["walnut", "walnut", "wheat"]);
-    expect(allergenKind("sesame")).toBe("sprinkle");
+  it("throws each allergen's ingredient (buckwheat as wheat), and sprinkles for the rest", () => {
+    expect(["Egg", " MILK ", "Wheat", "buckwheat"].map(allergenKind)).toEqual(["egg", "milk", "wheat", "wheat"]);
+    expect(["Walnut", "peanut", "sesame"].map(allergenKind)).toEqual(["sprinkle", "sprinkle", "sprinkle"]);
   });
 });
 
