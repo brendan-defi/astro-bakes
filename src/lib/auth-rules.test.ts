@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { codeMatches, flowMatches, generateCode, generateToken, hashCode, hashFlow, hashSession, hashToken, isSameOriginRequest, maskEmail, normaliseEmail, safeNext } from "./auth-rules";
+import { codeMatches, flowMatches, generateCode, generateToken, hashCode, hashFlow, hashSession, hashToken, isSameOriginRequest, maskEmail, normaliseEmail, safeNext, signInDestination } from "./auth-rules";
 
 describe("auth rules", () => {
   it("generates six-digit codes with leading zeros and distinct URL-safe tokens", () => {
@@ -56,6 +56,35 @@ describe("auth rules", () => {
     }
     // the chosen path must stay on the dummy origin once resolved
     expect(new URL(safeNext("/\t/attacker.test/path", "/en"), "https://astrobakes.xyz").origin).toBe("https://astrobakes.xyz");
+  });
+
+  it("rejects paths whose dot-segment normalisation would become protocol-relative", () => {
+    for (const bad of [
+      "/safe/..//attacker.test/path", // the reported case: normalises to //attacker.test/path
+      "/a/../..//evil.example",
+      "/./..//evil.example",
+      "/en/..//evil.example/x",
+      "/%2e%2e//evil.example", // percent-encoded dots normalise the same way
+      "/a/b/../../..//evil.example",
+    ]) {
+      const out = safeNext(bad, "/en");
+      expect(out).toBe("/en");
+      expect(new URL(out, "https://astrobakes.xyz").origin).toBe("https://astrobakes.xyz");
+    }
+    // ordinary dot segments are fine and come back normalised
+    expect(safeNext("/en/a/../checkout?step=delivery", "/en")).toBe("/en/checkout?step=delivery");
+    expect(safeNext("/en//double", "/en")).toBe("/en//double"); // a double slash inside the path is still same-site
+  });
+
+  it("the authenticated sign-in redirect never leaves the site", () => {
+    const attacks = ["/safe/..//attacker.test/path", "//attacker.test", "https://attacker.test", "/\t/attacker.test/path", "/%2e%2e//attacker.test"];
+    for (const a of attacks) {
+      const dest = signInDestination(a, "en");
+      expect(dest).toBe("/en/account");
+      expect(new URL(dest, "https://astrobakes.xyz").origin).toBe("https://astrobakes.xyz");
+    }
+    expect(signInDestination("/en/checkout?step=delivery&r=x", "en")).toBe("/en/checkout?step=delivery&r=x");
+    expect(signInDestination(null, "ja")).toBe("/ja/account");
   });
 
   it("recognises same-origin requests for the confirmation POST", () => {

@@ -57,21 +57,32 @@ export function flowMatches(secret: string | null | undefined, storedHash: strin
   return !!secret && equalHashes(hashFlow(secret), storedHash);
 }
 
+const DUMMY = "https://same.invalid";
+/** A path we would hand to a redirect: starts with one slash, no scheme/host, no backslash, no control characters. */
+const unsafePath = (s: string) => !s.startsWith("/") || s.startsWith("//") || /[\\\u0000-\u001F\u007F]/.test(s);
+
 /**
- * Only a same-site path may be used as a return target. Anything with a scheme,
- * a host, a protocol-relative prefix, a backslash or any control character is
- * replaced by the fallback; the result is also resolved against a dummy origin
- * and must stay there.
+ * Only a same-site path may be used as a return target. The input is checked,
+ * then normalised (dot segments, percent-encoding) by the URL parser, and the
+ * normalised string we actually return is checked again: "/safe/..//host"
+ * normalises to "//host", which a browser would treat as protocol-relative.
  */
 export function safeNext(next: string | null | undefined, fallback: string): string {
-  if (!next || !next.startsWith("/") || next.startsWith("//") || /[\\\u0000-\u001F\u007F]/.test(next)) return fallback;
+  if (!next || unsafePath(next)) return fallback;
   try {
-    const u = new URL(next, "https://same.invalid");
-    if (u.origin !== "https://same.invalid" || !u.pathname.startsWith("/")) return fallback;
-    return u.pathname + u.search + u.hash;
+    const u = new URL(next, DUMMY);
+    if (u.origin !== DUMMY) return fallback;
+    const out = u.pathname + u.search + u.hash;
+    if (unsafePath(out) || new URL(out, DUMMY).origin !== DUMMY) return fallback;
+    return out;
   } catch {
     return fallback;
   }
+}
+
+/** Where the sign-in page sends an already-signed-in visitor (or lands them after the code): the requested path, or their account. */
+export function signInDestination(nextParam: string | null | undefined, locale: string): string {
+  return safeNext(nextParam, `/${locale}/account`);
 }
 
 /** "jane.doe@example.com" → "j***@example.com", for the confirmation page. */
