@@ -43,6 +43,7 @@ const SAMPLES: Samples = {
   confirmSignInBody: ["y**@example.com"],
   confirmReplaces: ["me@example.com"],
   limitReached: [3, "4 Cookie Box", 5],
+  placedOn: ["Mon, Oct 12"],
   dropN: [4],
   tickerOpens: [4, "SUN NOV 8, 10:00 JST"],
   tickerClosed: [3],
@@ -62,12 +63,13 @@ const SAMPLES: Samples = {
   orderFrom: ["Sun, Nov 8 · 10:00 JST"],
 };
 
-/** A string, or a template rendered with its sample arguments. */
-function render(s: Strings, k: keyof Strings): string {
+/** The text behind a key as [id, text] pairs: the string, the template rendered with its samples, or each entry of a lookup table. */
+function texts(s: Strings, k: keyof Strings): [string, string][] {
   const v: unknown = s[k];
-  if (typeof v === "string") return v;
+  if (typeof v === "string") return [[k, v]];
   // SAMPLES is checked against each template's parameters above; only this lookup is dynamic.
-  return (v as (...a: unknown[]) => string)(...(SAMPLES as Record<string, unknown[]>)[k]);
+  if (typeof v === "function") return [[k, (v as (...a: unknown[]) => string)(...(SAMPLES as Record<string, unknown[]>)[k])]];
+  return Object.entries(v as Record<string, string>).map(([sub, text]) => [`${k}.${sub}`, text]);
 }
 
 /** Identical in both languages on purpose: Japanese-only on the EN page too (tagline, 税込, legal page titles, the address example) or a brand name. */
@@ -79,12 +81,17 @@ const JAPANESE = /[぀-ヿ一-鿿]/;
 
 describe("Japanese strings", () => {
   it("translates every string that isn't shared on purpose", () => {
-    const untranslated = keys.filter((k) => !SAME.has(k) && !HELPERS.has(k) && (render(ja, k) === render(en, k) || !JAPANESE.test(render(ja, k))));
+    const untranslated = keys
+      .filter((k) => !SAME.has(k) && !HELPERS.has(k))
+      .flatMap((k) => {
+        const english = new Map(texts(en, k));
+        return texts(ja, k).filter(([id, text]) => text === english.get(id) || !JAPANESE.test(text)).map(([id]) => id);
+      });
     expect(untranslated).toEqual([]);
   });
 
   it("keeps the shared strings shared", () => {
-    for (const k of SAME) expect(render(ja, k)).toBe(render(en, k));
+    for (const k of SAME) expect(texts(ja, k)).toEqual(texts(en, k));
   });
 });
 
