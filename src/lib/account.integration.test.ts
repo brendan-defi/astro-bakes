@@ -72,7 +72,7 @@ describe.skipIf(!URL)("account", () => {
     expect(m!.to).toBe("confirm@test.invalid");
     expect(m!.subject).toContain(number);
     expect(m!.text).toContain("4 Cookie Box × 2");
-    expect(m!.text).toContain("Total ¥3,300");
+    expect(m!.text).toContain("Total ¥2,500");
     expect(m!.text).toContain("Gift card: Enjoy!");
     expect(m!.text).toContain("until the drop closes");
     expect(m!.text).toContain(`/en/account/orders/${number}`);
@@ -88,7 +88,7 @@ describe.skipIf(!URL)("account", () => {
     await order(b);
     const mine = await loadOrders(a, "en");
     expect(mine.map((o) => o.number)).toEqual([second, first]);
-    expect(mine[1]).toMatchObject({ status: "confirmed", total: 3300, dropName: "Drop 03 · October", canCancel: false }); // the seeded drop is closed by the clock
+    expect(mine[1]).toMatchObject({ status: "confirmed", total: 2500, dropName: "Drop 03 · October", canCancel: false }); // the seeded drop is closed by the clock
     expect(mine[1].lines).toEqual([
       { name: "4 Cookie Box", slug: "cookie-box", qty: 2, unitPrice: 1000, lineTotal: 2000 },
       { name: "Nebula Banana Bread", slug: "banana-bread", qty: 1, unitPrice: 500, lineTotal: 500 },
@@ -108,10 +108,10 @@ describe.skipIf(!URL)("account", () => {
     expect(await sold("cookie-box")).toBe(13);
     expect(await sold("banana-bread")).toBe(7);
     const detail = (await loadOrder(c, number, "en"))!;
-    expect(detail).toMatchObject({ status: "cancelled", canCancel: false, refund: { amount: 3300, issued: false } });
+    expect(detail).toMatchObject({ status: "cancelled", canCancel: false, refund: { amount: 2500, issued: false } });
     const m = sent.find((e) => e.type === "order_cancelled");
     expect(m!.to).toBe("cancel@test.invalid");
-    expect(m!.text).toContain("¥3,300 is being refunded");
+    expect(m!.text).toContain("¥2,500 is being refunded");
     // Second attempt: nothing to cancel any more, nothing double-refunded.
     expect(await cancelOrder(c, number)).toEqual({ ok: false, error: "not_cancellable" });
     expect(await db.select().from(schema.refunds)).toHaveLength(1);

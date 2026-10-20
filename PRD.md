@@ -15,7 +15,7 @@
 
 ## What we're building
 
-Astro Bakes sells small-batch, American-style bakes on a **drop model**: a drop opens for preorders, closes on a set date (or when every box sells out), everything is baked in one kitchen session, and every order ships by Yamato on one ship date to addresses in Tokyo's 23 wards. The site is custom-built, bilingual (JA/EN), and has three jobs: make the drop model obvious and desirable to a first-time visitor, get a customer from "drop is open" to "order confirmed" on their phone in under two minutes, and give the owner a desktop admin to run a full drop cycle without touching code.
+Astro Bakes sells small-batch, American-style bakes on a **drop model**: a drop opens for preorders, closes on a set date (or when every box sells out), everything is baked in one kitchen session, and every order ships by Japan Post on one ship date to addresses in Tokyo's 23 wards. The site is custom-built, bilingual (JA/EN), and has three jobs: make the drop model obvious and desirable to a first-time visitor, get a customer from "drop is open" to "order confirmed" on their phone in under two minutes, and give the owner a desktop admin to run a full drop cycle without touching code.
 
 ---
 
@@ -60,9 +60,9 @@ Settled constraints that the components below are written against. Referenced as
 |---|---|
 | D17 | Stripe, with cards and PayPay enabled. Stripe supports PayPay natively for Japan-based accounts, so this is one integration. |
 | D18 | Prices and the shipping fee are stored and displayed tax-inclusive (総額表示). |
-| D19 | Flat shipping fee per order, set in admin, shown before checkout. |
+| D19 | Shipping is included in the box price; there is no separate fee. The settings key remains so a fee could return, and a non-zero fee shows as its own line. Changed from a flat per-order fee on 2026-10-20 — see changelog. |
 | D20 | Delivery area is Tokyo's 23 wards, validated at address entry. |
-| D21 | Yamato. One ship date per drop; nothing for the customer to choose. The site shows the expected arrival date (ship date + 1, next-day within Tokyo). |
+| D21 | Japan Post. One ship date per drop, shown with the expected arrival date (ship date + 1, next-day within Tokyo); the customer chooses a delivery time slot at checkout but not the date. Changed from Yamato with nothing to choose on 2026-10-20 — see changelog. |
 | D22 | Cancellation: free self-serve cancellation and full refund until the drop closes; none after. Refunds after close only for our failures (damage, non-delivery), handled manually by admin. *Placeholder policy — build for it, revisit if it bites.* |
 
 **Notifications & admin**
@@ -104,7 +104,7 @@ Remaining counts and sold-out badges on boxes follow D6.
 
 **What it does.** Three-step explainer so nobody is surprised that they can't order today or that it arrives in two weeks.
 
-**What the user sees.** 1) Preorder during the drop window → 2) We bake everything in one session → 3) Yamato delivers to your door the next day. Below: "Tokyo 23 wards only · ¥[fee] shipping · cancel free until the drop closes."
+**What the user sees.** 1) Preorder during the drop window → 2) We bake everything in one session → 3) Japan Post delivers to your door the next day. Below: "Tokyo 23 wards only · shipping included · cancel free until the drop closes."
 
 **Data.** Shipping fee and shipping area from settings (4.9). Otherwise static, bilingual.
 
@@ -146,7 +146,7 @@ Remaining counts and sold-out badges on boxes follow D6.
 
 ### [~] 1.7 FAQ
 
-Static bilingual page, owner-written. Questions to cover: when are drops · where do you deliver (23 wards; no, not Yokohama) · shipping fee · how it's packed and delivered · how long things keep and freezing · allergens and the kitchen's shared-equipment note · can I cancel (D22) · is there a limit per person (yes, 5 of each box per drop) · can I choose a delivery date or time (no — every box ships on the drop's ship date and arrives the next day) · can I send it as a gift (yes, gift message + any 23-ward address) · can I pick up (no) · what's "American-style".
+Static bilingual page, owner-written. Questions to cover: when are drops · where do you deliver (23 wards; no, not Yokohama) · shipping (included in the price) · how it's packed and delivered · how long things keep and freezing · allergens and the kitchen's shared-equipment note · can I cancel (D22) · is there a limit per person (yes, 5 of each box per drop) · can I choose a delivery date or time (the date no — every box ships on the drop's ship date and arrives the next day; a time slot yes, chosen at checkout) · can I send it as a gift (yes, gift message + any 23-ward address) · can I pick up (no) · what's "American-style".
 
 Content lives in code/markdown in v1; an admin editor for FAQ isn't worth building.
 
@@ -189,9 +189,9 @@ Three static pages, both languages. Content is the owner's responsibility; the s
 ### [~] 2.3 Profile
 
 **Fields.**
-- **Name** — one free-text field, kanji or romaji (D15). Required. Printed on the Yamato label.
+- **Name** — one free-text field, kanji or romaji (D15). Required. Printed on the Japan Post label.
 - **Email** — login identity.
-- **Phone** — required; Yamato needs it on the label. JP format validation, stored normalised.
+- **Phone** — required; Japan Post needs it on the label. JP format validation, stored normalised.
 - **Address** — 郵便番号 (7 digits) → auto-fills 都道府県 / 市区町村 / 町域 via postal-code lookup; then 番地 and 建物名・部屋番号 free text. Validated to one of the 23 wards (D20) at entry, with a friendly "we only deliver within Tokyo's 23 wards right now" if not. One saved address in v1; checkout prefills it and lets you edit, and the edited address becomes the saved one.
 - **Locale** — JA/EN, set from the URL on first sign-in, editable.
 
@@ -207,7 +207,7 @@ Three static pages, both languages. Content is the owner's responsibility; the s
 
 ### [~] 2.5 Order history
 
-**What the user sees.** List: drop name, order date, boxes, total, status in plain words (Confirmed → Baking → Shipped → Delivered — mapped from §5.2b). Order page: items, delivery address, ship date and expected arrival, gift message, payment method, Stripe receipt link, Yamato tracking number once shipped, and a **Cancel order** button while the drop is still open (D22). "Order again" adds the same boxes to the cart if the current drop is open and includes them.
+**What the user sees.** List: drop name, order date, boxes, total, status in plain words (Confirmed → Baking → Shipped → Delivered — mapped from §5.2b). Order page: items, delivery address, ship date and expected arrival, gift message, payment method, Stripe receipt link, Japan Post tracking number once shipped, and a **Cancel order** button while the drop is still open (D22). "Order again" adds the same boxes to the cart if the current drop is open and includes them.
 
 **Data.** Order, OrderItem (with price and name snapshots — box prices can change between drops).
 
@@ -249,7 +249,7 @@ Edit name / phone / address / locale. Change email (magic link sent to the *new*
 
 **What it does.** Holds the selection until checkout. Client-side until sign-in, then attached to the account.
 
-**What the user sees.** Sticky bar on the homepage: "2 boxes · ¥4,600 · Checkout →". Tapping expands: line items with steppers, subtotal, shipping fee (D19, shown here before anyone has typed anything), total 税込. On "Checkout": inventory re-check — if a box no longer has enough remaining, the quantity is reduced with a visible message before continuing. Once signed in, the same check applies the per-customer limit (D7).
+**What the user sees.** Sticky bar on the homepage: "2 boxes · ¥4,600 · Checkout →". Tapping expands: line items with steppers, subtotal, "shipping included" (D19), total 税込. On "Checkout": inventory re-check — if a box no longer has enough remaining, the quantity is reduced with a visible message before continuing. Once signed in, the same check applies the per-customer limit (D7).
 
 **Rules.** A cart belongs to one drop. When the drop closes, the cart is cleared and the bar says so.
 
@@ -261,7 +261,7 @@ Edit name / phone / address / locale. Change email (magic link sent to the *new*
 
 **Steps.**
 1. **Sign in** (2.1) — skipped if already signed in.
-2. **Delivery** — recipient name (prefilled with account name), phone, address (prefilled; 23-ward validation), gift message (3.2). Ship date and expected arrival are shown, not chosen (D21).
+2. **Delivery** — recipient name (prefilled with account name), phone, address (prefilled; 23-ward validation), gift message (3.2). Ship date and expected arrival are shown, not chosen; the delivery time slot is chosen here (D21; the field is not built yet).
 3. **Pay** (3.5).
 
 **Final confirmation screen.** Before payment, show everything the 2022 特商法 amendment requires on the 最終確認画面: items and quantities, unit and total prices 税込, shipping fee, payment method, delivery timing (ship date and expected arrival date), and the cancellation terms (D22) — with a "Place order" button whose label makes the commitment clear.
@@ -297,7 +297,7 @@ Edit name / phone / address / locale. Change email (magic link sent to the *new*
 | When | Message | Channel (v1) |
 |---|---|---|
 | Drop closes | *Optional*, admin-triggered: "The drop's closed — we bake on [date], your box ships [date]." | Email |
-| Admin marks order shipped / imports tracking (4.6) | "Your box is on its way" with the Yamato tracking number and link | Email |
+| Admin marks order shipped / imports tracking (4.6) | "Your box is on its way" with the Japan Post tracking number and link | Email |
 | Delivered | Nothing in v1 (would need tracking polling) | — |
 
 LINE for transactional messages is v1.1 (D24).
@@ -313,7 +313,7 @@ LINE for transactional messages is v1.1 (D24).
 - **Customer cancels before close** (D22). Self-serve from the order page → full Stripe refund → inventory returned → cancellation email.
 - **Customer wants to cancel after close.** No self-serve; the order page shows the policy and a contact link. Admin can still cancel and refund manually (4.4).
 - **Two orders from one customer in a drop.** Allowed, up to 5 of each box across all their orders in the drop (D7); the stepper and the checkout re-check both enforce it.
-- **Undeliverable / returned parcel.** Manual, between the owner and Yamato. Admin can note it on the order.
+- **Undeliverable / returned parcel.** Manual, between the owner and Japan Post. Admin can note it on the order.
 
 ---
 
@@ -383,7 +383,7 @@ Plus: boxes to assemble by type, count of gift messages, and a Print button.
 
 **Pack list.** One row per paid order, sorted by order #: order #, recipient, boxes by type and qty, gift message (text, highlighted). A checkbox per order persists `packed_at`. Printable.
 
-**Yamato export.** Export a CSV in the B2クラウド import layout: recipient name, postal code, address, phone, お届け希望日 (the drop's expected arrival date, or blank for fastest), 品名 ("焼き菓子"), sender details from settings, and the order # in the お客様管理番号 field. The owner imports it into B2, prints labels, then exports B2's result CSV (which includes the 伝票番号) and **imports it back** — we match on order #, set tracking numbers, mark shipped, and send the shipped emails (3.7) in one go. Manual fallback: paste a tracking number on any order.
+**Japan Post export.** Export a CSV in the layout Japan Post's label tool accepts (exact columns to confirm with the owner; this section was written for Yamato's B2クラウド before 2026-10-20 and the round trip below is the model): recipient name, postal code, address, phone, お届け希望日 (the drop's expected arrival date, or blank for fastest), 品名 ("焼き菓子"), sender details from settings, and the order # in the お客様管理番号 field. The owner imports it into B2, prints labels, then exports B2's result CSV (which includes the 伝票番号) and **imports it back** — we match on order #, set tracking numbers, mark shipped, and send the shipped emails (3.7) in one go. Manual fallback: paste a tracking number on any order.
 
 **Data.** Order.packed_at, shipped_at, tracking_number.
 
@@ -402,7 +402,7 @@ Plus: boxes to assemble by type, count of gift messages, and a Print button.
 ### [~] 4.9 Settings
 
 - **Store** — name, contact email, Instagram URL, LINE OA link and QR.
-- **Shipping** — flat fee 税込 (D19), allowed wards (default all 23), expected-arrival offset (default ship date + 1), Yamato sender name/address/phone, service type (常温 / クール).
+- **Shipping** — fee 税込 (D19; 0 = included, the default), allowed wards (default all 23), expected-arrival offset (default ship date + 1), Japan Post sender name/address/phone, service type (常温 / クール).
 - **Payments** — keys live in environment config, not the UI; toggles for card / PayPay.
 - **Legal** — 特商法 fields rendered into 1.8 and the checkout confirmation; cancellation policy text (D22).
 - **Notifications** — "email me on each new order" (3.6), owner email address.
@@ -508,7 +508,7 @@ Minimal and cookie-banner-free: a self-hosted events table or Plausible/Umami. E
 
 - Recipes, COGS, pricing strategy, production timelines, kitchen booking → operations doc / spreadsheet
 - Licensing, HACCP, labelling, PL insurance → launch checklist
-- Delivery date or time-slot choice, pickup, saved cards, phone verification, social login, box customisation
+- Delivery date choice, pickup, saved cards, phone verification, social login, box customisation (time-slot choice moved into scope on 2026-10-20, D21)
 - Corporate gift boxes, subscriptions, loyalty, brick-and-mortar
 - Marketing / Instagram strategy
 
@@ -518,12 +518,13 @@ Not decisions — things to verify when the relevant piece is built.
 
 - PayPay is enabled on the Stripe account (3.5).
 - B2クラウド CSV column layout matches the current template (4.6).
-- Yamato service type (常温 / クール) entered in settings (4.9).
+- Japan Post service type (常温 / クール) entered in settings (4.9).
 - Email deliverability (Resend, D23) tested against docomo/au/SoftBank addresses before the first drop (2.1).
 
 ---
 
 ## Changelog
 
+- **2026-10-20** — Three owner decisions overrode v1. D19: shipping is included in the box price, no separate fee; the cart bar, hero, chips, checkout, emails and order pages say "shipping included" and hide the fee line when the setting is 0 (the key stays so a fee could return). D21: the carrier is Japan Post, not Yamato, and customers choose a delivery time slot at checkout while the date stays the drop's ship date; the checkout field and the Japan Post label export are still to be built. Gift messages are handwritten, not printed. The legal pages and FAQ (1.7, 1.8) already say all of this.
 - **2026-10-19** — D23 changed from Amazon SES to Resend, provisioned through the Vercel Marketplace: one-command setup with the API key injected into the project, versus an AWS account, IAM credentials and a sandbox-exit request for SES. The sending domain still needs DKIM/SPF at GoDaddy and the carrier-address deliverability test before the first drop; the email transport sits behind one interface so SES stays available as a fallback if volume or cost ever warrant it.
 - **2026-10-06** — v0 component sketch written; fleshed out to v1 the same day; all decisions and open questions reviewed and settled (delivery date fixed to one ship date per drop; per-customer limit of 5 replaces a per-order max; exact stock counts; SES for email).

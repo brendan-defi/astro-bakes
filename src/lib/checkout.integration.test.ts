@@ -114,7 +114,7 @@ describe.skipIf(!URL)("checkout write path", () => {
     const r = await placeOrder(input(id, 1, { gift: "Happy birthday!" }), id, await customer("one@test.invalid"));
     expect(r.ok).toBe(true);
     if (!r.ok) return;
-    expect(r.order).toMatchObject({ number: "AB-003-001", subtotal: 2500, shippingFee: 800, total: 3300, email: "one@test.invalid" });
+    expect(r.order).toMatchObject({ number: "AB-003-001", subtotal: 2500, shippingFee: 0, total: 2500, email: "one@test.invalid" });
     expect(r.order.lines).toEqual([
       { name: "4 Cookie Box", qty: 2, lineTotal: 2000 },
       { name: "Nebula Banana Bread", qty: 1, lineTotal: 500 },

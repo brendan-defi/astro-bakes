@@ -90,7 +90,7 @@ function HeroNotOpen({ locale, home }: { locale: Locale; home: HomeData }) {
                 <div className={`${s.ticket} ${s.ticketPink}`}>
                   <div className={`eyebrow ${s.eyebrow}`}>{t.ordersOpen}</div>
                   <div className={s.ticketValue}>{fmtDateTime(drop.openAt, locale)}</div>
-                  <div className={s.ticketSub}>{t.boxesAndShipping(drop.boxes.length, yen(settings.shippingFee, "¥[fee]"))}</div>
+                  <div className={s.ticketSub}>{settings.shippingFee === 0 ? t.boxesShippingIncluded(drop.boxes.length) : t.boxesAndShipping(drop.boxes.length, yen(settings.shippingFee, "¥[fee]"))}</div>
                 </div>
                 <div className={`${s.ticket} ${s.ticketAqua}`}>
                   <div className={`eyebrow ${s.eyebrow}`}>{t.arrives}</div>

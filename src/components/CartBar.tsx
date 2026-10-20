@@ -18,7 +18,7 @@ export function CartBar({ locale }: { locale: Locale }) {
       <Link href={`/${locale}/checkout${demoQuery}`} className={s.cartLink}>
         <span>
           {t.boxCount(count)} · {yen(subtotal)}{" "}
-          <span className={s.fee}>{t.shippingSuffix(yen(shippingFee, "¥[fee]"))}</span>
+          <span className={s.fee}>{shippingFee === 0 ? t.shippingIncluded : t.shippingSuffix(yen(shippingFee, "¥[fee]"))}</span>
         </span>
         <span className={s.go}>{t.checkout}</span>
       </Link>
