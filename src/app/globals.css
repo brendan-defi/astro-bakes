@@ -208,6 +208,8 @@ p { margin: 0; }
   outline: 3px solid var(--aqua);
   outline-offset: 2px;
 }
+/* A section that ScrollLink sends focus to: no ring round the whole section. */
+section[tabindex="-1"]:focus { outline: none; }
 textarea.input { height: auto; padding: 12px 16px; resize: vertical; }
 /* The native arrow sits hard against the border; draw our own chevron (ink, as a data URI can't read --ink) with room around it. */
 select.input {

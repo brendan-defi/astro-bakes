@@ -41,12 +41,18 @@ export function springEasing(): string {
 
 const easeInOutCubic = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2);
 
+/** What stops a glide: the viewer taking over (wheel, touch, click, key) or going Back/Forward. */
+const GLIDE_STOPPERS = ["wheel", "touchstart", "pointerdown", "keydown", "popstate"] as const;
+/** The glide under way, if any: a new one replaces it instead of fighting it for the scroll position. */
+let gliding: (() => void) | null = null;
+
 /**
  * Scrolls the window to `top` with an ease-in-out glide (the browser's own smooth scroll can't be
- * eased or followed by anything). Longer trips take a little longer. Any wheel, touch or key from the
- * viewer stops it on the spot. Returns a function that cancels it.
+ * eased or followed by anything). Longer trips take a little longer. Any wheel, touch, click or key
+ * from the viewer, or Back/Forward, stops it on the spot. Returns a function that cancels it.
  */
 export function glideTo(top: number, onArrive?: () => void): () => void {
+  gliding?.();
   const from = window.scrollY;
   const distance = top - from;
   const duration = Math.min(1200, Math.max(650, Math.abs(distance) * 0.9));
@@ -54,9 +60,11 @@ export function glideTo(top: number, onArrive?: () => void): () => void {
   let start: number | null = null;
   const stop = () => {
     cancelAnimationFrame(frame);
-    for (const type of ["wheel", "touchstart", "keydown"]) window.removeEventListener(type, stop);
+    for (const type of GLIDE_STOPPERS) window.removeEventListener(type, stop);
+    if (gliding === stop) gliding = null;
   };
-  for (const type of ["wheel", "touchstart", "keydown"]) window.addEventListener(type, stop, { passive: true });
+  gliding = stop;
+  for (const type of GLIDE_STOPPERS) window.addEventListener(type, stop, { passive: true });
   const step = (now: number) => {
     start ??= now;
     const t = Math.min(1, (now - start) / duration);
