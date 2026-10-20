@@ -11,20 +11,20 @@ export function Ticker({ locale, home }: { locale: Locale; home: HomeData }) {
   let status: string;
   if (state === "open" && drop) {
     const days = daysUntil(drop.closeAt);
-    const ship = fmtTickerDate(drop.shipAt);
+    const ship = fmtTickerDate(drop.shipAt, locale);
     items = [t.tickerOpen(drop.number), t.tickerCloses(days), t.tickerArea, t.tickerShips(ship)];
     status = t.tickerStatus(drop.number, days, ship);
   } else {
     if (state === "scheduled" && drop) {
-      items = [t.tickerOpens(drop.number, fmtTickerDateTime(drop.openAt)), t.tickerArea, t.tickerShips(fmtTickerDate(drop.shipAt)), t.tickerNotified];
+      items = [t.tickerOpens(drop.number, fmtTickerDateTime(drop.openAt, locale)), t.tickerArea, t.tickerShips(fmtTickerDate(drop.shipAt, locale)), t.tickerNotified];
     } else if (state === "closed" && drop) {
-      items = [t.tickerClosed(drop.number), t.tickerShips(fmtTickerDay(drop.shipAt))];
-      if (nextDrop) items.push(t.tickerNextDrop(fmtTickerDay(nextDrop.openAt)));
+      items = [t.tickerClosed(drop.number), t.tickerShips(fmtTickerDay(drop.shipAt, locale))];
+      if (nextDrop) items.push(t.tickerNextDrop(fmtTickerDay(nextDrop.openAt, locale)));
       items.push(t.tickerArea);
     } else {
       items = [t.tickerBetween, t.tickerNextSoon, t.tickerArea, t.tickerNotified];
     }
-    status = items.join(". ") + ".";
+    status = t.tickerSentence(items);
   }
   const Group = () => (
     <>

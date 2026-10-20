@@ -41,7 +41,6 @@ function rich(template: (arg: string) => string, arg: string) {
   const [a, b] = template("\u0000").split("\u0000");
   return <>{a}<strong className="w9">{arg}</strong>{b}</>;
 }
-const plural = (name: string) => (name.endsWith("Box") ? `${name}es` : name);
 
 export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { locale: Locale; drop: CheckoutDrop | null; lineUrl: string; held: Reservation | null; customer: CheckoutCustomer | null }) {
   const t = getStrings(locale);
@@ -58,6 +57,8 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
   const idx = STEP_INDEX[step] ?? 0;
   const inCheckout = idx > 0;
   const home = `/${locale}`;
+  // The address form is Japanese-format in both languages (D2); English labels carry the Japanese field name too.
+  const jaHint = (label: string) => locale === "en" && <span className="ja" lang="ja">{label}</span>;
 
   const go = useCallback((to: Step, replace = false) => {
     // Keep the demo switches (?state=, ?demo=) across steps; they decide which drop the server sells outside production.
@@ -191,7 +192,7 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
     }
   }, [customer, prefilledFor]);
   const [gift, setGift] = useState(false);
-  const [giftMsg, setGiftMsg] = useState("Happy birthday! Save one for me.");
+  const [giftMsg, setGiftMsg] = useState("");
   const [pay, setPay] = useState<"card" | "paypay">("card");
   const [touched, setTouched] = useState(false);
 
@@ -289,7 +290,7 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
   const holdChip = inCheckout && holdLeft != null && (
     <div className={`${s.hold} ${holdLeft < 60_000 ? s.holdLow : ""}`} aria-label={t.heldAria(fmtCountdown(holdLeft))} role="timer">
       <ClockIcon />
-      <span className={s.holdLabel}>{t.held("").trim()}</span>{fmtCountdown(holdLeft)}
+      <span className={s.holdLabel}>{t.heldLabel}</span>{fmtCountdown(holdLeft)}
     </div>
   );
 
@@ -299,7 +300,7 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
       <a href={`${home}/legal/tokushoho`} className="w9">{t.tokushoho}</a>
     </div>
   );
-  const agree = <p className={s.noteSmall}>{t.agreeTerms} <a href={`${home}/legal/terms`}>{t.termsLink}</a> {t.agreeTermsEnd}</p>;
+  const agree = <p className={s.noteSmall}>{t.agreeTerms}<a href={`${home}/legal/terms`}>{t.termsLink}</a>{t.agreeTermsEnd}</p>;
   const lineNudge = (
     <div className={s.lineNudge}>
       <div style={{ flex: "1 1 auto", minWidth: 0 }}>
@@ -411,16 +412,16 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
                   <form className={s.form14} onSubmit={submitDelivery} noValidate>
                     <div className={s.fields}>
                       <div className="field">
-                        <label htmlFor="co-name" className="label">{t.recipientName} <span className="ja" lang="ja">お名前</span></label>
+                        <label htmlFor="co-name" className="label">{t.recipientName} {jaHint("お名前")}</label>
                         <input id="co-name" type="text" autoComplete="name" required className={`input ${touched && !addr.name.trim() ? s.inputError : ""}`} value={addr.name} onChange={(e) => setAddr({ ...addr, name: e.target.value })} />
                       </div>
                       <div className="field">
-                        <label htmlFor="co-phone" className="label">{t.phone} <span className="ja" lang="ja">電話番号</span></label>
+                        <label htmlFor="co-phone" className="label">{t.phone} {jaHint("電話番号")}</label>
                         <input id="co-phone" type="tel" autoComplete="tel" required className={`input ${touched && !addr.phone.trim() ? s.inputError : ""}`} value={addr.phone} onChange={(e) => setAddr({ ...addr, phone: e.target.value })} />
                         <span className="hint">{t.phoneHint}</span>
                       </div>
                       <div className="field">
-                        <label htmlFor="co-postal" className="label">{t.postalCode} <span className="ja" lang="ja">郵便番号</span></label>
+                        <label htmlFor="co-postal" className="label">{t.postalCode} {jaHint("郵便番号")}</label>
                         <div className={s.postalRow}>
                           <input id="co-postal" type="text" inputMode="numeric" autoComplete="postal-code" className="input" value={addr.postal}
                             onChange={(e) => { setAddr({ ...addr, postal: e.target.value }); setPostalTried(false); setHit(null); }}
@@ -435,7 +436,7 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
                           <>
                             <div className={s.addr}>{hit.prefecture} {hit.city} {hit.town}</div>
                             {hit.deliverable
-                              ? <div className={s.okPill}><CheckIcon size={15} strokeWidth={3} />{t.weDeliverTo(hit.wardEn)}</div>
+                              ? <div className={s.okPill}><CheckIcon size={15} strokeWidth={3} />{t.weDeliverTo(locale === "ja" ? hit.city : hit.wardEn)}</div>
                               : <div className={s.badPill}><WarningIcon size={15} />{t.outsideArea}</div>}
                           </>
                         ) : (
@@ -443,11 +444,11 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
                         )}
                       </div>
                       <div className="field">
-                        <label htmlFor="co-line1" className="label">{t.streetNumber} <span className="ja" lang="ja">番地</span></label>
+                        <label htmlFor="co-line1" className="label">{t.streetNumber} {jaHint("番地")}</label>
                         <input id="co-line1" type="text" autoComplete="address-line1" required className={`input ${touched && !addr.line1.trim() ? s.inputError : ""}`} value={addr.line1} onChange={(e) => setAddr({ ...addr, line1: e.target.value })} />
                       </div>
                       <div className="field">
-                        <label htmlFor="co-line2" className="label">{t.building} <span className="ja" lang="ja">建物名・部屋番号</span> <span className="ja">{t.optional}</span></label>
+                        <label htmlFor="co-line2" className="label">{t.building} {jaHint("建物名・部屋番号")} <span className="ja">{t.optional}</span></label>
                         <input id="co-line2" type="text" autoComplete="address-line2" placeholder={t.buildingPlaceholder} className="input" value={addr.line2} onChange={(e) => setAddr({ ...addr, line2: e.target.value })} />
                       </div>
                     </div>
@@ -466,7 +467,7 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
                     {gift && (
                       <div className={`field ${s.giftField}`}>
                         <label htmlFor="co-gift" className="label">{t.giftLabel} <span className="ja">{t.giftHint}</span></label>
-                        <textarea id="co-gift" rows={3} maxLength={150} className="input" value={giftMsg} onChange={(e) => setGiftMsg(e.target.value)} />
+                        <textarea id="co-gift" rows={3} maxLength={150} className="input" placeholder={t.giftPlaceholder} value={giftMsg} onChange={(e) => setGiftMsg(e.target.value)} />
                         <span className={s.counter}>{giftMsg.length} / 150</span>
                       </div>
                     )}
@@ -662,7 +663,7 @@ function CartStep({ t, cart, changes, maxFor, shipLineYamato, feeLabel, totalLab
               <li key={i}>
                 {c.kind === "gone"
                   ? rich(t.recheckGone, c.box.name)
-                  : rich((n) => t.recheckCut(c.left, n, c.from, c.to), plural(c.box.name))}
+                  : rich((n) => t.recheckCut(c.left, n, c.from, c.to), t.boxNames(c.box.name))}
               </li>
             ))}
           </ul>
@@ -682,7 +683,7 @@ function CartStep({ t, cart, changes, maxFor, shipLineYamato, feeLabel, totalLab
         <div className={s.rows}>
           {rows.map((l) => (
             <div key={l.box.id} className={s.row}>
-              <div className={s.thumb} style={{ background: l.box.tint }}>Photo</div>
+              <div className={s.thumb} style={{ background: l.box.tint }}>{t.photo}</div>
               <div className={s.rowBody}>
                 <div className={s.rowTop}>
                   <div className={s.rowName}>{l.box.name}</div>
@@ -703,7 +704,7 @@ function CartStep({ t, cart, changes, maxFor, shipLineYamato, feeLabel, totalLab
           ))}
           {gone.map((c) => (
             <div key={c.box.id} className={`${s.row} ${s.rowGone}`}>
-              <div className={s.thumb} style={{ background: c.box.tint }}>Photo</div>
+              <div className={s.thumb} style={{ background: c.box.tint }}>{t.photo}</div>
               <div className={s.rowBody}>
                 <div className={s.rowTop}>
                   <div className={s.rowName}>{c.box.name}</div>

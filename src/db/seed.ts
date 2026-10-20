@@ -23,21 +23,24 @@ const SETTINGS: { key: string; value: unknown }[] = [
 ];
 
 const ITEMS = [
-  { slug: "cookie-american-choc-chip", nameEn: "American chocolate chip cookie", productionUnit: "cookie" },
-  { slug: "cookie-matcha-white-choc", nameEn: "Matcha white chocolate cookie", productionUnit: "cookie" },
-  { slug: "cookie-double-choc-walnut", nameEn: "Double chocolate & roasted walnut cookie", productionUnit: "cookie" },
-  { slug: "cookie-cookies-and-cream", nameEn: "Cookies & cream cookie", productionUnit: "cookie" },
-  { slug: "banana-bread-mini-loaf", nameEn: "Nebula Banana Bread, mini loaf", productionUnit: "mini loaf" },
-  { slug: "banana-bread-slice", nameEn: "Nebula Banana Bread, slice", productionUnit: "mini loaf", unitsPerProductionUnit: 6 },
-  { slug: "midnight-choc-cake-slice", nameEn: "Midnight Chocolate Cake, slice", productionUnit: "cake", unitsPerProductionUnit: 12 },
+  { slug: "cookie-american-choc-chip", nameEn: "American chocolate chip cookie", nameJa: "アメリカンチョコチップクッキー", productionUnit: "cookie" },
+  { slug: "cookie-matcha-white-choc", nameEn: "Matcha white chocolate cookie", nameJa: "抹茶ホワイトチョコクッキー", productionUnit: "cookie" },
+  { slug: "cookie-double-choc-walnut", nameEn: "Double chocolate & roasted walnut cookie", nameJa: "ダブルチョコ＆ローストくるみクッキー", productionUnit: "cookie" },
+  { slug: "cookie-cookies-and-cream", nameEn: "Cookies & cream cookie", nameJa: "クッキー＆クリームクッキー", productionUnit: "cookie" },
+  { slug: "banana-bread-mini-loaf", nameEn: "Nebula Banana Bread, mini loaf", nameJa: "ネビュラ・バナナブレッド（ミニローフ）", productionUnit: "mini loaf" },
+  { slug: "banana-bread-slice", nameEn: "Nebula Banana Bread, slice", nameJa: "ネビュラ・バナナブレッド（スライス）", productionUnit: "mini loaf", unitsPerProductionUnit: 6 },
+  { slug: "midnight-choc-cake-slice", nameEn: "Midnight Chocolate Cake, slice", nameJa: "ミッドナイト・チョコレートケーキ（スライス）", productionUnit: "cake", unitsPerProductionUnit: 12 },
 ];
 
 const BOXES = [
   {
     slug: "cookie-box",
     nameEn: "4 Cookie Box",
+    nameJa: "4種のクッキーボックス",
     descriptionEn: "All four signature cookies. Thick and soft in the middle.",
+    descriptionJa: "看板クッキー4種の詰め合わせ。厚焼きで、真ん中はしっとりやわらか。",
     contentsEn: "1 American chocolate chip · 1 matcha white chocolate · 1 double chocolate & roasted walnut · 1 cookies & cream",
+    contentsJa: "アメリカンチョコチップ 1枚 · 抹茶ホワイトチョコ 1枚 · ダブルチョコ＆ローストくるみ 1枚 · クッキー＆クリーム 1枚",
     price: 1000,
     allergens: ["Egg", "Milk", "Wheat", "Walnut"],
     defaultCap: 20,
@@ -47,8 +50,11 @@ const BOXES = [
   {
     slug: "banana-bread",
     nameEn: "Nebula Banana Bread",
+    nameJa: "ネビュラ・バナナブレッド",
     descriptionEn: "A mini loaf, sweet from ripe bananas and very moist.",
+    descriptionJa: "完熟バナナの甘さが広がる、とてもしっとりしたミニローフ。",
     contentsEn: "1 whole mini loaf",
+    contentsJa: "ミニローフ 1本",
     price: 500,
     allergens: ["Egg", "Milk", "Wheat"],
     defaultCap: 10,
@@ -58,8 +64,11 @@ const BOXES = [
   {
     slug: "sampler-box",
     nameEn: "Sampler Box",
+    nameJa: "サンプラーボックス",
     descriptionEn: "A little of everything from this drop.",
+    descriptionJa: "今回のドロップを少しずつ楽しめる詰め合わせ。",
     contentsEn: "1 slice Nebula Banana Bread · 1 slice Midnight Chocolate Cake · 2 chocolate chip cookies",
+    contentsJa: "ネビュラ・バナナブレッド 1切れ · ミッドナイト・チョコレートケーキ 1切れ · チョコチップクッキー 2枚",
     price: 900, // sample price; the owner sets the real one in admin (PRD 4.3)
     allergens: ["Egg", "Milk", "Wheat"],
     defaultCap: 10,
@@ -74,6 +83,7 @@ const DROPS = [
     number: 3,
     slug: "drop-03",
     nameEn: "Drop 03 · October",
+    nameJa: "ドロップ03 · 10月",
     state: "open" as const,
     openAt: JST("2026-10-11T12:00:00"),
     closeAt: JST("2026-10-18T21:00:00"),
@@ -85,6 +95,7 @@ const DROPS = [
     number: 4,
     slug: "drop-04",
     nameEn: "Drop 04 · November",
+    nameJa: "ドロップ04 · 11月",
     state: "scheduled" as const,
     openAt: JST("2026-11-08T10:00:00"),
     closeAt: JST("2026-11-15T21:00:00"),

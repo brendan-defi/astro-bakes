@@ -15,3 +15,6 @@
   .track { animation-duration: 40s; }
   .item { gap: 28px; padding-left: 28px; }
 }
+
+/* Titan One has no Japanese glyphs, so JA labels set in it use Zen Maru Gothic 900 (handoff p.13). */
+:lang(ja) .ticker { font-family: var(--font-body), sans-serif; font-weight: 900; }

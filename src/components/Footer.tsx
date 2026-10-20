@@ -13,7 +13,7 @@ export function Footer({ locale, settings }: { locale: Locale; settings: Setting
     <footer className={s.footer}>
       <div className={`container ${s.footerInner}`}>
         <span className={`logo-face ${s.footerLogo}`}>Astro Bakes</span>
-        <nav aria-label="Footer" className={s.footerNav}>
+        <nav aria-label={t.footerNav} className={s.footerNav}>
           {links.map(([label, href]) => <a key={label} href={href}>{label}</a>)}
         </nav>
         <div className={s.copy}>{t.copyright}</div>

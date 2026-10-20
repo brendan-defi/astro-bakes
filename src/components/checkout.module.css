@@ -240,3 +240,6 @@
 @media (min-width: 900px) { .hideDesktop { display: none !important; } }
 @media (max-width: 899px) { .hideMobile { display: none !important; } }
 @media (max-width: 899px) { .continueRow { display: flex; flex-direction: column; gap: 8px; } }
+
+/* Titan One has no Japanese glyphs, so JA labels set in it use Zen Maru Gothic 900 (handoff p.13). */
+:lang(ja) .rowName, :lang(ja) .soldTag, :lang(ja) .sectionTitle { font-family: var(--font-body), sans-serif; font-weight: 900; }

@@ -24,13 +24,14 @@ export function fmtTime(d: Date, locale: Locale = "en"): string {
   return locale === "ja" ? t : `${t} JST`;
 }
 
-/** "Sun, Oct 18 · 21:00 JST" */
+/** "Sun, Oct 18 · 21:00 JST" / 「10月18日(日) 21:00」 (handoff p.13) */
 export function fmtDateTime(d: Date, locale: Locale = "en"): string {
-  return `${fmtDate(d, locale)} · ${fmtTime(d, locale)}`;
+  return locale === "ja" ? `${fmtDate(d, "ja")} ${fmtTime(d, "ja")}` : `${fmtDate(d)} · ${fmtTime(d)}`;
 }
 
-/** "OCT 25" for the ticker */
-export function fmtTickerDate(d: Date): string {
+/** "OCT 25" / 「10月25日」 for the ticker */
+export function fmtTickerDate(d: Date, locale: Locale = "en"): string {
+  if (locale === "ja") return new Intl.DateTimeFormat("ja-JP", { timeZone: TZ, month: "long", day: "numeric" }).format(d);
   return new Intl.DateTimeFormat("en-US", { timeZone: TZ, month: "short", day: "numeric" }).format(d).toUpperCase();
 }
 
@@ -46,17 +47,18 @@ export function fmtCountdown(ms: number): string {
   return `${m}:${String(s % 60).padStart(2, "0")}`;
 }
 
-/** "SUN OCT 25" for the ticker */
-export function fmtTickerDay(d: Date): string {
+/** "SUN OCT 25" / 「10月25日(日)」 for the ticker */
+export function fmtTickerDay(d: Date, locale: Locale = "en"): string {
+  if (locale === "ja") return fmtDate(d, "ja");
   return new Intl.DateTimeFormat("en-US", { timeZone: TZ, weekday: "short", month: "short", day: "numeric" })
     .format(d)
     .replace(",", "")
     .toUpperCase();
 }
 
-/** "SUN NOV 8, 10:00 JST" for the ticker */
-export function fmtTickerDateTime(d: Date): string {
-  return `${fmtTickerDay(d)}, ${fmtTime(d)}`;
+/** "SUN NOV 8, 10:00 JST" / 「11月8日(日) 10:00」 for the ticker */
+export function fmtTickerDateTime(d: Date, locale: Locale = "en"): string {
+  return locale === "ja" ? `${fmtDate(d, "ja")} ${fmtTime(d, "ja")}` : `${fmtTickerDay(d)}, ${fmtTime(d)}`;
 }
 
 /** "Sunday" / 「日曜日」 */
