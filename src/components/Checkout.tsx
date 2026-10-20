@@ -171,10 +171,17 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
     },
   });
   const email = auth.email;
-  // Set while the customer's own way back out of the code step is landing (see `back`); a new step clears it.
+  // Set while the customer's own way out of the code step is landing, by the back buttons (see `back`) or browser
+  // history; whichever step it lands on clears it. Until then the signed-in skip below holds off, so it can't replace
+  // the page they chose with delivery while that page loads. (History is caught here, during the event itself, ahead
+  // of the sign-in flow's own reaction to it, which settles busy a moment later.)
   const leavingCode = useRef(false);
   useEffect(() => {
     leavingCode.current = false;
+    if (step !== "code") return;
+    const onHistory = () => { leavingCode.current = true; };
+    window.addEventListener("popstate", onHistory);
+    return () => window.removeEventListener("popstate", onHistory);
   }, [step]);
   useEffect(() => {
     // Already signed in: the email steps don't apply, and shouldn't sit in history. Not while a code is being checked,

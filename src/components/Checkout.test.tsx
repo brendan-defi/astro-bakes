@@ -168,13 +168,29 @@ describe("Checkout sign-in: leaving during the \"you're in\" moment", () => {
     return { ...spies, goTo };
   }
 
-  it("Back to the email step drops the moment, then skips the email steps for the signed-in customer", async () => {
-    const { replace, refresh, goTo } = await celebrating();
+  /** Browser Back mid-moment, with the destination slow to land: the moment winds down while the code step still shows. */
+  async function backWhileLoading() {
+    const spies = await celebrating();
     act(() => { window.dispatchEvent(new PopStateEvent("popstate")); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(50); });
+    expect(spies.replace).not.toHaveBeenCalled(); // nothing jumps ahead of the page they chose while it loads
+    return spies;
+  }
+
+  it("Back to the cart lands on the cart, even when it's slow to load", async () => {
+    const { replace, refresh, goTo } = await backWhileLoading();
+    goTo("");
+    await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+    expect(replace).not.toHaveBeenCalled();
+    expect(refresh).not.toHaveBeenCalled(); // the moment's own continuation never ran
+  });
+
+  it("Back to the email step skips it once it lands, since they're signed in, and nothing is stuck busy", async () => {
+    const { replace, refresh, goTo } = await backWhileLoading();
     goTo("step=signin");
     await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
-    expect(refresh).not.toHaveBeenCalled(); // the moment's own continuation never ran
-    expect(replace).toHaveBeenCalledWith("/en/checkout?step=delivery"); // the signed-in skip did, so nothing is stuck busy
+    expect(refresh).not.toHaveBeenCalled();
+    expect(replace).toHaveBeenCalledExactlyOnceWith("/en/checkout?step=delivery");
   });
 
   it("the back button takes the customer where they asked, not on to delivery when the moment would have ended", async () => {
