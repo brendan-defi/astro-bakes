@@ -6,6 +6,7 @@ import { loadSettings } from "@/lib/drops";
 import { getStrings, isLocale } from "@/lib/i18n";
 import { isLegalSlug, LEGAL_SLUGS, LEGAL_TITLES, legalDocument } from "@/lib/legal";
 import { Footer } from "@/components/Footer";
+import { LangToggle } from "@/components/LangToggle";
 import { Logo } from "@/components/Logo";
 import { ArrowLeftIcon } from "@/components/icons";
 import s from "@/components/checkout.module.css";
@@ -35,7 +36,7 @@ export default async function LegalPage({ params }: { params: Params }) {
         <div className={`container ${s.headerRow}`}>
           <Link href={home} aria-label={t.backToShop} className={s.iconBtn}><ArrowLeftIcon /></Link>
           <Logo href={home} label={t.home} size="sm" />
-          <span className={s.spacer} />
+          <LangToggle locale={locale} hrefFor={(l) => `/${l}/legal/${slug}`} />
         </div>
       </header>
       <div className={s.body}>
