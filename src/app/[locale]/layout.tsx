@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Titan_One, Pacifico, Zen_Maru_Gothic } from "next/font/google";
 import { notFound } from "next/navigation";
 import { isLocale } from "@/lib/i18n";
-import { SITE_URL, stringsFor } from "@/lib/metadata";
+import { openGraphBase, SITE_URL, stringsFor } from "@/lib/metadata";
 import "../globals.css";
 
 const display = Titan_One({ weight: "400", subsets: ["latin"], variable: "--font-display", display: "swap" });
@@ -16,20 +16,12 @@ const body = Zen_Maru_Gothic({ weight: ["500", "700", "900"], subsets: ["latin"]
 export async function generateMetadata({ params }: { params: Promise<{ locale: string }> }): Promise<Metadata> {
   const { locale } = await params;
   const t = stringsFor(locale);
-  const [ogLocale, otherOgLocale] = locale === "ja" ? ["ja_JP", "en_US"] : ["en_US", "ja_JP"];
   return {
     metadataBase: new URL(SITE_URL),
     applicationName: "Astro Bakes",
     title: { default: t.metaTitle, template: t.metaTitleTemplate },
     description: t.metaDescription,
-    openGraph: {
-      type: "website",
-      siteName: "Astro Bakes",
-      title: t.metaTitle,
-      description: t.metaDescription,
-      locale: ogLocale,
-      alternateLocale: otherOgLocale,
-    },
+    openGraph: { ...openGraphBase(locale), title: t.metaTitle, description: t.metaDescription },
     twitter: { card: "summary_large_image" },
   };
 }

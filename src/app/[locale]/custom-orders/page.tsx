@@ -6,6 +6,7 @@ import { dateRange } from "@/lib/custom-order-rules";
 import { anonymousViewer, type Viewer } from "@/lib/data";
 import { loadSettings } from "@/lib/drops";
 import { getStrings, isLocale } from "@/lib/i18n";
+import { publicPage, stringsFor } from "@/lib/metadata";
 import { CustomOrderForm } from "@/components/CustomOrderForm";
 import { Footer } from "@/components/Footer";
 import { Nav } from "@/components/Nav";
@@ -15,8 +16,8 @@ import s from "@/components/parties.module.css";
 
 export async function generateMetadata({ params }: { params: Promise<{ locale: string }> }): Promise<Metadata> {
   const { locale } = await params;
-  const t = getStrings(isLocale(locale) ? locale : "en");
-  return { title: `${t.partiesEyebrow} · Astro Bakes`, description: t.customOrdersMeta };
+  const t = stringsFor(locale);
+  return publicPage(locale, "/custom-orders", t.partiesEyebrow, t.customOrdersMeta);
 }
 
 /** Party and custom orders: the request form behind the homepage's "Want cookies at your next party?" band. */
