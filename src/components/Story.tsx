@@ -1,3 +1,4 @@
+import Image from "next/image";
 import type { Locale, Settings } from "@/lib/data";
 import { getStrings } from "@/lib/i18n";
 import { InstagramIcon, PawIcon } from "./icons";
@@ -5,6 +6,13 @@ import s from "./home.module.css";
 
 export function Story({ locale, settings }: { locale: Locale; settings: Settings }) {
   const t = getStrings(locale);
+  // The photo grid (PRD 1.4). Square crops; size is the source's pixel width.
+  const polaroids = [
+    { src: "/images/astro-outside.jpg", size: 271, alt: t.astroOutsideAlt, caption: t.capQC, className: s.p1 },
+    { src: "/images/story/gooey.jpg", size: 1024, alt: t.gooeyAlt, caption: t.capGooey, className: s.p2 },
+    { src: "/images/story/matcha.jpg", size: 1024, alt: t.matchaAlt, caption: t.capMatcha, className: s.p3 },
+    { src: "/images/story/bake-day.jpg", size: 1024, alt: t.bakeDayAlt, caption: t.capBake, className: s.p4 },
+  ];
   return (
     <section id="story" className={s.story}>
       <div className={`container ${s.storyInner}`}>
@@ -23,23 +31,12 @@ export function Story({ locale, settings }: { locale: Locale; settings: Settings
           </a>
         </div>
         <div className={s.polaroids}>
-          <figure className={`${s.polaroid} ${s.p1}`}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/images/astro-outside.jpg" alt={t.astroOutsideAlt} />
-            <figcaption>{t.capQC}</figcaption>
-          </figure>
-          <figure className={`${s.polaroid} ${s.p2}`}>
-            <div className={s.polaroidPh} style={{ background: "var(--butter-soft)" }}>{t.phGooey}</div>
-            <figcaption>{t.capGooey}</figcaption>
-          </figure>
-          <figure className={`${s.polaroid} ${s.p3}`}>
-            <div className={s.polaroidPh} style={{ background: "#d5f5f4" }}>{t.phLoaf}</div>
-            <figcaption>{t.capLoaf}</figcaption>
-          </figure>
-          <figure className={`${s.polaroid} ${s.p4}`}>
-            <div className={s.polaroidPh} style={{ background: "var(--lilac-tint)" }}>{t.phTrays}</div>
-            <figcaption>{t.capBake}</figcaption>
-          </figure>
+          {polaroids.map((p) => (
+            <figure key={p.src} className={`${s.polaroid} ${p.className}`}>
+              <Image src={p.src} alt={p.alt} width={p.size} height={p.size} sizes="(min-width: 768px) 200px, 45vw" />
+              <figcaption>{p.caption}</figcaption>
+            </figure>
+          ))}
         </div>
       </div>
     </section>

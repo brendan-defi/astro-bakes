@@ -43,6 +43,7 @@ const BOXES = [
     contentsJa: "アメリカンチョコチップ 1枚 · 抹茶ホワイトチョコ 1枚 · ダブルチョコ＆ローストくるみ 1枚 · クッキー＆クリーム 1枚",
     price: 1000,
     allergens: ["Egg", "Milk", "Wheat", "Walnut"],
+    photos: ["/images/boxes/cookie-box.jpg"],
     defaultCap: 20,
     sort: 0,
     items: [["cookie-american-choc-chip", 1], ["cookie-matcha-white-choc", 1], ["cookie-double-choc-walnut", 1], ["cookie-cookies-and-cream", 1]] as const,

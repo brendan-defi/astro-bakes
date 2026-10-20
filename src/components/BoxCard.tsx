@@ -4,7 +4,8 @@ import type { Box, Locale } from "@/lib/data";
 import { yen } from "@/lib/format";
 import { getStrings } from "@/lib/i18n";
 import { maxFor, useCart } from "@/lib/cart";
-import { CameraIcon, StarburstShape } from "./icons";
+import { StarburstShape } from "./icons";
+import { BoxPhoto } from "./BoxPhoto";
 import { Stepper } from "./Stepper";
 import s from "./home.module.css";
 
@@ -16,10 +17,7 @@ export function BoxCard({ box, locale }: { box: Box; locale: Locale }) {
   const soldOut = box.left === 0;
   return (
     <article className={`card ${s.box}`} style={{ transform: `rotate(${box.tilt})` }}>
-      <div className={s.boxPhoto} style={{ background: box.tint }}>
-        <CameraIcon />
-        <span>{t.productPhoto} — {box.name}</span>
-      </div>
+      <BoxPhoto box={box} placeholder={`${t.productPhoto} — ${box.name}`} />
       {!soldOut && (
         <div className={s.burst} aria-hidden>
           <StarburstShape />
