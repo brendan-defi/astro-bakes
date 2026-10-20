@@ -6,7 +6,7 @@ export function Footer({ locale, settings }: { locale: Locale; settings: Setting
   const t = getStrings(locale);
   const p = `/${locale}`;
   const links: [string, string][] = [
-    [t.faq, `${p}/faq`], [t.contact, `mailto:${settings.contactEmail}`], [t.instagram, settings.instagramUrl], [t.line, settings.lineUrl],
+    [t.faq, `${p}/faq`], [t.partiesEyebrow, `${p}/custom-orders`], [t.contact, `mailto:${settings.contactEmail}`], [t.instagram, settings.instagramUrl], [t.line, settings.lineUrl],
     [t.tokushoho, `${p}/legal/tokushoho`], [t.privacy, `${p}/legal/privacy`], [t.terms, `${p}/legal/terms`],
   ];
   return (

@@ -36,6 +36,13 @@
       "when": 1792461428681,
       "tag": "0004_nifty_namorita",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1792475493096,
+      "tag": "0005_thick_jane_foster",
+      "breakpoints": true
     }
   ]
 }

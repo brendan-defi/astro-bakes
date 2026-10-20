@@ -13,6 +13,7 @@ import { Wave } from "@/components/Wave";
 import { Boxes } from "@/components/Boxes";
 import { HowItWorks } from "@/components/HowItWorks";
 import { Story } from "@/components/Story";
+import { PartyOrders } from "@/components/PartyOrders";
 import { Notify } from "@/components/Notify";
 import { Footer } from "@/components/Footer";
 import { CartBar } from "@/components/CartBar";
@@ -52,6 +53,8 @@ export default async function HomePage({ params, searchParams }: { params: Promi
       <Boxes locale={locale} home={home} />
       <Wave from="var(--ground)" to="var(--butter)" />
       <HowItWorks locale={locale} settings={settings} />
+      <Wave from="var(--butter)" to="var(--pink-soft)" />
+      <PartyOrders locale={locale} />
       <Story locale={locale} settings={settings} />
       <Notify locale={locale} settings={settings} viewer={home.viewer} />
       <Footer locale={locale} settings={settings} />
