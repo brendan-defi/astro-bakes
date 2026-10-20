@@ -1,7 +1,8 @@
 import type { Drop, HomeData, Locale } from "@/lib/data";
 import { daysHoursUntil, fmtDate, fmtDateTime, fmtHourShort, fmtTime, fmtWeekday, yen } from "@/lib/format";
 import { getStrings } from "@/lib/i18n";
-import { ArrowDownIcon, CookieShape, StarShape, TruckIcon } from "./icons";
+import { ArrowDownIcon, TruckIcon } from "./icons";
+import { HeroAstro } from "./HeroAstro";
 import { Countdown } from "./Countdown";
 import { NotifyForm } from "./NotifyForm";
 import s from "./home.module.css";
@@ -22,7 +23,7 @@ function HeroOpen({ locale, drop }: { locale: Locale; drop: Drop }) {
           <Title t={t} />
         </div>
 
-        <AstroVisual photo="/images/astro-cookie.jpg" alt={t.astroAlt} bubble={t.dropIsOpen(t.dropN(drop.number))} />
+        <HeroAstro photo="/images/astro-cookie.jpg" alt={t.astroAlt} bubble={t.dropIsOpen(t.dropN(drop.number))} />
 
         <div className={s.heroActions}>
           <div className={s.tickets}>
@@ -157,7 +158,7 @@ function HeroNotOpen({ locale, home }: { locale: Locale; home: HomeData }) {
           )}
         </div>
 
-        <AstroVisual photo={photo} alt={alt} bubble={bubble} />
+        <HeroAstro photo={photo} alt={alt} bubble={bubble} />
       </div>
     </section>
   );
@@ -172,29 +173,5 @@ function Title({ t }: { t: ReturnType<typeof getStrings> }) {
       <p className={s.heroSub}>{t.heroSub}</p>
       <p className={s.heroTagline} lang="ja">{t.heroTagline}</p>
     </>
-  );
-}
-
-function AstroVisual({ photo, alt, bubble }: { photo: string; alt: string; bubble: string }) {
-  return (
-    <div className={s.heroVisual}>
-      <div className={s.astro}>
-        <div className={s.astroMoon} />
-        <svg viewBox="0 0 340 340" aria-hidden className={s.astroOrbit}>
-          <path d="M4 216 C -34 150, 110 56, 250 50 C 344 46, 376 92, 334 140" fill="none" stroke="var(--ink)" strokeWidth="11" strokeLinecap="round" />
-          <path d="M4 216 C -34 150, 110 56, 250 50 C 344 46, 376 92, 334 140" fill="none" stroke="var(--pink)" strokeWidth="6" strokeLinecap="round" />
-        </svg>
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={photo} alt={alt} className={s.astroPhoto} />
-        <svg viewBox="0 0 340 340" aria-hidden className={s.astroOrbit}>
-          <path d="M334 198 C 300 264, 150 322, 60 294" fill="none" stroke="var(--ink)" strokeWidth="11" strokeLinecap="round" />
-          <path d="M334 198 C 300 264, 150 322, 60 294" fill="none" stroke="var(--pink)" strokeWidth="6" strokeLinecap="round" />
-        </svg>
-        <CookieShape className={s.astroCookie} />
-        <StarShape className={s.astroStar} />
-        <StarShape className={s.astroStar2} fill="var(--white)" strokeWidth={3.5} />
-        <div className={s.bubble}>{bubble}</div>
-      </div>
-    </div>
   );
 }

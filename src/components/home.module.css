@@ -1,5 +1,6 @@
 /* ===== Hero ===== */
-.hero { position: relative; background: var(--lilac); padding: 30px var(--gutter) 26px; }
+/* overflow-x: clip keeps the orbiting cookie from widening the page on narrow phones. */
+.hero { position: relative; background: var(--lilac); padding: 30px var(--gutter) 26px; overflow-x: clip; }
 .heroGrid { display: flex; flex-wrap: wrap; align-items: center; gap: 28px; }
 .heroText { flex: 1 1 320px; min-width: 0; display: flex; flex-direction: column; gap: 16px; align-items: flex-start; }
 .heroVisual { flex: 1 1 280px; min-width: 0; display: flex; justify-content: center; }
@@ -32,16 +33,28 @@
 .heroCta { min-height: 62px; margin-top: 4px; font-size: 22px; }
 
 /* Astro visual */
-.astro { position: relative; width: 100%; max-width: 330px; aspect-ratio: 1 / 1; }
-.astroMoon { position: absolute; inset: 4%; border-radius: 50%; background: var(--butter); border: var(--border); }
-.astroOrbit { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
-.astroPhoto { position: absolute; inset: 11%; width: 78%; height: 78%; object-fit: cover; border-radius: 50%; border: var(--border); }
-.astroCookie { position: absolute; left: -4%; bottom: 2%; width: 23%; height: 23%; animation: ab-bob 4s ease-in-out infinite; }
-.astroStar { position: absolute; right: 0; top: 0; width: 15%; height: 15%; animation: ab-spin 14s linear infinite, ab-twinkle 2.8s ease-in-out infinite; }
-.astroStar2 { display: none; position: absolute; left: 2%; top: 8%; width: 9%; height: 9%; animation: ab-twinkle 3.6s ease-in-out 1.2s infinite; }
+/*
+ * Layers, back to front: moon 1, back orbit 2, cookie on the back arc 3, photo 4, front orbit 5,
+ * cookie on the front arc 6, stars 7, bubble 8. The square is a size container so the orbiting
+ * cookie can be placed in cqw (1cqw = 1% of the square), however big the square is.
+ */
+.astro { position: relative; width: 100%; max-width: 330px; aspect-ratio: 1 / 1; isolation: isolate; container-type: inline-size; }
+.astroMoon { position: absolute; inset: 4%; border-radius: 50%; background: var(--butter); border: var(--border); z-index: 1; }
+/* The orbit svgs cover the whole square; let taps through to Astro. */
+.astroOrbit { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+.astroOrbitBack { z-index: 2; }
+.astroOrbitFront { z-index: 5; }
+.astroPhoto { position: absolute; inset: 11%; width: 78%; height: 78%; object-fit: cover; border-radius: 50%; border: var(--border); z-index: 4; }
+/* Tap Astro (HeroAstro): no text selection, image drag or tap flash. */
+.astroBoop { cursor: pointer; user-select: none; -webkit-user-select: none; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+/* A zero-size point the cookie is centred on: its translate is the cookie's centre, at rest bottom-left. */
+.orbiter { position: absolute; left: 0; top: 0; width: 0; height: 0; z-index: 6; pointer-events: none; translate: 7.5cqw 86.5cqw; }
+.astroCookie { position: absolute; left: -11.5cqw; top: -11.5cqw; width: 23cqw; height: 23cqw; animation: ab-bob 4s ease-in-out infinite; }
+.astroStar { position: absolute; right: 0; top: 0; width: 15%; height: 15%; z-index: 7; animation: ab-spin 14s linear infinite, ab-twinkle 2.8s ease-in-out infinite; }
+.astroStar2 { display: none; position: absolute; left: 2%; top: 8%; width: 9%; height: 9%; z-index: 7; animation: ab-twinkle 3.6s ease-in-out 1.2s infinite; }
 /* Springs in from its tail (bottom-left corner) once the page has settled. */
 .bubble {
-  position: absolute; right: -2%; bottom: 10%; transform: rotate(4deg); transform-origin: 0 100%;
+  position: absolute; right: -2%; bottom: 10%; z-index: 8; transform: rotate(4deg); transform-origin: 0 100%;
   animation: ab-pop-in 650ms var(--ease-spring) 500ms both;
   background: var(--white); border: var(--border); border-radius: 18px 18px 18px 4px;
   box-shadow: 3px 3px 0 var(--ink); padding: 6px 12px;
@@ -65,7 +78,7 @@
   .ticketValue { font-size: 18px; }
   .heroCta { align-self: flex-start; min-height: 68px; padding: 0 40px; margin-top: 8px; font-size: 26px; box-shadow: 0 7px 0 var(--ink); }
   .astro { max-width: 460px; }
-  .astroCookie { left: -6%; }
+  .orbiter { translate: 5.5cqw 86.5cqw; }
   .astroStar2 { display: block; }
   .bubble { right: -4%; bottom: 12%; border-radius: 20px 20px 20px 4px; box-shadow: 4px 4px 0 var(--ink); padding: 8px 16px; font-size: 17px; max-width: 44%; }
 }
