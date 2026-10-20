@@ -14,7 +14,7 @@ type Params = Promise<{ locale: string; slug: string }>;
 export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
   const { locale, slug } = await params;
   if (!isLocale(locale) || !isLegalSlug(slug)) return {};
-  return { title: LEGAL_TITLES[slug][locale] }; // the layout template appends the site name (PR #9)
+  return { title: LEGAL_TITLES[slug][locale], alternates: { canonical: `/${locale}/legal/${slug}`, languages: { en: `/en/legal/${slug}`, ja: `/ja/legal/${slug}` } } };
 }
 
 /** The three legal pages (PRD 1.8). Copy lives in src/lib/legal.ts; the 特商法 seller fields come from settings (PRD 4.9). */
