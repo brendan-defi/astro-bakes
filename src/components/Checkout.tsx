@@ -193,6 +193,8 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
   }, [customer, prefilledFor]);
   const [gift, setGift] = useState(false);
   const [giftMsg, setGiftMsg] = useState("");
+  // A blank message means no card; the example text is only a placeholder.
+  const giftText = gift && giftMsg.trim() ? giftMsg : null;
   const [pay, setPay] = useState<"card" | "paypay">("card");
   const [touched, setTouched] = useState(false);
 
@@ -235,7 +237,7 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
         revision: h.revision,
         locale,
         delivery: addr,
-        gift: gift ? giftMsg : null,
+        gift: giftText,
         paymentMethod: pay,
       });
       if (!res.ok) {
@@ -247,7 +249,7 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
         else { setNotice(t.orderFailed); setTouched(true); go("delivery"); }
         return;
       }
-      const order: PlacedOrder = { ...res.order, address: addr, hit, gift: gift ? giftMsg : null };
+      const order: PlacedOrder = { ...res.order, address: addr, hit, gift: giftText };
       try { window.sessionStorage.setItem(ORDER_KEY, JSON.stringify(order)); } catch {}
       setPlaced(order);
       clearHold();
@@ -507,7 +509,7 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
                     </div>
                     <div className="w9">{addr.name}</div>
                     <div style={{ fontSize: 15 }}>{addressLine}<br />{addr.phone}</div>
-                    {gift && giftMsg && <div className={s.giftNote}><span className="w9">{t.giftCard}</span> {giftMsg}</div>}
+                    {giftText && <div className={s.giftNote}><span className="w9">{t.giftCard}</span> {giftText}</div>}
                     <div className={s.shipLine}><TruckIcon size={20} />{shipLineYamato}</div>
                   </section>
 

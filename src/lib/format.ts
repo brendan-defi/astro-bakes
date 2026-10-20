@@ -35,9 +35,12 @@ export function fmtTickerDate(d: Date, locale: Locale = "en"): string {
   return new Intl.DateTimeFormat("en-US", { timeZone: TZ, month: "short", day: "numeric" }).format(d).toUpperCase();
 }
 
-/** Whole days until `d`, floored at 0. */
+/** The Tokyo calendar day a moment falls on, as a day number. Japan has no DST, so UTC+9 is exact. */
+const jstDay = (d: Date) => Math.floor((d.getTime() + 9 * 3_600_000) / 86_400_000);
+
+/** Calendar days until `d` in JST: 0 = later today, 1 = tomorrow. Floored at 0. */
 export function daysUntil(d: Date, now = new Date()): number {
-  return Math.max(0, Math.ceil((d.getTime() - now.getTime()) / 86_400_000));
+  return Math.max(0, jstDay(d) - jstDay(now));
 }
 
 /** "9:52" */
