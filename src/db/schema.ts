@@ -1,6 +1,7 @@
 import { relations, sql } from "drizzle-orm";
 import {
   boolean,
+  date,
   index,
   integer,
   jsonb,
@@ -393,6 +394,38 @@ export const orderItems = pgTable(
   (t) => [index("order_items_order_idx").on(t.orderId)],
 );
 
+// ---------------------------------------------------------------- Custom orders
+
+/**
+ * "Want cookies at your next party?" requests from /custom-orders. Nothing is
+ * booked or charged; the owner replies to the customer by email. Only the
+ * sender's IP hash is kept, for the rate limit (custom-order-rules.ts).
+ */
+export const customOrderRequests = pgTable(
+  "custom_order_requests",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    name: text().notNull(),
+    email: text().notNull(),
+    /** The language they wrote in, so the reply can match it. */
+    locale: localeEnum().notNull().default("en"),
+    /** The Tokyo calendar day of the party. */
+    eventDate: date({ mode: "string" }).notNull(),
+    /** upTo20 · 20to50 · 50to100 · over100 */
+    partySize: text().notNull(),
+    /** birthday · office · wedding · other; null when they didn't say. */
+    occasion: text(),
+    details: text().notNull(),
+    /** Set when they were signed in. */
+    customerId: uuid().references(() => customers.id, { onDelete: "set null" }),
+    ipHash: text(),
+    /** When the owner's notification went out; null if the send failed (the error is in notification_log). */
+    notifiedAt: timestamp({ withTimezone: true }),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("custom_order_requests_email_idx").on(t.email, t.createdAt), index("custom_order_requests_ip_idx").on(t.ipHash, t.createdAt)],
+);
+
 // ---------------------------------------------------------------- Relations
 
 export const customersRelations = relations(customers, ({ one, many }) => ({
@@ -456,3 +489,4 @@ export type InventoryHoldRow = typeof inventoryHolds.$inferSelect;
 export type OrderRow = typeof orders.$inferSelect;
 export type OrderItemRow = typeof orderItems.$inferSelect;
 export type RefundRow = typeof refunds.$inferSelect;
+export type CustomOrderRequestRow = typeof customOrderRequests.$inferSelect;

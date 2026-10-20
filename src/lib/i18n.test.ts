@@ -62,6 +62,7 @@ const SAMPLES: Samples = {
   bubbleScheduled: ["Sunday", "10"],
   comingIn: ["Drop 04"],
   orderFrom: ["Sun, Nov 8 · 10:00 JST"],
+  requestSentBody: ["Hanako", "you@example.com"],
 };
 
 /** The text behind a key as [id, text] pairs: the string, the template rendered with its samples, or each entry of a lookup table. */

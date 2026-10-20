@@ -17,6 +17,8 @@ export interface OutgoingEmail extends Email {
   type: string;
   /** `<event>/<entity>`; Resend dedupes retries with it for 24 hours. */
   idempotencyKey: string;
+  /** Where a reply goes, when that isn't us (the customer, on a custom-order request to the owner). */
+  replyTo?: string;
   customerId?: string | null;
   orderId?: string | null;
 }
@@ -30,7 +32,7 @@ const resendTransport: EmailTransport = async (email, from) => {
   const resend = new Resend(key);
   // The SDK reports API errors in the result, not by throwing.
   const { data, error } = await resend.emails.send(
-    { from, to: [email.to], subject: email.subject, html: email.html, text: email.text },
+    { from, to: [email.to], subject: email.subject, html: email.html, text: email.text, ...(email.replyTo ? { replyTo: email.replyTo } : {}) },
     { idempotencyKey: email.idempotencyKey },
   );
   if (error) return { ok: false, error: `${error.name}: ${error.message}` };

@@ -36,6 +36,13 @@
       "when": 1792461428681,
       "tag": "0004_nifty_namorita",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1792472331952,
+      "tag": "0005_far_nighthawk",
+      "breakpoints": true
     }
   ]
 }
