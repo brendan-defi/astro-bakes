@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { updateProfileAction } from "@/app/[locale]/account/actions";
 import type { Locale } from "@/lib/data";
 import { getStrings } from "@/lib/i18n";
-import { lookupPostal, normalisePostal, type PostalHit } from "@/lib/postal";
+import { lookupPostal, normalisePostal, outsideWards, type PostalHit } from "@/lib/postal";
 import { CheckIcon, WarningIcon } from "../icons";
 import s from "../checkout.module.css";
 import a from "../account.module.css";
@@ -80,7 +80,7 @@ export function ProfileForm({ locale, initial }: { locale: Locale; initial: Prof
                 : <div className={s.badPill}><WarningIcon size={15} />{t.outsideArea}</div>}
             </>
           ) : (
-            <div className={s.addr} style={{ opacity: postalTried ? 1 : 0.5 }}>{postalTried ? <span className={s.badPill}><WarningIcon size={15} />{t.postalNotFound}</span> : "—"}</div>
+            <div className={s.addr} style={{ opacity: postalTried ? 1 : 0.5 }}>{postalTried ? <span className={s.badPill}><WarningIcon size={15} />{outsideWards(v.postal) ? t.outsideArea : t.postalNotFound}</span> : "—"}</div>
           )}
         </div>
         <div className="field">

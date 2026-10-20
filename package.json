@@ -12,6 +12,7 @@
     "db:migrate": "dotenv -e .env.local -- drizzle-kit migrate",
     "db:seed": "dotenv -e .env.local -- tsx src/db/seed-cli.ts",
     "db:studio": "dotenv -e .env.local -- drizzle-kit studio",
+    "postal:update": "node scripts/postal-tokyo23.mjs",
     "test": "vitest run",
     "test:watch": "vitest"
   },
