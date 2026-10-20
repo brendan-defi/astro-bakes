@@ -5,6 +5,7 @@ import { settings as defaultSettings } from "@/lib/data";
 import { loadSettings } from "@/lib/drops";
 import { FAQ_DESCRIPTION, faqEntries } from "@/lib/faq";
 import { getStrings, isLocale } from "@/lib/i18n";
+import { publicPage } from "@/lib/metadata";
 import { DocShell } from "@/components/DocShell";
 import s from "@/components/checkout.module.css";
 import l from "@/components/legal.module.css";
@@ -14,7 +15,7 @@ type Params = Promise<{ locale: string }>;
 export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
   const { locale } = await params;
   if (!isLocale(locale)) return {};
-  return { title: getStrings(locale).faq, description: FAQ_DESCRIPTION[locale], alternates: { canonical: `/${locale}/faq`, languages: { en: "/en/faq", ja: "/ja/faq" } } };
+  return publicPage(locale, "/faq", getStrings(locale).faq, FAQ_DESCRIPTION[locale]);
 }
 
 /** The FAQ (PRD 1.7). Copy lives in src/lib/faq.ts. */
