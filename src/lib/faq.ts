@@ -6,6 +6,12 @@ import { yen } from "./format";
  * Pure module like legal.ts, with the shipping fee and contact address taken from settings.
  */
 
+/** Meta description for link previews and search. */
+export const FAQ_DESCRIPTION: Record<Locale, string> = {
+  ja: "Astro Bakes のよくある質問。ドロップの時期、東京23区への配送、送料、日持ちと冷凍、アレルゲン、キャンセル、ギフトについて。",
+  en: "Answers about Astro Bakes drops: when they open, delivery across Tokyo's 23 wards, shipping, keeping and freezing, allergens, cancellations and gifts.",
+};
+
 export interface FaqEntry { id: string; q: string; a: string[] }
 
 const PER_CUSTOMER = 5;

@@ -34,6 +34,22 @@ export const LEGAL_TITLES: Record<LegalSlug, Record<Locale, string>> = {
   terms: { ja: "利用規約", en: "Terms of sale" },
 };
 
+/** Meta descriptions for link previews and search; the second of PR #6 / #8 to land wires them through `publicPage`. */
+export const LEGAL_DESCRIPTIONS: Record<LegalSlug, Record<Locale, string>> = {
+  tokushoho: {
+    ja: "Astro Bakes の特定商取引法に基づく表記。販売業者、販売価格、送料、支払方法、引渡時期、返品・キャンセルについて。",
+    en: "Commercial disclosure for Astro Bakes under Japan's Act on Specified Commercial Transactions: seller, prices, shipping, payment, delivery and cancellation terms.",
+  },
+  privacy: {
+    ja: "Astro Bakes のプライバシーポリシー。取得する情報、利用目的、委託先、Cookie、保存期間と削除について。",
+    en: "How Astro Bakes handles your personal information: what we collect, why, who processes it, cookies, retention and deletion.",
+  },
+  terms: {
+    ja: "Astro Bakes の利用規約。ドロップ（予約販売）の仕組み、東京23区内への配送、支払い、キャンセルと返金について。",
+    en: "Terms of sale for Astro Bakes drops: preorders with caps and one ship date, delivery within Tokyo's 23 wards, payment, cancellation and refunds.",
+  },
+};
+
 const ON_REQUEST = { ja: "請求があったら遅滞なく開示します。", en: "Disclosed without delay on request." };
 const JA_GOVERNS = "The Japanese version of this page is the authoritative one; this translation is for convenience.";
 

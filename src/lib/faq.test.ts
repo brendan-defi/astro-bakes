@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { settings as base } from "./data";
-import { faqEntries } from "./faq";
+import { FAQ_DESCRIPTION, faqEntries } from "./faq";
 
 const JAPANESE = /[぀-ヿ一-鿿]/;
 /** The questions PRD 1.7 says the page must cover. */
@@ -18,6 +18,8 @@ describe("FAQ", () => {
     const text = (locale: "ja" | "en") => faqEntries(locale, base).flatMap((e) => [e.q, ...e.a]);
     expect(text("ja").filter((t) => !JAPANESE.test(t))).toEqual([]);
     expect(text("en").filter((t) => JAPANESE.test(t))).toEqual([]);
+    expect(FAQ_DESCRIPTION.ja).toMatch(JAPANESE);
+    expect(FAQ_DESCRIPTION.en).not.toMatch(JAPANESE);
   });
 
   it("takes the shipping fee and contact address from settings", () => {

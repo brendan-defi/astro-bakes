@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { settings as defaultSettings } from "@/lib/data";
 import { loadSettings } from "@/lib/drops";
 import { isLocale } from "@/lib/i18n";
-import { isLegalSlug, LEGAL_SLUGS, LEGAL_TITLES, legalDocument } from "@/lib/legal";
+import { isLegalSlug, LEGAL_DESCRIPTIONS, LEGAL_SLUGS, LEGAL_TITLES, legalDocument } from "@/lib/legal";
 import { DocShell } from "@/components/DocShell";
 import s from "@/components/checkout.module.css";
 import l from "@/components/legal.module.css";
@@ -14,7 +14,7 @@ type Params = Promise<{ locale: string; slug: string }>;
 export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
   const { locale, slug } = await params;
   if (!isLocale(locale) || !isLegalSlug(slug)) return {};
-  return { title: LEGAL_TITLES[slug][locale], alternates: { canonical: `/${locale}/legal/${slug}`, languages: { en: `/en/legal/${slug}`, ja: `/ja/legal/${slug}` } } };
+  return { title: LEGAL_TITLES[slug][locale], description: LEGAL_DESCRIPTIONS[slug][locale], alternates: { canonical: `/${locale}/legal/${slug}`, languages: { en: `/en/legal/${slug}`, ja: `/ja/legal/${slug}` } } };
 }
 
 /** The three legal pages (PRD 1.8). Copy lives in src/lib/legal.ts; the 特商法 seller fields come from settings (PRD 4.9). */

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { settings as base } from "./data";
-import { LEGAL_SLUGS, isLegalSlug, legalDocument, type LegalDocument } from "./legal";
+import { LEGAL_DESCRIPTIONS, LEGAL_SLUGS, isLegalSlug, legalDocument, type LegalDocument } from "./legal";
 
 const JAPANESE = /[぀-ヿ一-鿿]/;
 const allText = (d: LegalDocument) => d.sections.flatMap((s) => [s.heading ?? "", ...(s.paragraphs ?? []), ...(s.bullets ?? []), ...(s.rows ?? []).flatMap((r) => [r.label, r.value])]).filter(Boolean);
@@ -60,6 +60,8 @@ describe("legal pages", () => {
       expect(ja.note).toBeNull();
       expect(en.note).toMatch(/Japanese version/);
       expect(ja.updated).toEqual(en.updated);
+      expect(LEGAL_DESCRIPTIONS[slug].ja).toMatch(JAPANESE);
+      expect(LEGAL_DESCRIPTIONS[slug].en).not.toMatch(JAPANESE);
     }
   });
 });
