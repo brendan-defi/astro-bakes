@@ -17,5 +17,6 @@
 .lg .face { font-size: 30px; }
 /* A wiggle on hover; rotate composes with the sticker's -4deg tilt. */
 @media (hover: hover) and (prefers-reduced-motion: no-preference) {
-  .logo:hover { --boop-rotate: -6deg; --boop-scale: 1.05; animation: ab-boop var(--dur-boop) var(--ease-out); }
+  .logo:hover { --boop-rotate: -6deg; --boop-scale: 1.05; animation: boop var(--dur-boop) var(--ease-out); }
 }
+@keyframes boop { 30% { rotate: var(--boop-rotate, 8deg); scale: var(--boop-scale, 1.06); } }

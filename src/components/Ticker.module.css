@@ -5,7 +5,7 @@
   font-family: var(--font-display), sans-serif;
   font-size: 14px; letter-spacing: 0.06em;
 }
-.track { display: inline-flex; animation: ab-ticker 22s linear infinite; }
+.track { display: inline-flex; animation: ticker 22s linear infinite; }
 .group { display: inline-flex; }
 .item { display: inline-flex; gap: 22px; padding-left: 22px; }
 .pink { color: var(--pink); }
@@ -18,3 +18,4 @@
 
 /* Titan One has no Japanese glyphs, so JA labels set in it use Zen Maru Gothic 900 (handoff p.13). */
 :lang(ja) .ticker { font-family: var(--font-body), sans-serif; font-weight: 900; }
+@keyframes ticker { from { transform: translateX(0); } to { transform: translateX(-50%); } }

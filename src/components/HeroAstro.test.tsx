@@ -10,10 +10,17 @@ afterEach(() => { cleanup(); restoreMotion(); particles.burst.mockReset(); });
 const hero = () => render(<HeroAstro photo="/images/astro-cookie.jpg" alt="Astro the border collie" bubble="Drop 03 is open!" />);
 
 describe("HeroAstro", () => {
-  it("throws paws and hearts from where Astro is tapped", () => {
+  it("throws paws, hearts and cookies from where Astro is tapped", () => {
     hero();
     fireEvent.pointerDown(screen.getByRole("img", { name: "Astro the border collie" }), { clientX: 120, clientY: 340 });
-    expect(particles.burst).toHaveBeenCalledWith({ x: 120, y: 340 }, expect.objectContaining({ kind: ["paw", "heart", "paw"] }));
+    expect(particles.burst).toHaveBeenCalledWith({ x: 120, y: 340 }, expect.objectContaining({ kind: ["paw", "heart", "cookie", "paw"] }));
+  });
+
+  it("showers cookies when the orbiting cookie is caught", () => {
+    const { container } = hero();
+    const cookie = container.querySelector('svg[viewBox="0 0 64 64"]')!;
+    fireEvent.pointerDown(cookie);
+    expect(particles.burst).toHaveBeenCalledWith(cookie, expect.objectContaining({ kind: expect.arrayContaining(["cookie"]) }));
   });
 
   it("keeps the photo a plain image: its alt text, no button, no tab stop", () => {

@@ -14,7 +14,8 @@ const ORBIT_MS = 16_000;
 const withoutMove = (d: string) => d.replace(/^M\S+ \S+ /, "");
 
 /**
- * Astro on his moon, with the cookie orbiting him. Tap him for a wiggle and a puff of paws and hearts
+ * Astro on his moon, with the cookie orbiting him. Tap him for a wiggle and a puff of paws, hearts and
+ * cookies, or catch the cookie for a shower of cookies
  * (decorative, so the photo keeps its alt text and no tab stop). The cookie's route is measured from
  * the orbit drawing itself, starting and ending where it rests today; under reduced motion it stays put.
  */
@@ -82,7 +83,7 @@ export function HeroAstro({ photo, alt, bubble }: { photo: string; alt: string; 
           draggable={false}
           onPointerDown={(e) => {
             boop(e.currentTarget, { rotate: -5, scale: 1.05 });
-            burst({ x: e.clientX, y: e.clientY }, { kind: ["paw", "heart", "paw"], count: 9, power: 380 });
+            burst({ x: e.clientX, y: e.clientY }, { kind: ["paw", "heart", "cookie", "paw"], count: 11, power: 400 });
           }}
         />
         <svg viewBox="0 0 340 340" aria-hidden className={`${s.astroOrbit} ${s.astroOrbitFront}`}>
@@ -90,7 +91,14 @@ export function HeroAstro({ photo, alt, bubble }: { photo: string; alt: string; 
           <path d={FRONT_ARC} fill="none" stroke="var(--pink)" strokeWidth="6" strokeLinecap="round" />
         </svg>
         <div ref={orbiterRef} className={s.orbiter} aria-hidden>
-          <CookieShape className={s.astroCookie} />
+          {/* Catch the cookie for a shower of cookies (also decorative: no tab stop). */}
+          <CookieShape
+            className={s.astroCookie}
+            onPointerDown={(e) => {
+              boop(e.currentTarget, { rotate: 25, scale: 1.2 });
+              burst(e.currentTarget, { kind: ["cookie", "cookie", "crumb", "cookie"], count: 14, power: 460, spread: Math.PI * 1.7 });
+            }}
+          />
         </div>
         <StarShape className={s.astroStar} />
         <StarShape className={s.astroStar2} fill="var(--white)" strokeWidth={3.5} />

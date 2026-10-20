@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { restoreMotion, stubAnimate, stubMatchMedia } from "@/test/motion";
-import { allergenKind } from "./particle-art";
+import { allergenKind, particleNode } from "./particle-art";
 import { burst, flyTo, MAX_LIVE } from "./particles";
 
 const layer = () => document.querySelector<HTMLElement>("[data-particles]");
@@ -64,6 +64,15 @@ describe("burst", () => {
     burst(el, { count: 3 });
     burst(el, { count: 3 });
     expect(calls).toHaveLength(3);
+  });
+});
+
+describe("particleNode", () => {
+  it("paints paws in bright sticker colours, not ink, so they show on the lilac hero", () => {
+    for (let i = 0; i < 20; i++) {
+      const tint = particleNode("paw").node.style.getPropertyValue("--c");
+      expect(["var(--butter)", "var(--aqua)", "var(--white)", "var(--pink)"]).toContain(tint);
+    }
   });
 });
 

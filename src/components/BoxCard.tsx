@@ -10,6 +10,7 @@ import { burst, flyTo } from "@/lib/particles";
 import { StarburstShape } from "./icons";
 import { AllergenChips } from "./AllergenChips";
 import { BoxPhoto } from "./BoxPhoto";
+import { ScrollLink } from "./ScrollLink";
 import { Stepper } from "./Stepper";
 import s from "./home.module.css";
 
@@ -63,7 +64,7 @@ export function BoxCard({ box, locale }: { box: Box; locale: Locale }) {
             <Stepper qty={qty} max={maxFor(box)} onInc={() => cart.inc(box.id)} onDec={() => cart.dec(box.id)} labels={{ inc: t.addOne, dec: t.removeOne }} fx={fx} />
           </div>
         ) : (
-          <div className={s.soldNote}>{t.soldOutThisDrop} <a href="#notify">{t.headsUpNextTime}</a></div>
+          <div className={s.soldNote}>{t.soldOutThisDrop} <ScrollLink href="#notify">{t.headsUpNextTime}</ScrollLink></div>
         )}
       </div>
     </article>

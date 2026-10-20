@@ -3,6 +3,7 @@ import { daysHoursUntil, fmtDate, fmtDateTime, fmtHourShort, fmtTime, fmtWeekday
 import { getStrings } from "@/lib/i18n";
 import { ArrowDownIcon, TruckIcon } from "./icons";
 import { HeroAstro } from "./HeroAstro";
+import { ScrollLink } from "./ScrollLink";
 import { Countdown } from "./Countdown";
 import { NotifyForm } from "./NotifyForm";
 import s from "./home.module.css";
@@ -38,10 +39,10 @@ function HeroOpen({ locale, drop }: { locale: Locale; drop: Drop }) {
               <div className={s.ticketSub}>{t.ships} {fmtDate(drop.shipAt, locale)}</div>
             </div>
           </div>
-          <a href="#boxes" className={`btn btn-primary sheen ${s.heroCta}`}>
+          <ScrollLink href="#boxes" className={`btn btn-primary sheen ${s.heroCta}`}>
             {t.pickYourBoxes}
             <ArrowDownIcon />
-          </a>
+          </ScrollLink>
         </div>
       </div>
     </section>
@@ -153,7 +154,7 @@ function HeroNotOpen({ locale, home }: { locale: Locale; home: HomeData }) {
               label={formLabel}
               button={state === "scheduled" ? t.remindMe : t.notifyMe}
               consent={t.dropEmailsOnly}
-              extra={<a href="#notify">{t.orLine}</a>}
+              extra={<ScrollLink href="#notify">{t.orLine}</ScrollLink>}
             />
           )}
         </div>

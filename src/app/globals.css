@@ -52,6 +52,8 @@
 }
 
 /* ---------- Base ---------- */
+/* Selected text cycles through the palette: SelectionColors moves --selection on to the next colour each time. */
+::selection { background: var(--selection, var(--pink)); color: var(--ink); }
 *, *::before, *::after { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; }
 body {
@@ -277,18 +279,14 @@ select.input {
 }
 
 /* ---------- Motion ---------- */
-@keyframes ab-ticker { from { transform: translateX(0); } to { transform: translateX(-50%); } }
-@keyframes ab-bob { 0%, 100% { transform: translateY(0) rotate(-3deg); } 50% { transform: translateY(-8px) rotate(2deg); } }
-@keyframes ab-spin { from { transform: rotate(0); } to { transform: rotate(360deg); } }
-@keyframes ab-pop { 0% { transform: scale(1); } 40% { transform: scale(1.18); } 100% { transform: scale(1); } }
 /*
- * Newer keyframes move the individual rotate/scale/translate properties, which compose with
- * the transform: rotate(...) tilts all over the site instead of replacing them.
- * Entrances are written "from" only, so with reduced motion the element simply sits in its final state.
+ * Keyframes live in the stylesheet that uses them. In a .module.css file Next (Lightning CSS) renames every
+ * animation name, references included, so a module can't reach a global @keyframes: the hero, ticker and
+ * cart badge animations were silently dead until each module got its own copy.
+ * Newer keyframes move the individual rotate/scale/translate properties, which compose with the
+ * transform: rotate(...) tilts all over the site instead of replacing them. Entrances are written
+ * "from" only, so with reduced motion the element simply sits in its final state.
  */
-@keyframes ab-boop { 30% { rotate: var(--boop-rotate, 8deg); scale: var(--boop-scale, 1.06); } }
-@keyframes ab-twinkle { 0%, 100% { scale: 1; opacity: 1; } 50% { scale: 0.72; opacity: 0.75; } }
-@keyframes ab-pop-in { from { scale: 0; opacity: 0; } }
 @keyframes ab-sheen { 0% { translate: -110% 0; } 16%, 100% { translate: 110% 0; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
 
