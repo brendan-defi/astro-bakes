@@ -9,7 +9,7 @@ export function Story({ locale, settings }: { locale: Locale; settings: Settings
   // The photo grid (PRD 1.4). Square crops; size is the source's pixel width.
   const polaroids = [
     { src: "/images/astro-outside.jpg", size: 271, alt: t.astroOutsideAlt, caption: t.capQC, className: s.p1 },
-    { src: "/images/story/gooey.jpg", size: 1024, alt: t.gooeyAlt, caption: t.capGooey, className: s.p2 },
+    { src: "/images/story/pull-apart.jpg", size: 1024, alt: t.softAlt, caption: t.capSoft, className: s.p2 },
     { src: "/images/story/matcha.jpg", size: 1024, alt: t.matchaAlt, caption: t.capMatcha, className: s.p3 },
     { src: "/images/story/bake-day.jpg", size: 1024, alt: t.bakeDayAlt, caption: t.capBake, className: s.p4 },
   ];
