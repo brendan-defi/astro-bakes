@@ -12,24 +12,30 @@ const KEY = "ab-auth-pending";
 export const CELEBRATE_MS = 1100;
 
 /**
+ * How the "you're in" moment ended: it played out, the person went Back (which may keep this page, as in the checkout's
+ * steps), or they followed a link (which takes them off it).
+ */
+type Ending = "played" | "back" | "link";
+
+/**
  * Waits out the "you're in" moment, unless the person heads somewhere else themselves meanwhile: a plain click on a
  * link, or Back. The page is still mounted while that navigation loads, so without this the end of the moment would
- * send them to the sign-in destination instead. Resolves false if they left. (A modified click opens another tab and
- * leaves this one be.)
+ * send them to the sign-in destination instead. (A modified click opens another tab and leaves this one be.) Ways out
+ * that a page offers itself, like the checkout's back buttons, call `cancel` instead.
  */
-function celebrate(): Promise<boolean> {
+function celebrate(): Promise<Ending> {
   return new Promise((resolve) => {
     const onClick = (e: MouseEvent) => {
       const link = e.target instanceof Element ? e.target.closest<HTMLAnchorElement>("a[href]") : null;
-      if (link && link.target !== "_blank" && e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey) finish(false);
+      if (link && link.target !== "_blank" && e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey) finish("link");
     };
-    const onBack = () => finish(false);
-    const timer = window.setTimeout(() => finish(true), CELEBRATE_MS);
-    function finish(played: boolean) {
+    const onBack = () => finish("back");
+    const timer = window.setTimeout(() => finish("played"), CELEBRATE_MS);
+    function finish(ending: Ending) {
       window.clearTimeout(timer);
       document.removeEventListener("click", onClick, true);
       window.removeEventListener("popstate", onBack);
-      resolve(played);
+      resolve(ending);
     }
     document.addEventListener("click", onClick, true);
     window.addEventListener("popstate", onBack);
@@ -81,6 +87,15 @@ export function useSignInFlow({ locale, next, onSignedIn }: { locale: Locale; ne
    * and above all no navigation the person didn't ask for.
    */
   const flow = useRef(0);
+  /**
+   * Drops a code check or "you're in" moment under way, without moving on, and settles busy: for a page that stays put
+   * while the person goes elsewhere on it (the checkout's back buttons, Back between its steps). Work already under way
+   * for the dropped flow can't navigate afterwards, or clear the busy of whatever comes next.
+   */
+  const cancel = useCallback(() => {
+    flow.current++;
+    setBusy(false);
+  }, []);
   const [now, setNow] = useState(() => Date.now());
   const [resendAt, setResendAt] = useState(0);
 
@@ -141,28 +156,30 @@ export function useSignInFlow({ locale, next, onSignedIn }: { locale: Locale; ne
       writePending(null);
       setVerified(true);
       // Stay busy while the field celebrates, so nothing can be sent twice. Someone who leaves meanwhile is already
-      // signed in; their navigation wins, and the page stays busy while it loads.
-      if (motionOK() && !(await celebrate())) flow.current++;
+      // signed in, and their navigation wins. Back may keep this page, so settle busy for whatever it shows next; a link
+      // takes them off it, so stay busy while that loads rather than let the page react underneath.
+      const ending = motionOK() ? await celebrate() : "played";
+      if (ending === "back") cancel();
+      else if (ending === "link") flow.current++;
       if (flow.current !== mine) return false;
       onSignedIn(r.next);
       return true;
     } finally {
-      // An abandoned flow was either reset (and a new one may be busy with its own request by now) or is on its way off
-      // the page, which should stay busy until it's gone.
+      // A dropped flow was either cancelled (busy settled already, and something newer may be busy by now) or is on its
+      // way off the page by a link, which should stay busy until it's gone.
       if (flow.current === mine) setBusy(false);
     }
-  }, [email, code, busy, onSignedIn, t]);
+  }, [email, code, busy, onSignedIn, cancel, t]);
 
   /** Back to the email field, dropping any code check (or celebration) still under way. */
   const reset = useCallback(() => {
-    flow.current++;
+    cancel();
     writePending(null);
     setPending(false);
     setCode("");
     setNotice(null);
     setVerified(false);
-    setBusy(false);
-  }, []);
+  }, [cancel]);
 
-  return { email, setEmail, code, setCode, pending, hydrated, busy, notice, setNotice, verified, misses, resendLeft: Math.max(0, resendAt - now), request, verify, reset };
+  return { email, setEmail, code, setCode, pending, hydrated, busy, notice, setNotice, verified, misses, resendLeft: Math.max(0, resendAt - now), request, verify, cancel, reset };
 }

@@ -171,16 +171,31 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
     },
   });
   const email = auth.email;
+  // Set while the customer's own way back out of the code step is landing (see `back`); a new step clears it.
+  const leavingCode = useRef(false);
+  useEffect(() => {
+    leavingCode.current = false;
+  }, [step]);
   useEffect(() => {
     // Already signed in: the email steps don't apply, and shouldn't sit in history. Not while a code is being checked,
     // though: the session arrives with the check's re-render, and onSignedIn moves on once the "you're in" moment has
-    // played (busy lasts through it). Coming back to these steps later skips them again.
+    // played (busy lasts through it). Nor while the customer's chosen step is still landing. Coming back to these steps
+    // later skips them again.
     if (customer && (step === "signin" || step === "code")) {
-      if (!auth.busy) go("delivery", true);
+      if (!auth.busy && !leavingCode.current) go("delivery", true);
     }
     // The code screen without an address to verify (storage cleared): back to the email field.
     else if (!customer && step === "code" && auth.hydrated && !auth.pending) go("signin", true);
   }, [customer, step, auth.hydrated, auth.pending, auth.busy, go]);
+  // The back buttons. Leaving the code step while a code is being checked or celebrated drops that attempt, which would
+  // otherwise move the customer on to delivery afterwards, and holds the signed-in skip until their step has landed.
+  const back = () => {
+    if (step === "code" && auth.busy) {
+      leavingCode.current = true;
+      auth.cancel();
+    }
+    go(prevOf(step));
+  };
 
   // ---- delivery ----
   const prefill = (c: CheckoutCustomer | null): Address => ({ name: c?.name ?? "", phone: c?.phone ?? "", postal: c?.postal ?? "", line1: c?.line1 ?? "", line2: c?.line2 ?? "" });
@@ -335,7 +350,7 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
       <header className={s.header}>
         <div className={`container ${s.headerRow}`}>
           {isCart && <Link href={home} aria-label={t.backToShop} className={s.iconBtn}><ArrowLeftIcon /></Link>}
-          {inCheckout && <button type="button" aria-label={t.back} onClick={() => go(prevOf(step))} className={s.iconBtn}><ArrowLeftIcon /></button>}
+          {inCheckout && <button type="button" aria-label={t.back} onClick={back} className={s.iconBtn}><ArrowLeftIcon /></button>}
           {step === "done" && <span className={s.spacer} />}
           <Logo href={home} label={t.home} size="sm" />
           {inCheckout && <StepList cls={s.stepsTop} />}
@@ -362,7 +377,7 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
         {/* ===== Main column ===== */}
         <main className={s.main}>
           {inCheckout && !holdExpired && (
-            <button type="button" onClick={() => go(prevOf(step))} className={s.backBtn}><ArrowLeftIcon size={18} />{backLabel}</button>
+            <button type="button" onClick={back} className={s.backBtn}><ArrowLeftIcon size={18} />{backLabel}</button>
           )}
 
           {holdExpired ? (

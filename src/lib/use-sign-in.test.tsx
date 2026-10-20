@@ -98,6 +98,7 @@ describe("useSignInFlow: leaving or starting over", () => {
       act(() => { window.dispatchEvent(new PopStateEvent("popstate")); });
       await act(async () => { vi.advanceTimersByTime(CELEBRATE_MS); });
       expect(second.onSignedIn).not.toHaveBeenCalled();
+      expect(second.hook.result.current.busy).toBe(false); // Back may keep the page (checkout steps), so nothing stays stuck
     } finally {
       link.remove();
     }
@@ -113,6 +114,24 @@ describe("useSignInFlow: leaving or starting over", () => {
     } finally {
       link.remove();
     }
+  });
+
+  it("cancel() drops the celebration and settles busy, for a page that stays put", async () => {
+    const { hook, onSignedIn } = await celebrating();
+    act(() => hook.result.current.cancel());
+    expect(hook.result.current.busy).toBe(false);
+    await act(async () => { vi.advanceTimersByTime(CELEBRATE_MS); });
+    expect(onSignedIn).not.toHaveBeenCalled();
+  });
+
+  it("a cancelled check doesn't clear the busy of what came after it", async () => {
+    const { hook } = await celebrating();
+    act(() => hook.result.current.cancel());
+    actions.requestSignInAction.mockReturnValue(new Promise(() => {})); // a new code, still sending
+    act(() => { void hook.result.current.request(); });
+    expect(hook.result.current.busy).toBe(true);
+    await act(async () => { vi.advanceTimersByTime(CELEBRATE_MS); }); // the cancelled check winds down
+    expect(hook.result.current.busy).toBe(true);
   });
 
   it("drops the celebration when the person goes back to change their email", async () => {

@@ -1,9 +1,10 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CartProvider } from "@/lib/cart";
 import { boxes } from "@/lib/data";
 import { startHold } from "@/lib/hold";
 import { getStrings } from "@/lib/i18n";
+import { restoreMotion, stubAnimate, stubMatchMedia } from "@/test/motion";
 import { Checkout, type CheckoutCustomer, type CheckoutDrop } from "./Checkout";
 
 // The step comes from the URL; tests swap `nav.params` and rerender to move between steps.
@@ -133,5 +134,57 @@ describe("Checkout sign-in", () => {
     } finally {
       replace.mockRestore();
     }
+  });
+});
+
+describe("Checkout sign-in: leaving during the \"you're in\" moment", () => {
+  afterEach(() => {
+    restoreMotion();
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  /** Signed out on the code step, with motion: enters a good code and stops partway into the celebration. */
+  async function celebrating() {
+    stubMatchMedia(false);
+    stubAnimate();
+    vi.useFakeTimers();
+    auth.verifyCodeAction.mockReset().mockResolvedValue({ ok: true, next: "/en/checkout?step=delivery" });
+    const spies = { push: vi.spyOn(nav.router, "push"), replace: vi.spyOn(nav.router, "replace"), refresh: vi.spyOn(nav.router, "refresh") };
+    window.sessionStorage.setItem("ab-auth-pending", JSON.stringify({ email: "you@example.com", resendAt: 0 }));
+    const tree = (who: CheckoutCustomer | null) => (
+      <CartProvider dropId="drop-03" boxes={boxes} shippingFee={800}>
+        <Checkout locale="en" drop={drop} lineUrl="#" held={null} customer={who} />
+      </CartProvider>
+    );
+    nav.params = new URLSearchParams("step=code");
+    const view = render(tree(null));
+    const goTo = (query: string) => { nav.params = new URLSearchParams(query); view.rerender(tree(customer)); };
+    fireEvent.change(document.getElementById("co-code")!, { target: { value: "123456" } });
+    await act(async () => { await vi.advanceTimersByTimeAsync(600); }); // the code lands, submits, and is accepted
+    goTo("step=code"); // the check's re-render brings the session
+    expect(document.querySelector("[data-state]")?.getAttribute("data-state")).toBe("done");
+    for (const spy of Object.values(spies)) spy.mockClear();
+    return { ...spies, goTo };
+  }
+
+  it("Back to the email step drops the moment, then skips the email steps for the signed-in customer", async () => {
+    const { replace, refresh, goTo } = await celebrating();
+    act(() => { window.dispatchEvent(new PopStateEvent("popstate")); });
+    goTo("step=signin");
+    await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+    expect(refresh).not.toHaveBeenCalled(); // the moment's own continuation never ran
+    expect(replace).toHaveBeenCalledWith("/en/checkout?step=delivery"); // the signed-in skip did, so nothing is stuck busy
+  });
+
+  it("the back button takes the customer where they asked, not on to delivery when the moment would have ended", async () => {
+    const { push, replace, refresh, goTo } = await celebrating();
+    fireEvent.click(screen.getByRole("button", { name: t.back }));
+    expect(push).toHaveBeenCalledWith("/en/checkout");
+    expect(replace).not.toHaveBeenCalled(); // nothing jumps ahead of their step while it loads
+    goTo("");
+    await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+    expect(replace).not.toHaveBeenCalled();
+    expect(refresh).not.toHaveBeenCalled();
   });
 });
