@@ -15,7 +15,7 @@ export function AllergenChips({ items }: { items: { key: string; label: string }
       {items.map(({ key, label }) => (
         <span
           key={key}
-          className="chip-sm chip-toy"
+          className="chip-sm tap-toy"
           onPointerDown={(e) => {
             burst(e.currentTarget, { kind: allergenKind(key), count: 8, power: 420, spread: Math.PI * 0.75 });
             boop(e.currentTarget, { rotate: -6, scale: 1.12 });

@@ -1,7 +1,8 @@
 import Link from "next/link";
 import type { Locale } from "@/lib/data";
 import { getStrings } from "@/lib/i18n";
-import { CookieShape, StarShape, StarburstShape } from "./icons";
+import { CookieToy } from "./CookieToy";
+import { StarShape, StarburstShape } from "./icons";
 import s from "./home.module.css";
 
 const ROWS = ["when", "howMany", "flavours"] as const;
@@ -39,8 +40,9 @@ export function PartyOrders({ locale }: { locale: Locale }) {
             <StarburstShape />
             <span>{t.ticketBurst}</span>
           </div>
-          <CookieShape className={s.partyCookie} />
-          <CookieShape className={s.partyCookie2} />
+          {/* Tap either cookie for a shower of cookies. */}
+          <CookieToy className={s.partyCookie} />
+          <CookieToy className={s.partyCookie2} />
         </div>
       </div>
     </section>

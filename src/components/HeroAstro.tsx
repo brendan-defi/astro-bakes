@@ -3,7 +3,8 @@
 import { useEffect, useRef } from "react";
 import { boop, motionOK, useReducedMotion } from "@/lib/motion";
 import { burst } from "@/lib/particles";
-import { CookieShape, StarShape } from "./icons";
+import { CookieToy } from "./CookieToy";
+import { StarShape } from "./icons";
 import s from "./home.module.css";
 
 /** The pink orbit, in the 340×340 box of its svgs: the back arc passes behind Astro, the front arc in front. */
@@ -91,14 +92,8 @@ export function HeroAstro({ photo, alt, bubble }: { photo: string; alt: string; 
           <path d={FRONT_ARC} fill="none" stroke="var(--pink)" strokeWidth="6" strokeLinecap="round" />
         </svg>
         <div ref={orbiterRef} className={s.orbiter} aria-hidden>
-          {/* Catch the cookie for a shower of cookies (also decorative: no tab stop). */}
-          <CookieShape
-            className={s.astroCookie}
-            onPointerDown={(e) => {
-              boop(e.currentTarget, { rotate: 25, scale: 1.2 });
-              burst(e.currentTarget, { kind: ["cookie", "cookie", "crumb", "cookie"], count: 14, power: 460, spread: Math.PI * 1.7 });
-            }}
-          />
+          {/* Catch the cookie for a shower of cookies. */}
+          <CookieToy className={s.astroCookie} />
         </div>
         <StarShape className={s.astroStar} />
         <StarShape className={s.astroStar2} fill="var(--white)" strokeWidth={3.5} />
