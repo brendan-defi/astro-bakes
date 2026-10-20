@@ -14,7 +14,7 @@ type Params = Promise<{ locale: string }>;
 export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
   const { locale } = await params;
   if (!isLocale(locale)) return {};
-  return { title: `${getStrings(locale).faq} · Astro Bakes` };
+  return { title: getStrings(locale).faq }; // the layout template appends the site name (PR #9)
 }
 
 /** The FAQ (PRD 1.7). Copy lives in src/lib/faq.ts. */
