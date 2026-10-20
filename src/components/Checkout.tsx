@@ -171,12 +171,38 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
     },
   });
   const email = auth.email;
+  // Set while the customer's own way out of the code step is landing, by the back buttons (see `back`) or browser
+  // history; whichever step it lands on clears it. Until then the signed-in skip below holds off, so it can't replace
+  // the page they chose with delivery while that page loads. (History is caught here, during the event itself, ahead
+  // of the sign-in flow's own reaction to it, which settles busy a moment later.)
+  const leavingCode = useRef(false);
   useEffect(() => {
-    // Already signed in: the email steps don't apply, and shouldn't sit in history.
-    if (customer && (step === "signin" || step === "code")) go("delivery", true);
+    leavingCode.current = false;
+    if (step !== "code") return;
+    const onHistory = () => { leavingCode.current = true; };
+    window.addEventListener("popstate", onHistory);
+    return () => window.removeEventListener("popstate", onHistory);
+  }, [step]);
+  useEffect(() => {
+    // Already signed in: the email steps don't apply, and shouldn't sit in history. Not while a code is being checked,
+    // though: the session arrives with the check's re-render, and onSignedIn moves on once the "you're in" moment has
+    // played (busy lasts through it). Nor while the customer's chosen step is still landing. Coming back to these steps
+    // later skips them again.
+    if (customer && (step === "signin" || step === "code")) {
+      if (!auth.busy && !leavingCode.current) go("delivery", true);
+    }
     // The code screen without an address to verify (storage cleared): back to the email field.
     else if (!customer && step === "code" && auth.hydrated && !auth.pending) go("signin", true);
-  }, [customer, step, auth.hydrated, auth.pending, go]);
+  }, [customer, step, auth.hydrated, auth.pending, auth.busy, go]);
+  // The back buttons. Leaving the code step while a code is being checked or celebrated drops that attempt, which would
+  // otherwise move the customer on to delivery afterwards, and holds the signed-in skip until their step has landed.
+  const back = () => {
+    if (step === "code" && auth.busy) {
+      leavingCode.current = true;
+      auth.cancel();
+    }
+    go(prevOf(step));
+  };
 
   // ---- delivery ----
   const prefill = (c: CheckoutCustomer | null): Address => ({ name: c?.name ?? "", phone: c?.phone ?? "", postal: c?.postal ?? "", line1: c?.line1 ?? "", line2: c?.line2 ?? "" });
@@ -331,7 +357,7 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
       <header className={s.header}>
         <div className={`container ${s.headerRow}`}>
           {isCart && <Link href={home} aria-label={t.backToShop} className={s.iconBtn}><ArrowLeftIcon /></Link>}
-          {inCheckout && <button type="button" aria-label={t.back} onClick={() => go(prevOf(step))} className={s.iconBtn}><ArrowLeftIcon /></button>}
+          {inCheckout && <button type="button" aria-label={t.back} onClick={back} className={s.iconBtn}><ArrowLeftIcon /></button>}
           {step === "done" && <span className={s.spacer} />}
           <Logo href={home} label={t.home} size="sm" />
           {inCheckout && <StepList cls={s.stepsTop} />}
@@ -358,7 +384,7 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
         {/* ===== Main column ===== */}
         <main className={s.main}>
           {inCheckout && !holdExpired && (
-            <button type="button" onClick={() => go(prevOf(step))} className={s.backBtn}><ArrowLeftIcon size={18} />{backLabel}</button>
+            <button type="button" onClick={back} className={s.backBtn}><ArrowLeftIcon size={18} />{backLabel}</button>
           )}
 
           {holdExpired ? (
@@ -400,7 +426,7 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
                   <form className={s.form} onSubmit={(e) => { e.preventDefault(); void auth.verify(); }}>
                     <label htmlFor="co-code" className="label">{t.sixDigit}</label>
                     <div className={s.codeRow}>
-                      <CodeInput id="co-code" value={auth.code} onChange={auth.setCode} />
+                      <CodeInput id="co-code" value={auth.code} onChange={auth.setCode} doneLabel={t.codeAccepted} checking={auth.busy} done={auth.verified} misses={auth.misses} />
                       <button type="submit" className="btn btn-primary" disabled={auth.code.length !== 6 || auth.busy}>{t.continue}</button>
                     </div>
                   </form>

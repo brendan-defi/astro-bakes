@@ -1,9 +1,10 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CartProvider } from "@/lib/cart";
 import { boxes } from "@/lib/data";
 import { startHold } from "@/lib/hold";
 import { getStrings } from "@/lib/i18n";
+import { restoreMotion, stubAnimate, stubMatchMedia } from "@/test/motion";
 import { Checkout, type CheckoutCustomer, type CheckoutDrop } from "./Checkout";
 
 // The step comes from the URL; tests swap `nav.params` and rerender to move between steps.
@@ -11,7 +12,8 @@ const nav = vi.hoisted(() => ({ params: new URLSearchParams(), router: { push: (
 vi.mock("next/navigation", () => ({ useRouter: () => nav.router, usePathname: () => "/en/checkout", useSearchParams: () => nav.params }));
 const actions = vi.hoisted(() => ({ placeOrderAction: vi.fn(), startCheckoutAction: vi.fn() }));
 vi.mock("@/app/[locale]/checkout/actions", () => actions);
-vi.mock("@/app/[locale]/auth/actions", () => ({ requestSignInAction: vi.fn(), verifyCodeAction: vi.fn() }));
+const auth = vi.hoisted(() => ({ requestSignInAction: vi.fn(), verifyCodeAction: vi.fn() }));
+vi.mock("@/app/[locale]/auth/actions", () => auth);
 const particles = vi.hoisted(() => ({ celebrate: vi.fn(), burst: vi.fn(), flyTo: vi.fn() }));
 vi.mock("@/lib/particles", () => particles);
 
@@ -101,5 +103,104 @@ describe("Checkout celebration", () => {
     mountAt("done");
     await waitFor(() => expect(screen.getByText(/AB-003-001/)).toBeTruthy());
     expect(particles.celebrate).not.toHaveBeenCalled();
+  });
+});
+
+describe("Checkout sign-in", () => {
+  /** Signed out, on the code step, with an email already sent from this tab. */
+  function mountOnCodeStep() {
+    window.sessionStorage.setItem("ab-auth-pending", JSON.stringify({ email: "you@example.com", resendAt: 0 }));
+    const tree = (who: CheckoutCustomer | null) => (
+      <CartProvider dropId="drop-03" boxes={boxes} shippingFee={800}>
+        <Checkout locale="en" drop={drop} lineUrl="#" held={null} customer={who} />
+      </CartProvider>
+    );
+    nav.params = new URLSearchParams("step=code");
+    const view = render(tree(null));
+    return { goTo: (step: string, who: CheckoutCustomer | null) => { nav.params = new URLSearchParams(`step=${step}`); view.rerender(tree(who)); } };
+  }
+
+  it("skips the email steps for someone who just signed in with a code, even on coming back to them", async () => {
+    auth.verifyCodeAction.mockResolvedValue({ ok: true, next: "/en/checkout?step=delivery" });
+    const replace = vi.spyOn(nav.router, "replace");
+    try {
+      const { goTo } = mountOnCodeStep();
+      fireEvent.change(document.getElementById("co-code")!, { target: { value: "123456" } }); // submits itself
+      await waitFor(() => expect(replace).toHaveBeenCalledWith("/en/checkout?step=delivery"));
+      goTo("delivery", customer); // the check's re-render brings the session
+      replace.mockClear();
+      goTo("signin", customer); // Back to the email step, still signed in
+      expect(replace).toHaveBeenCalledWith("/en/checkout?step=delivery");
+    } finally {
+      replace.mockRestore();
+    }
+  });
+});
+
+describe("Checkout sign-in: leaving during the \"you're in\" moment", () => {
+  afterEach(() => {
+    restoreMotion();
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  /** Signed out on the code step, with motion: enters a good code and stops partway into the celebration. */
+  async function celebrating() {
+    stubMatchMedia(false);
+    stubAnimate();
+    vi.useFakeTimers();
+    auth.verifyCodeAction.mockReset().mockResolvedValue({ ok: true, next: "/en/checkout?step=delivery" });
+    const spies = { push: vi.spyOn(nav.router, "push"), replace: vi.spyOn(nav.router, "replace"), refresh: vi.spyOn(nav.router, "refresh") };
+    window.sessionStorage.setItem("ab-auth-pending", JSON.stringify({ email: "you@example.com", resendAt: 0 }));
+    const tree = (who: CheckoutCustomer | null) => (
+      <CartProvider dropId="drop-03" boxes={boxes} shippingFee={800}>
+        <Checkout locale="en" drop={drop} lineUrl="#" held={null} customer={who} />
+      </CartProvider>
+    );
+    nav.params = new URLSearchParams("step=code");
+    const view = render(tree(null));
+    const goTo = (query: string) => { nav.params = new URLSearchParams(query); view.rerender(tree(customer)); };
+    fireEvent.change(document.getElementById("co-code")!, { target: { value: "123456" } });
+    await act(async () => { await vi.advanceTimersByTimeAsync(600); }); // the code lands, submits, and is accepted
+    goTo("step=code"); // the check's re-render brings the session
+    expect(document.querySelector("[data-state]")?.getAttribute("data-state")).toBe("done");
+    for (const spy of Object.values(spies)) spy.mockClear();
+    return { ...spies, goTo };
+  }
+
+  /** Browser Back mid-moment, with the destination slow to land: the moment winds down while the code step still shows. */
+  async function backWhileLoading() {
+    const spies = await celebrating();
+    act(() => { window.dispatchEvent(new PopStateEvent("popstate")); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(50); });
+    expect(spies.replace).not.toHaveBeenCalled(); // nothing jumps ahead of the page they chose while it loads
+    return spies;
+  }
+
+  it("Back to the cart lands on the cart, even when it's slow to load", async () => {
+    const { replace, refresh, goTo } = await backWhileLoading();
+    goTo("");
+    await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+    expect(replace).not.toHaveBeenCalled();
+    expect(refresh).not.toHaveBeenCalled(); // the moment's own continuation never ran
+  });
+
+  it("Back to the email step skips it once it lands, since they're signed in, and nothing is stuck busy", async () => {
+    const { replace, refresh, goTo } = await backWhileLoading();
+    goTo("step=signin");
+    await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+    expect(refresh).not.toHaveBeenCalled();
+    expect(replace).toHaveBeenCalledExactlyOnceWith("/en/checkout?step=delivery");
+  });
+
+  it("the back button takes the customer where they asked, not on to delivery when the moment would have ended", async () => {
+    const { push, replace, refresh, goTo } = await celebrating();
+    fireEvent.click(screen.getByRole("button", { name: t.back }));
+    expect(push).toHaveBeenCalledWith("/en/checkout");
+    expect(replace).not.toHaveBeenCalled(); // nothing jumps ahead of their step while it loads
+    goTo("");
+    await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+    expect(replace).not.toHaveBeenCalled();
+    expect(refresh).not.toHaveBeenCalled();
   });
 });
