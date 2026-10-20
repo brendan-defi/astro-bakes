@@ -57,6 +57,10 @@ Magic link + 6-digit code (D13, PRD 2.1), in `src/lib/auth.ts` with the pure rul
 
 `/account` (PRD 2.3–2.6, `src/lib/account.ts`): order history with the customer-facing status (Confirmed → Baking → Shipped → Delivered, Baking derived from the drop state), each order's page with items, address, dates, gift message, payment method and tracking, **cancel while the drop is open** (D22: order cancelled, stock returned, a `refunds` row recorded as owed until Stripe issues it, cancellation email), **order again** when the open drop carries the same boxes, the notification toggle (PRD 2.4), and name/phone/address/language editing with the same postal rules as the checkout. The order confirmation email (PRD 3.6) is sent after an order is placed. Email change and account deletion (PRD 2.6) are not built yet.
 
+## Legal pages
+
+`/legal/tokushoho`, `/legal/privacy` and `/legal/terms` (PRD 1.8), linked from the footer and the checkout. The copy lives in `src/lib/legal.ts` in both languages (Japanese is the authoritative text; the English page says so) and is covered by `legal.test.ts`. The 特定商取引法 table takes the seller fields from settings (PRD 4.9): `legal_seller_name`, `legal_operator`, `legal_address`, `legal_phone`, plus `contact_email` and `shipping_fee`. Empty seller fields render the wording the law allows a sole proprietor, 「請求があったら遅滞なく開示します」, and the 運営責任者 row is left out; set the real values on the database before asking Stripe or PayPay to review the site, since their reviewers check that the page matches the account. The FAQ page the footer links to (PRD 1.7) is not built yet.
+
 ## Checkout write path
 
 `src/lib/checkout.ts` (server only; pure rules in `checkout-rules.ts`), exposed to the client as server actions in `src/app/[locale]/checkout/actions.ts`:

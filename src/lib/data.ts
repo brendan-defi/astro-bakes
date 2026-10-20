@@ -52,6 +52,11 @@ export interface Settings {
   contactEmail: string;
   /** Checkout hold TTL in minutes (D8). */
   holdMinutes: number;
+  /** 特商法 seller fields (PRD 4.9, rendered by 1.8). Empty means "disclosed on request", which the law allows a sole proprietor. */
+  legalSellerName: string;
+  legalOperator: string;
+  legalAddress: string;
+  legalPhone: string;
 }
 
 /** The signed-in customer, if any (PRD 2.3 / 2.4 / 2.5). */
@@ -75,6 +80,10 @@ export const settings: Settings = {
   lineUrl: "#notify",
   contactEmail: "hello@astrobakes.xyz",
   holdMinutes: 10,
+  legalSellerName: "",
+  legalOperator: "",
+  legalAddress: "",
+  legalPhone: "",
 };
 
 export const boxes: Box[] = [
