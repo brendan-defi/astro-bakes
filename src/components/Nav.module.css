@@ -1,4 +1,5 @@
-.nav { background: var(--lilac); padding: 14px var(--gutter) 0; }
+/* Above the hero (positioned, later in the page), so the tilted logo and its shadow aren't cut off where they hang below the nav. */
+.nav { position: relative; z-index: 1; background: var(--lilac); padding: 14px var(--gutter) 0; }
 .row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .logoSm { display: inline-flex; }
 .logoLg { display: none; }
