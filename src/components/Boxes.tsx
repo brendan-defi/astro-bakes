@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import type { Box, Drop, HomeData, Locale } from "@/lib/data";
 import { fmtDateTime, yen } from "@/lib/format";
 import { getStrings, type Strings } from "@/lib/i18n";
@@ -33,7 +34,7 @@ export function Boxes({ locale, home }: { locale: Locale; home: HomeData }) {
 /** Box card when no drop is open: no stepper, no stock, just when ordering opens. */
 function MenuCard({ box, upcoming, locale, t }: { box: Box; upcoming: Drop | null; locale: Locale; t: Strings }) {
   return (
-    <article className={`card ${s.box}`} style={{ transform: `rotate(${box.tilt})` }}>
+    <article className={`card ${s.box}`} style={{ "--tilt": box.tilt } as CSSProperties}>
       <BoxPhoto box={box} placeholder={`${t.productPhoto} — ${box.name}`}>
         <span className={`${s.boxTag} ${upcoming ? s.boxTagButter : ""}`}>{upcoming ? t.inNextDrop : t.backNextDrop}</span>
       </BoxPhoto>

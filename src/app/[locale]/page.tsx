@@ -50,7 +50,7 @@ export default async function HomePage({ params, searchParams }: { params: Promi
       <Hero locale={locale} home={home} />
       <Wave from="var(--lilac)" to="var(--ground)" />
       <Boxes locale={locale} home={home} />
-      <Wave from="var(--ground)" to="var(--butter)" />
+      <Wave from="var(--ground)" to="var(--butter)" reverse />
       <HowItWorks locale={locale} settings={settings} />
       <Story locale={locale} settings={settings} />
       <Notify locale={locale} settings={settings} viewer={home.viewer} />

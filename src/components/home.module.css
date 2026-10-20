@@ -28,10 +28,12 @@
 .astroOrbit { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
 .astroPhoto { position: absolute; inset: 11%; width: 78%; height: 78%; object-fit: cover; border-radius: 50%; border: var(--border); }
 .astroCookie { position: absolute; left: -4%; bottom: 2%; width: 23%; height: 23%; animation: ab-bob 4s ease-in-out infinite; }
-.astroStar { position: absolute; right: 0; top: 0; width: 15%; height: 15%; animation: ab-spin 14s linear infinite; }
-.astroStar2 { display: none; position: absolute; left: 2%; top: 8%; width: 9%; height: 9%; }
+.astroStar { position: absolute; right: 0; top: 0; width: 15%; height: 15%; animation: ab-spin 14s linear infinite, ab-twinkle 2.8s ease-in-out infinite; }
+.astroStar2 { display: none; position: absolute; left: 2%; top: 8%; width: 9%; height: 9%; animation: ab-twinkle 3.6s ease-in-out 1.2s infinite; }
+/* Springs in from its tail (bottom-left corner) once the page has settled. */
 .bubble {
-  position: absolute; right: -2%; bottom: 10%; transform: rotate(4deg);
+  position: absolute; right: -2%; bottom: 10%; transform: rotate(4deg); transform-origin: 0 100%;
+  animation: ab-pop-in 650ms var(--ease-spring) 500ms both;
   background: var(--white); border: var(--border); border-radius: 18px 18px 18px 4px;
   box-shadow: 3px 3px 0 var(--ink); padding: 6px 12px;
   font-weight: 900; font-size: 14px; line-height: 1.3; max-width: 46%;
@@ -107,7 +109,11 @@
 .boxesHead { display: flex; flex-direction: column; gap: 4px; }
 .boxesSub { font-size: 15px; font-weight: 700; }
 .boxGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); gap: 30px 24px; }
-.box { position: relative; display: flex; flex-direction: column; box-shadow: 6px 6px 0 var(--ink); }
+/* --tilt comes from the card's inline style; the separate rotate property lets hover straighten it. */
+.box {
+  position: relative; display: flex; flex-direction: column; box-shadow: 6px 6px 0 var(--ink); rotate: var(--tilt, 0deg);
+  transition: rotate 500ms var(--ease-spring), translate 500ms var(--ease-spring), box-shadow 200ms var(--ease-out);
+}
 .boxPhoto {
   position: relative; height: 190px; border-radius: 25px 25px 0 0; border-bottom: var(--border);
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
@@ -222,6 +228,7 @@
 .p2 { transform: rotate(3deg) translateY(14px); box-shadow: 4px 4px 0 var(--aqua); }
 .p3 { transform: rotate(2deg); box-shadow: 4px 4px 0 var(--butter); }
 .p4 { transform: rotate(-3deg) translateY(14px); box-shadow: 4px 4px 0 var(--lilac); }
+.polaroid { transition: translate 450ms var(--ease-spring), scale 450ms var(--ease-spring); }
 @media (min-width: 768px) {
   .story { padding: 80px var(--gutter) 96px; }
   .storyInner { gap: 64px; }
@@ -288,6 +295,12 @@
   .footerLogo { font-size: 34px; }
   .footerNav { display: flex; flex-wrap: wrap; gap: 0 24px; }
   .copy { flex-basis: 100%; }
+}
+
+/* ===== Hover lifts (mouse and trackpad only; phones have no hover) ===== */
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .box:hover { rotate: 0deg; translate: 0 -6px; box-shadow: 10px 12px 0 var(--ink); }
+  .polaroid:hover { translate: 0 -10px; scale: 1.06; z-index: 1; }
 }
 
 /* Titan One has no Japanese glyphs, so JA labels set in it use Zen Maru Gothic 900 (handoff p.13). */

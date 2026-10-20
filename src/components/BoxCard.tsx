@@ -1,5 +1,6 @@
 "use client";
 
+import type { CSSProperties } from "react";
 import type { Box, Locale } from "@/lib/data";
 import { yen } from "@/lib/format";
 import { getStrings } from "@/lib/i18n";
@@ -16,7 +17,7 @@ export function BoxCard({ box, locale }: { box: Box; locale: Locale }) {
   const qty = cart.qty[box.id] ?? 0;
   const soldOut = box.left === 0;
   return (
-    <article className={`card ${s.box}`} style={{ transform: `rotate(${box.tilt})` }}>
+    <article className={`card ${s.box}`} style={{ "--tilt": box.tilt } as CSSProperties}>
       <BoxPhoto box={box} placeholder={`${t.productPhoto} — ${box.name}`} />
       {!soldOut && (
         <div className={s.burst} aria-hidden>
