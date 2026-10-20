@@ -38,10 +38,9 @@ export function Nav({ locale, showCart = false, viewer = anonymousViewer }: { lo
             </Link>
           )}
           {viewer.signedIn ? (
-            // TODO: link to the account page (PRD 2.3) once it exists
-            <Link href="#top" aria-label={t.yourAccount} className={styles.avatar}>{viewer.initial}</Link>
+            <Link href={`/${locale}/account`} aria-label={t.yourAccount} className={styles.avatar}>{viewer.initial}</Link>
           ) : (
-            <Link href="#top" className={styles.signIn}>{t.signIn}</Link>
+            <Link href={`/${locale}/sign-in`} className={styles.signIn}>{t.signIn}</Link>
           )}
         </div>
       </div>

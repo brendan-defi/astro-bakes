@@ -69,7 +69,7 @@ Settled constraints that the components below are written against. Referenced as
 
 | # | Decision |
 |---|---|
-| D23 | Email is the transactional channel, sent via Amazon SES. |
+| D23 | Email is the transactional channel, sent via Resend (provisioned through the Vercel Marketplace; Resend itself runs on Amazon SES). Changed from Amazon SES on 2026-10-19 — see changelog. |
 | D24 | LINE in v1 is a broadcast channel: "notify me on LINE" means adding the Astro Bakes LINE Official Account, and announcements go out from LINE's own manager. Per-account LINE linking is v1.1. |
 | D25 | Admin is desktop-only, with a single admin account (the owner's). |
 
@@ -176,7 +176,7 @@ Three static pages, both languages. Content is the owner's responsibility; the s
 
 **Data.** Customer (email, email_verified_at, locale, created_at), AuthToken (token_hash, code_hash, expires_at, used_at). Session: long-lived cookie (90 days), explicit sign-out.
 
-**Provider.** Amazon SES (D23). Deliverability to docomo/au/SoftBank carrier addresses is the Japan-specific risk — set up SPF/DKIM/DMARC on the sending domain from day one and test against real carrier addresses before the first drop.
+**Provider.** Resend (D23). Deliverability to docomo/au/SoftBank carrier addresses is the Japan-specific risk — set up SPF/DKIM/DMARC on the sending domain from day one and test against real carrier addresses before the first drop.
 
 ### [~] 2.2 Where sign-up happens
 
@@ -471,7 +471,7 @@ Every customer-facing text field is stored in both languages (`name_ja`, `name_e
 | New order | order → paid | owner | Email | internal, toggle |
 | Oversell flag / webhook failure | 3.8 race, Stripe webhook error | owner | Email | internal |
 
-All email goes out through SES (D23). Marketing emails carry sender identity and an unsubscribe link (特定電子メール法) and a `List-Unsubscribe` header; transactional emails don't offer unsubscribe. Every message exists in JA and EN; the recipient's locale picks. All sends logged.
+All email goes out through Resend (D23). Marketing emails carry sender identity and an unsubscribe link (特定電子メール法) and a `List-Unsubscribe` header; transactional emails don't offer unsubscribe. Every message exists in JA and EN; the recipient's locale picks. All sends logged.
 
 ### [~] 5.4 Auth & roles
 
@@ -519,10 +519,11 @@ Not decisions — things to verify when the relevant piece is built.
 - PayPay is enabled on the Stripe account (3.5).
 - B2クラウド CSV column layout matches the current template (4.6).
 - Yamato service type (常温 / クール) entered in settings (4.9).
-- SES deliverability tested against docomo/au/SoftBank addresses before the first drop (2.1).
+- Email deliverability (Resend, D23) tested against docomo/au/SoftBank addresses before the first drop (2.1).
 
 ---
 
 ## Changelog
 
+- **2026-10-19** — D23 changed from Amazon SES to Resend, provisioned through the Vercel Marketplace: one-command setup with the API key injected into the project, versus an AWS account, IAM credentials and a sandbox-exit request for SES. The sending domain still needs DKIM/SPF at GoDaddy and the carrier-address deliverability test before the first drop; the email transport sits behind one interface so SES stays available as a fallback if volume or cost ever warrant it.
 - **2026-10-06** — v0 component sketch written; fleshed out to v1 the same day; all decisions and open questions reviewed and settled (delivery date fixed to one ship date per drop; per-customer limit of 5 replaces a per-order max; exact stock counts; SES for email).
