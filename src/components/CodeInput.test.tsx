@@ -93,6 +93,22 @@ describe("CodeInput: entering the code", () => {
     act(() => { vi.advanceTimersByTime(1000); });
     expect(onSubmit).toHaveBeenCalledExactlyOnceWith("123456");
   });
+
+  it("drops a pending automatic submit once the code is submitted some other way, or is being checked", () => {
+    stubMatchMedia(false);
+    stubAnimate();
+    vi.useFakeTimers();
+    const { input, onSubmit, update } = mount();
+    paste(input, "123456");
+    fireEvent.submit(input.form!); // Continue or Enter, before the cascade has landed
+    act(() => { vi.advanceTimersByTime(1000); });
+    expect(onSubmit).toHaveBeenCalledOnce();
+
+    paste(input, "654321");
+    update({ checking: true });
+    act(() => { vi.advanceTimersByTime(1000); });
+    expect(onSubmit).toHaveBeenCalledOnce();
+  });
 });
 
 describe("CodeInput: the tiles", () => {

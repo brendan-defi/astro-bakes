@@ -172,14 +172,15 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
   });
   const email = auth.email;
   useEffect(() => {
-    // Already signed in: the email steps don't apply, and shouldn't sit in history. Not while a code is being checked or
-    // celebrated, though: the session arrives with the check's re-render, and onSignedIn moves on once the moment has played.
+    // Already signed in: the email steps don't apply, and shouldn't sit in history. Not while a code is being checked,
+    // though: the session arrives with the check's re-render, and onSignedIn moves on once the "you're in" moment has
+    // played (busy lasts through it). Coming back to these steps later skips them again.
     if (customer && (step === "signin" || step === "code")) {
-      if (!auth.busy && !auth.verified) go("delivery", true);
+      if (!auth.busy) go("delivery", true);
     }
     // The code screen without an address to verify (storage cleared): back to the email field.
     else if (!customer && step === "code" && auth.hydrated && !auth.pending) go("signin", true);
-  }, [customer, step, auth.hydrated, auth.pending, auth.busy, auth.verified, go]);
+  }, [customer, step, auth.hydrated, auth.pending, auth.busy, go]);
 
   // ---- delivery ----
   const prefill = (c: CheckoutCustomer | null): Address => ({ name: c?.name ?? "", phone: c?.phone ?? "", postal: c?.postal ?? "", line1: c?.line1 ?? "", line2: c?.line2 ?? "" });

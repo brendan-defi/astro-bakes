@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { motionOK } from "@/lib/motion";
 import { burst } from "@/lib/particles";
 import { CODE_LENGTH, cleanCode, codeInPaste } from "@/lib/sign-in-code";
@@ -52,6 +52,11 @@ export function CodeInput({ id, value, onChange, doneLabel, checking = false, do
   const nextKey = useRef(0);
   // Submit only after the completed code has rendered, so the form's handler sees it.
   const submitWhenRendered = useRef(false);
+  const autoSubmit = useRef<number | undefined>(undefined);
+  const cancelAutoSubmit = useCallback(() => {
+    window.clearTimeout(autoSubmit.current);
+    autoSubmit.current = undefined;
+  }, []);
 
   const commit = (text: string) => {
     const code = cleanCode(text);
@@ -78,9 +83,20 @@ export function CodeInput({ id, value, onChange, doneLabel, checking = false, do
     // Let a pasted code finish landing first, so checking (and the green flip) come after it rather than over it.
     const submit = () => ref.current?.form?.requestSubmit();
     if (!motionOK()) return submit();
-    const t = window.setTimeout(submit, (CODE_LENGTH - 1 - stamps.from) * CASCADE_MS + LAND_MS);
-    return () => window.clearTimeout(t);
-  }, [value, stamps.from]);
+    autoSubmit.current = window.setTimeout(submit, (CODE_LENGTH - 1 - stamps.from) * CASCADE_MS + LAND_MS);
+    return cancelAutoSubmit;
+  }, [value, stamps.from, cancelAutoSubmit]);
+
+  // Any submission (Continue, Enter, or the automatic one) settles the code, and so does checking or accepting it: a
+  // pending automatic submit mustn't send the same code again, which a quick "wrong code" would leave it free to do.
+  useEffect(() => {
+    const form = ref.current?.form;
+    form?.addEventListener("submit", cancelAutoSubmit);
+    return () => form?.removeEventListener("submit", cancelAutoSubmit);
+  }, [cancelAutoSubmit]);
+  useEffect(() => {
+    if (checking || done) cancelAutoSubmit();
+  }, [checking, done, cancelAutoSubmit]);
 
   useEffect(() => {
     if (!misses) return;

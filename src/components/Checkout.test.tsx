@@ -11,7 +11,8 @@ const nav = vi.hoisted(() => ({ params: new URLSearchParams(), router: { push: (
 vi.mock("next/navigation", () => ({ useRouter: () => nav.router, usePathname: () => "/en/checkout", useSearchParams: () => nav.params }));
 const actions = vi.hoisted(() => ({ placeOrderAction: vi.fn(), startCheckoutAction: vi.fn() }));
 vi.mock("@/app/[locale]/checkout/actions", () => actions);
-vi.mock("@/app/[locale]/auth/actions", () => ({ requestSignInAction: vi.fn(), verifyCodeAction: vi.fn() }));
+const auth = vi.hoisted(() => ({ requestSignInAction: vi.fn(), verifyCodeAction: vi.fn() }));
+vi.mock("@/app/[locale]/auth/actions", () => auth);
 const particles = vi.hoisted(() => ({ celebrate: vi.fn(), burst: vi.fn(), flyTo: vi.fn() }));
 vi.mock("@/lib/particles", () => particles);
 
@@ -101,5 +102,36 @@ describe("Checkout celebration", () => {
     mountAt("done");
     await waitFor(() => expect(screen.getByText(/AB-003-001/)).toBeTruthy());
     expect(particles.celebrate).not.toHaveBeenCalled();
+  });
+});
+
+describe("Checkout sign-in", () => {
+  /** Signed out, on the code step, with an email already sent from this tab. */
+  function mountOnCodeStep() {
+    window.sessionStorage.setItem("ab-auth-pending", JSON.stringify({ email: "you@example.com", resendAt: 0 }));
+    const tree = (who: CheckoutCustomer | null) => (
+      <CartProvider dropId="drop-03" boxes={boxes} shippingFee={800}>
+        <Checkout locale="en" drop={drop} lineUrl="#" held={null} customer={who} />
+      </CartProvider>
+    );
+    nav.params = new URLSearchParams("step=code");
+    const view = render(tree(null));
+    return { goTo: (step: string, who: CheckoutCustomer | null) => { nav.params = new URLSearchParams(`step=${step}`); view.rerender(tree(who)); } };
+  }
+
+  it("skips the email steps for someone who just signed in with a code, even on coming back to them", async () => {
+    auth.verifyCodeAction.mockResolvedValue({ ok: true, next: "/en/checkout?step=delivery" });
+    const replace = vi.spyOn(nav.router, "replace");
+    try {
+      const { goTo } = mountOnCodeStep();
+      fireEvent.change(document.getElementById("co-code")!, { target: { value: "123456" } }); // submits itself
+      await waitFor(() => expect(replace).toHaveBeenCalledWith("/en/checkout?step=delivery"));
+      goTo("delivery", customer); // the check's re-render brings the session
+      replace.mockClear();
+      goTo("signin", customer); // Back to the email step, still signed in
+      expect(replace).toHaveBeenCalledWith("/en/checkout?step=delivery");
+    } finally {
+      replace.mockRestore();
+    }
   });
 });
