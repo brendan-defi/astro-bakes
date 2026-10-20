@@ -29,6 +29,13 @@
       "when": 1792396089658,
       "tag": "0003_unknown_maggott",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1792461428681,
+      "tag": "0004_nifty_namorita",
+      "breakpoints": true
     }
   ]
 }

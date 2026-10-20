@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { anonymousViewer, type Locale, type Settings, type Viewer } from "@/lib/data";
 import { getStrings } from "@/lib/i18n";
 import { NotifyForm } from "./NotifyForm";
@@ -13,7 +14,7 @@ export function Notify({ locale, settings, viewer = anonymousViewer }: { locale:
           <h2 className="display h2">{t.notifyTitle}</h2>
           <p className={s.notifySub}>{t.notifySub}</p>
           {viewer.signedIn && viewer.optedIn ? (
-            <div className={s.onListText} role="status">{t.onListAccount}</div>
+            <div className={s.onListText} role="status">{t.onListAccount} <Link href={`/${locale}/account`}>{t.accountTitle} →</Link></div>
           ) : (
             <NotifyForm locale={locale} id="notify-email" variant="section" label={t.emailAddress} button={t.notifyCta} consent={t.notifyConsent} />
           )}

@@ -146,6 +146,24 @@ export const sessions = pgTable(
   (t) => [index("sessions_customer_idx").on(t.customerId)],
 );
 
+/** Money owed or returned to a customer (PRD 5.1, D22). issued_at is null until Stripe confirms the refund. */
+export const refunds = pgTable(
+  "refunds",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    orderId: uuid()
+      .notNull()
+      .references(() => orders.id, { onDelete: "cascade" }),
+    amount: integer().notNull(),
+    /** customer_cancelled, admin_cancelled, damage, non_delivery … */
+    reason: text().notNull(),
+    stripeRefundId: text().unique(),
+    issuedAt: timestamp({ withTimezone: true }),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("refunds_order_idx").on(t.orderId)],
+);
+
 /** Every email we send (PRD 5.1, 5.3): what, to whom, when, and the provider's id or the error. */
 export const notificationLog = pgTable(
   "notification_log",
@@ -407,10 +425,15 @@ export const ordersRelations = relations(orders, ({ one, many }) => ({
   drop: one(drops, { fields: [orders.dropId], references: [drops.id] }),
   customer: one(customers, { fields: [orders.customerId], references: [customers.id] }),
   items: many(orderItems),
+  refunds: many(refunds),
+}));
+export const refundsRelations = relations(refunds, ({ one }) => ({
+  order: one(orders, { fields: [refunds.orderId], references: [orders.id] }),
 }));
 export const orderItemsRelations = relations(orderItems, ({ one }) => ({
   order: one(orders, { fields: [orderItems.orderId], references: [orders.id] }),
   dropBox: one(dropBoxes, { fields: [orderItems.dropBoxId], references: [dropBoxes.id] }),
+  box: one(boxes, { fields: [orderItems.boxId], references: [boxes.id] }),
 }));
 export const boxesRelations = relations(boxes, ({ many }) => ({ dropBoxes: many(dropBoxes), boxItems: many(boxItems) }));
 export const boxItemsRelations = relations(boxItems, ({ one }) => ({
@@ -432,3 +455,4 @@ export type CartRow = typeof carts.$inferSelect;
 export type InventoryHoldRow = typeof inventoryHolds.$inferSelect;
 export type OrderRow = typeof orders.$inferSelect;
 export type OrderItemRow = typeof orderItems.$inferSelect;
+export type RefundRow = typeof refunds.$inferSelect;

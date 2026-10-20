@@ -1,0 +1,208 @@
+import "server-only";
+import { and, desc, eq, sql } from "drizzle-orm";
+import { getDb, type Db } from "@/db";
+import { addresses, customers, dropBoxes, drops, inventoryHolds, orders, refunds } from "@/db/schema";
+import { effectiveState, type Locale } from "./data";
+import { validateDelivery, type DeliveryInput } from "./checkout-rules";
+import { sendEmail } from "./email";
+import { orderCancelledEmail, orderConfirmationEmail, type OrderEmailData } from "./email-templates";
+import { fmtDate, fmtDateTime } from "./format";
+import { canCancel, orderStatus, type OrderStatus } from "./order-status";
+import { loadDrops } from "./drops";
+
+/**
+ * The account area (PRD 2.3–2.6, 3.8, D22): profile and saved address,
+ * notification preference, order history, cancellation while the drop is
+ * open, and the order emails. Server only; everything is scoped to the
+ * signed-in customer's id.
+ */
+
+type Conn = Db | Parameters<Parameters<Db["transaction"]>[0]>[0];
+const DAY = 86_400_000;
+const liveState = (d: { state: Drops["state"]; openAt: Date; closeAt: Date; shipAt: Date }, now = new Date()) =>
+  effectiveState({ ...d, arriveAt: new Date(d.shipAt.getTime() + DAY) }, now);
+type Drops = typeof drops.$inferSelect;
+
+// ---------------------------------------------------------------- orders
+
+export interface OrderLine {
+  name: string;
+  slug: string;
+  qty: number;
+  unitPrice: number;
+  lineTotal: number;
+}
+
+export interface OrderSummary {
+  number: string;
+  placedAt: Date;
+  dropName: string;
+  status: OrderStatus;
+  total: number;
+  lines: OrderLine[];
+  canCancel: boolean;
+}
+
+export interface OrderDetail extends OrderSummary {
+  dropSlug: string;
+  shipToName: string;
+  phone: string;
+  addressLine: string;
+  subtotal: number;
+  shippingFee: number;
+  giftMessage: string | null;
+  paymentMethod: "card" | "paypay" | null;
+  trackingNumber: string | null;
+  shipAt: Date;
+  arriveAt: Date;
+  closeAt: Date;
+  refund: { amount: number; issued: boolean } | null;
+  /** The same boxes in the currently open drop, when there is one (PRD 2.5 "Order again"). */
+  reorder: { dropId: string; items: Record<string, number> } | null;
+}
+
+const addressLine = (o: { postalCode: string; prefecture: string; city: string; town: string | null; line1: string; line2: string | null }) =>
+  `〒${o.postalCode.slice(0, 3)}-${o.postalCode.slice(3)} ${o.prefecture}${o.city}${o.town ?? ""}${o.line1}${o.line2 ? ` ${o.line2}` : ""}`;
+
+function toSummary(o: typeof orders.$inferSelect & { drop: Drops; items: { nameEn: string; nameJa: string | null; qty: number; unitPrice: number; box: { slug: string } }[] }, locale: Locale, now: Date): OrderSummary {
+  const dropState = liveState(o.drop, now);
+  return {
+    number: o.number,
+    placedAt: o.createdAt,
+    dropName: (locale === "ja" && o.drop.nameJa) || o.drop.nameEn,
+    status: orderStatus(o.state, dropState),
+    total: o.total,
+    lines: o.items.map((i) => ({ name: (locale === "ja" && i.nameJa) || i.nameEn, slug: i.box.slug, qty: i.qty, unitPrice: i.unitPrice, lineTotal: i.qty * i.unitPrice })),
+    canCancel: canCancel(o.state, dropState),
+  };
+}
+
+const withItems = { drop: true, items: { with: { box: { columns: { slug: true } } } } } as const;
+
+/** Newest first (PRD 2.5). */
+export async function loadOrders(customerId: string, locale: Locale): Promise<OrderSummary[]> {
+  const rows = await getDb().query.orders.findMany({ where: eq(orders.customerId, customerId), orderBy: [desc(orders.createdAt)], with: withItems });
+  const now = new Date();
+  return rows.map((o) => toSummary(o, locale, now));
+}
+
+export async function loadOrder(customerId: string, number: string, locale: Locale): Promise<OrderDetail | null> {
+  const o = await getDb().query.orders.findFirst({ where: and(eq(orders.customerId, customerId), eq(orders.number, number)), with: { ...withItems, refunds: true } });
+  if (!o) return null;
+  const now = new Date();
+  const summary = toSummary(o, locale, now);
+  // "Order again": the same boxes in whatever drop is open right now, if it carries them all.
+  const open = (await loadDrops(locale)).find((d) => effectiveState(d, now) === "open") ?? null;
+  const onSale = open ? new Set(open.boxes.map((b) => b.id)) : null;
+  const reorder = open && onSale && summary.lines.every((l) => onSale.has(l.slug)) ? { dropId: open.id, items: Object.fromEntries(summary.lines.map((l) => [l.slug, l.qty])) } : null;
+  const refund = o.refunds[0] ? { amount: o.refunds[0].amount, issued: !!o.refunds[0].issuedAt } : null;
+  return {
+    ...summary,
+    dropSlug: o.drop.slug,
+    shipToName: o.shipToName,
+    phone: o.phone,
+    addressLine: addressLine(o),
+    subtotal: o.subtotal,
+    shippingFee: o.shippingFee,
+    giftMessage: o.giftMessage,
+    paymentMethod: o.paymentMethodType,
+    trackingNumber: o.trackingNumber,
+    shipAt: o.drop.shipAt,
+    arriveAt: new Date(o.drop.shipAt.getTime() + DAY),
+    closeAt: o.drop.closeAt,
+    refund,
+    reorder,
+  };
+}
+
+// ---------------------------------------------------------------- cancel (D22)
+
+export type CancelResult = { ok: true; refunded: boolean } | { ok: false; error: "not_found" | "closed" | "not_cancellable" };
+
+/** Self-serve cancellation: full refund owed, stock returned, email sent. Only while the drop is open. */
+export async function cancelOrder(customerId: string, number: string): Promise<CancelResult> {
+  const db = getDb();
+  const result = await db.transaction(async (tx) => {
+    const [o] = await tx.select().from(orders).where(and(eq(orders.customerId, customerId), eq(orders.number, number))).for("update");
+    if (!o) return { ok: false as const, error: "not_found" as const };
+    const [drop] = await tx.select().from(drops).where(eq(drops.id, o.dropId)).for("update");
+    const dropState = liveState(drop);
+    if (!canCancel(o.state, dropState)) return { ok: false as const, error: dropState === "open" ? ("not_cancellable" as const) : ("closed" as const) };
+    const now = new Date();
+    const wasPaid = o.state === "paid";
+    // Stock goes back: sold units for a paid order, held units for one still awaiting payment.
+    if (wasPaid) {
+      const items = await tx.query.orderItems.findMany({ where: (t, { eq }) => eq(t.orderId, o.id) });
+      for (const it of items) {
+        await tx.execute(sql`select id from ${dropBoxes} where id = ${it.dropBoxId} for update`);
+        await tx.update(dropBoxes).set({ soldQty: sql`greatest(0, ${dropBoxes.soldQty} - ${it.qty})` }).where(eq(dropBoxes.id, it.dropBoxId));
+      }
+      // The refund itself is issued through Stripe (payment PR); until then it is recorded as owed.
+      await tx.insert(refunds).values({ orderId: o.id, amount: o.total, reason: "customer_cancelled" });
+    } else {
+      await tx.delete(inventoryHolds).where(eq(inventoryHolds.orderId, o.id));
+    }
+    await tx.update(orders).set({ state: "cancelled", cancelledAt: now, updatedAt: now }).where(eq(orders.id, o.id));
+    return { ok: true as const, refunded: wasPaid, orderId: o.id, total: o.total, locale: o.locale };
+  });
+  if (!result.ok) return result;
+  const customer = await db.query.customers.findFirst({ where: eq(customers.id, customerId), columns: { email: true } });
+  if (customer) {
+    await sendEmail({ ...orderCancelledEmail({ locale: result.locale, number, total: result.total, refunded: result.refunded }), to: customer.email, type: "order_cancelled", idempotencyKey: `order-cancelled/${result.orderId}`, customerId, orderId: result.orderId });
+  }
+  return { ok: true, refunded: result.refunded };
+}
+
+// ---------------------------------------------------------------- confirmation email (PRD 3.6)
+
+/** Sent once an order is paid; called after the placing transaction commits (and from the Stripe webhook later). */
+export async function sendOrderConfirmation(orderId: string): Promise<void> {
+  const o = await getDb().query.orders.findFirst({ where: eq(orders.id, orderId), with: { ...withItems, customer: { columns: { email: true } } } });
+  if (!o) return;
+  const locale = o.locale;
+  const data: OrderEmailData = {
+    number: o.number,
+    lines: o.items.map((i) => ({ name: (locale === "ja" && i.nameJa) || i.nameEn, qty: i.qty, lineTotal: i.qty * i.unitPrice })),
+    subtotal: o.subtotal,
+    shippingFee: o.shippingFee,
+    total: o.total,
+    shipToName: o.shipToName,
+    addressLine: addressLine(o),
+    shipDate: fmtDate(o.drop.shipAt, locale),
+    arriveDate: fmtDate(new Date(o.drop.shipAt.getTime() + DAY), locale),
+    closeDateTime: fmtDateTime(o.drop.closeAt, locale),
+    giftMessage: o.giftMessage,
+  };
+  await sendEmail({ ...orderConfirmationEmail({ locale, order: data }), to: o.customer.email, type: "order_confirmation", idempotencyKey: `order-confirmation/${o.id}`, customerId: o.customerId, orderId: o.id });
+}
+
+// ---------------------------------------------------------------- profile (PRD 2.3, 2.4, 2.6)
+
+export interface ProfileInput {
+  name: string;
+  phone: string;
+  locale: Locale;
+  address: DeliveryInput;
+}
+
+export type ProfileResult = { ok: true } | { ok: false; error: "invalid"; errors: string[] };
+
+export async function updateProfile(customerId: string, input: ProfileInput): Promise<ProfileResult> {
+  const delivery = validateDelivery({ ...input.address, name: input.name, phone: input.phone });
+  if (!delivery.ok || !delivery.hit) return { ok: false, error: "invalid", errors: delivery.errors };
+  const hit = delivery.hit;
+  const now = new Date();
+  const locale: Locale = input.locale === "ja" ? "ja" : "en";
+  await getDb().transaction(async (tx) => {
+    await tx.update(customers).set({ name: input.name.trim(), phone: input.phone.trim(), locale, updatedAt: now }).where(eq(customers.id, customerId));
+    const saved = { customerId, postalCode: delivery.postal, prefecture: hit.prefecture, city: hit.city, town: hit.town, line1: input.address.line1.trim(), line2: input.address.line2?.trim() || null, wardCode: hit.wardCode };
+    await tx.insert(addresses).values(saved).onConflictDoUpdate({ target: addresses.customerId, set: { ...saved, updatedAt: now } });
+  });
+  return { ok: true };
+}
+
+/** "Email me when a drop is announced or opens" (PRD 2.4). */
+export async function setMarketingOptIn(customerId: string, optIn: boolean): Promise<void> {
+  await getDb().update(customers).set({ marketingOptIn: optIn, updatedAt: new Date() }).where(eq(customers.id, customerId));
+}
+
