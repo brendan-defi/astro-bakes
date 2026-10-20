@@ -16,6 +16,8 @@ export interface ProfileValues { name: string; phone: string; locale: Locale; po
 export function ProfileForm({ locale, initial }: { locale: Locale; initial: ProfileValues }) {
   const t = getStrings(locale);
   const router = useRouter();
+  // The address form is Japanese-format in both languages (D2); English labels carry the Japanese field name too.
+  const jaHint = (label: string) => locale === "en" && <span className="ja" lang="ja">{label}</span>;
   const [v, setV] = useState(initial);
   const [hit, setHit] = useState<PostalHit | null>(() => (initial.postal ? lookupPostal(initial.postal) : null));
   const [postalTried, setPostalTried] = useState(!!initial.postal);
@@ -50,16 +52,16 @@ export function ProfileForm({ locale, initial }: { locale: Locale; initial: Prof
     <form className={s.form14} onSubmit={submit} noValidate>
       <div className={s.fields}>
         <div className="field">
-          <label htmlFor="pf-name" className="label">{t.recipientName} <span className="ja" lang="ja">お名前</span></label>
+          <label htmlFor="pf-name" className="label">{t.recipientName} {jaHint("お名前")}</label>
           <input id="pf-name" type="text" autoComplete="name" required className={`input ${touched && !v.name.trim() ? s.inputError : ""}`} value={v.name} onChange={(e) => set({ name: e.target.value })} />
         </div>
         <div className="field">
-          <label htmlFor="pf-phone" className="label">{t.phone} <span className="ja" lang="ja">電話番号</span></label>
+          <label htmlFor="pf-phone" className="label">{t.phone} {jaHint("電話番号")}</label>
           <input id="pf-phone" type="tel" autoComplete="tel" required className={`input ${touched && !v.phone.trim() ? s.inputError : ""}`} value={v.phone} onChange={(e) => set({ phone: e.target.value })} />
           <span className="hint">{t.phoneHint}</span>
         </div>
         <div className="field">
-          <label htmlFor="pf-postal" className="label">{t.postalCode} <span className="ja" lang="ja">郵便番号</span></label>
+          <label htmlFor="pf-postal" className="label">{t.postalCode} {jaHint("郵便番号")}</label>
           <div className={s.postalRow}>
             <input id="pf-postal" type="text" inputMode="numeric" autoComplete="postal-code" className="input" value={v.postal}
               onChange={(e) => { set({ postal: e.target.value }); setPostalTried(false); setHit(null); }}
@@ -74,7 +76,7 @@ export function ProfileForm({ locale, initial }: { locale: Locale; initial: Prof
             <>
               <div className={s.addr}>{hit.prefecture} {hit.city} {hit.town}</div>
               {hit.deliverable
-                ? <div className={s.okPill}><CheckIcon size={15} strokeWidth={3} />{t.weDeliverTo(hit.wardEn)}</div>
+                ? <div className={s.okPill}><CheckIcon size={15} strokeWidth={3} />{t.weDeliverTo(locale === "ja" ? hit.city : hit.wardEn)}</div>
                 : <div className={s.badPill}><WarningIcon size={15} />{t.outsideArea}</div>}
             </>
           ) : (
@@ -82,11 +84,11 @@ export function ProfileForm({ locale, initial }: { locale: Locale; initial: Prof
           )}
         </div>
         <div className="field">
-          <label htmlFor="pf-line1" className="label">{t.streetNumber} <span className="ja" lang="ja">番地</span></label>
+          <label htmlFor="pf-line1" className="label">{t.streetNumber} {jaHint("番地")}</label>
           <input id="pf-line1" type="text" autoComplete="address-line1" required className={`input ${touched && !v.line1.trim() ? s.inputError : ""}`} value={v.line1} onChange={(e) => set({ line1: e.target.value })} />
         </div>
         <div className="field">
-          <label htmlFor="pf-line2" className="label">{t.building} <span className="ja" lang="ja">建物名・部屋番号</span> <span className="ja">{t.optional}</span></label>
+          <label htmlFor="pf-line2" className="label">{t.building} {jaHint("建物名・部屋番号")} <span className="ja">{t.optional}</span></label>
           <input id="pf-line2" type="text" autoComplete="address-line2" placeholder={t.buildingPlaceholder} className="input" value={v.line2} onChange={(e) => set({ line2: e.target.value })} />
         </div>
         <div className="field">

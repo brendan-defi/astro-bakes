@@ -68,8 +68,11 @@ p { margin: 0; }
   font-weight: 400;
 }
 :lang(ja) .display { font-family: var(--font-body), sans-serif; font-weight: 900; }
+/* Break Japanese headings and buttons between phrases, not mid-word (Chromium; others wrap as before). */
+:lang(ja) :is(.display, .btn) { word-break: auto-phrase; }
 .logo-face { font-family: var(--font-logo), cursive; font-weight: 400; }
 .eyebrow { font-family: var(--font-display), sans-serif; letter-spacing: 0.08em; text-transform: uppercase; }
+:lang(ja) .eyebrow { font-family: var(--font-body), sans-serif; font-weight: 900; }
 .h1 { font-size: var(--fs-h1); line-height: 1.02; letter-spacing: -0.01em; }
 .h2 { font-size: var(--fs-h2); line-height: 1.02; }
 .w7 { font-weight: 700; }

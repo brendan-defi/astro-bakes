@@ -47,7 +47,7 @@ function MenuCard({ box, upcoming, locale, t }: { box: Box; upcoming: Drop | nul
         <p className={s.boxContents}>{box.contents}</p>
         <div className={s.allergens}>
           <span className={s.lab}>{t.contains}</span>
-          {box.allergens.map((a) => <span key={a} className="chip-sm">{a}</span>)}
+          {box.allergens.map((a) => <span key={a} className="chip-sm">{t.allergen(a)}</span>)}
         </div>
         <div className={s.menuFoot}>
           <ClockIcon size={18} />

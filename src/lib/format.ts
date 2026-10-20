@@ -24,19 +24,23 @@ export function fmtTime(d: Date, locale: Locale = "en"): string {
   return locale === "ja" ? t : `${t} JST`;
 }
 
-/** "Sun, Oct 18 · 21:00 JST" */
+/** "Sun, Oct 18 · 21:00 JST" / 「10月18日(日) 21:00」 (handoff p.13) */
 export function fmtDateTime(d: Date, locale: Locale = "en"): string {
-  return `${fmtDate(d, locale)} · ${fmtTime(d, locale)}`;
+  return locale === "ja" ? `${fmtDate(d, "ja")} ${fmtTime(d, "ja")}` : `${fmtDate(d)} · ${fmtTime(d)}`;
 }
 
-/** "OCT 25" for the ticker */
-export function fmtTickerDate(d: Date): string {
+/** "OCT 25" / 「10月25日」 for the ticker */
+export function fmtTickerDate(d: Date, locale: Locale = "en"): string {
+  if (locale === "ja") return new Intl.DateTimeFormat("ja-JP", { timeZone: TZ, month: "long", day: "numeric" }).format(d);
   return new Intl.DateTimeFormat("en-US", { timeZone: TZ, month: "short", day: "numeric" }).format(d).toUpperCase();
 }
 
-/** Whole days until `d`, floored at 0. */
+/** The Tokyo calendar day a moment falls on, as a day number. Japan has no DST, so UTC+9 is exact. */
+const jstDay = (d: Date) => Math.floor((d.getTime() + 9 * 3_600_000) / 86_400_000);
+
+/** Calendar days until `d` in JST: 0 = later today, 1 = tomorrow. Floored at 0. */
 export function daysUntil(d: Date, now = new Date()): number {
-  return Math.max(0, Math.ceil((d.getTime() - now.getTime()) / 86_400_000));
+  return Math.max(0, jstDay(d) - jstDay(now));
 }
 
 /** "9:52" */
@@ -46,17 +50,18 @@ export function fmtCountdown(ms: number): string {
   return `${m}:${String(s % 60).padStart(2, "0")}`;
 }
 
-/** "SUN OCT 25" for the ticker */
-export function fmtTickerDay(d: Date): string {
+/** "SUN OCT 25" / 「10月25日(日)」 for the ticker */
+export function fmtTickerDay(d: Date, locale: Locale = "en"): string {
+  if (locale === "ja") return fmtDate(d, "ja");
   return new Intl.DateTimeFormat("en-US", { timeZone: TZ, weekday: "short", month: "short", day: "numeric" })
     .format(d)
     .replace(",", "")
     .toUpperCase();
 }
 
-/** "SUN NOV 8, 10:00 JST" for the ticker */
-export function fmtTickerDateTime(d: Date): string {
-  return `${fmtTickerDay(d)}, ${fmtTime(d)}`;
+/** "SUN NOV 8, 10:00 JST" / 「11月8日(日) 10:00」 for the ticker */
+export function fmtTickerDateTime(d: Date, locale: Locale = "en"): string {
+  return locale === "ja" ? `${fmtDate(d, "ja")} ${fmtTime(d, "ja")}` : `${fmtTickerDay(d)}, ${fmtTime(d)}`;
 }
 
 /** "Sunday" / 「日曜日」 */

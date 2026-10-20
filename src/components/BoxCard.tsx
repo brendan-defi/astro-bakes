@@ -39,12 +39,12 @@ export function BoxCard({ box, locale }: { box: Box; locale: Locale }) {
         <p className={s.boxContents}>{box.contents}</p>
         <div className={s.allergens}>
           <span className={s.lab}>{t.contains}</span>
-          {box.allergens.map((a) => <span key={a} className="chip-sm">{a}</span>)}
+          {box.allergens.map((a) => <span key={a} className="chip-sm">{t.allergen(a)}</span>)}
         </div>
         {!soldOut ? (
           <div className={s.boxFoot}>
             <span className={s.howMany}>{t.howMany}</span>
-            <span className="sr-only">{box.left} {t.left}</span>
+            <span className="sr-only">{t.leftCount(box.left)}</span>
             <Stepper qty={qty} max={maxFor(box)} onInc={() => cart.inc(box.id)} onDec={() => cart.dec(box.id)} labels={{ inc: t.addOne, dec: t.removeOne }} />
           </div>
         ) : (
