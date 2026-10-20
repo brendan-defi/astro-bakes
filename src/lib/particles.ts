@@ -151,3 +151,11 @@ export function flyTo(from: Element | null | undefined, { kind = "cookie", targe
     track(group, 1, [anim], duration, () => boop(to, wide ? { rotate: -2, scale: 1.04 } : { rotate: -12, scale: 1.15 }));
   });
 }
+
+/** The big one, for an order placed: two waves of cookies, stars, hearts and sprinkles. */
+export function celebrate(origin: Element | null | undefined): void {
+  if (!origin || !motionOK()) return;
+  const at = centre(origin);
+  burst(at, { kind: ["cookie", "star", "sprinkle", "heart"], count: 22, power: 560, spread: Math.PI * 1.6, gravity: 900, duration: 1400 });
+  setTimeout(() => burst(at, { kind: ["star", "sprinkle", "cookie"], count: 16, power: 440, spread: Math.PI * 1.2, gravity: 900, duration: 1300 }), 240);
+}

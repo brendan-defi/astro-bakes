@@ -12,6 +12,8 @@ vi.mock("next/navigation", () => ({ useRouter: () => nav.router, usePathname: ()
 const actions = vi.hoisted(() => ({ placeOrderAction: vi.fn(), startCheckoutAction: vi.fn() }));
 vi.mock("@/app/[locale]/checkout/actions", () => actions);
 vi.mock("@/app/[locale]/auth/actions", () => ({ requestSignInAction: vi.fn(), verifyCodeAction: vi.fn() }));
+const particles = vi.hoisted(() => ({ celebrate: vi.fn(), burst: vi.fn(), flyTo: vi.fn() }));
+vi.mock("@/lib/particles", () => particles);
 
 const t = getStrings("en");
 const CHECKOUT_ID = "3f2504e0-4f89-11d3-9a0c-0305e82c3301";
@@ -19,7 +21,7 @@ const drop: CheckoutDrop = { id: "drop-03", number: 3, name: "Drop 03 · October
 const customer: CheckoutCustomer = { email: "you@example.com", name: "山田 花子", phone: "090-1234-5678", postal: "1530061", line1: "1-2-3", line2: "" };
 
 /** A signed-in customer with a live reservation, at the given checkout step. */
-function mountAt(step: "delivery" | "pay") {
+function mountAt(step: "delivery" | "pay" | "done") {
   const held = { checkoutId: CHECKOUT_ID, revision: 1, expiresAt: Date.now() + 600_000, items: { "cookie-box": 1 } };
   startHold({ checkoutId: held.checkoutId, revision: held.revision, expires: held.expiresAt });
   const tree = () => (
@@ -29,7 +31,7 @@ function mountAt(step: "delivery" | "pay") {
   );
   nav.params = new URLSearchParams(`step=${step}`);
   const view = render(tree());
-  return { goTo: (next: "delivery" | "pay") => { nav.params = new URLSearchParams(`step=${next}`); view.rerender(tree()); } };
+  return { goTo: (next: "delivery" | "pay" | "done") => { nav.params = new URLSearchParams(`step=${next}`); view.rerender(tree()); } };
 }
 
 const giftField = () => document.getElementById("co-gift") as HTMLTextAreaElement;
@@ -39,6 +41,7 @@ beforeEach(() => {
   window.sessionStorage.clear();
   window.localStorage.clear();
   actions.placeOrderAction.mockReset().mockResolvedValue({ ok: false, error: "hold_expired" });
+  particles.celebrate.mockReset();
 });
 afterEach(cleanup);
 
@@ -75,5 +78,28 @@ describe("Checkout gift message", () => {
     placeOrder();
     await waitFor(() => expect(actions.placeOrderAction).toHaveBeenCalledTimes(1));
     expect(actions.placeOrderAction.mock.calls[0][0]).toMatchObject({ gift: "Happy birthday, Mum!", checkoutId: CHECKOUT_ID, revision: 1 });
+  });
+});
+
+describe("Checkout celebration", () => {
+  const order = { number: "AB-003-001", lines: [{ name: "4 Cookie Box", qty: 1, lineTotal: 1000 }], subtotal: 1000, shippingFee: 800, total: 1800, email: "you@example.com" };
+
+  it("celebrates once when this tab places the order", async () => {
+    actions.placeOrderAction.mockResolvedValue({ ok: true, order });
+    const { goTo } = mountAt("pay");
+    placeOrder();
+    await waitFor(() => expect(window.sessionStorage.getItem("ab-last-order")).not.toBeNull());
+    goTo("done");
+    await waitFor(() => expect(particles.celebrate).toHaveBeenCalledTimes(1));
+    expect((particles.celebrate.mock.calls[0][0] as HTMLElement).querySelector("img")).not.toBeNull();
+    goTo("done");
+    expect(particles.celebrate).toHaveBeenCalledTimes(1);
+  });
+
+  it("doesn't celebrate again when a reload restores the order", async () => {
+    window.sessionStorage.setItem("ab-last-order", JSON.stringify({ ...order, address: { name: "山田 花子", phone: "", postal: "1530061", line1: "1-2-3", line2: "" }, hit: { prefecture: "東京都", city: "目黒区", town: "中目黒", wardEn: "Meguro-ku", wardCode: "13110", deliverable: true }, gift: null }));
+    mountAt("done");
+    await waitFor(() => expect(screen.getByText(/AB-003-001/)).toBeTruthy());
+    expect(particles.celebrate).not.toHaveBeenCalled();
   });
 });

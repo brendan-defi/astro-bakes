@@ -13,6 +13,9 @@ import { BoxPhoto } from "./BoxPhoto";
 import { Stepper } from "./Stepper";
 import s from "./home.module.css";
 
+/** At or below this many left, the "N left" sticker starts to throb. */
+const LOW_STOCK = 3;
+
 /** Box card while the drop is open: stepper + remaining count (PRD 1.3 / 3.1). */
 export function BoxCard({ box, locale }: { box: Box; locale: Locale }) {
   const t = getStrings(locale);
@@ -33,7 +36,7 @@ export function BoxCard({ box, locale }: { box: Box; locale: Locale }) {
     <article className={`card ${s.box}`} style={{ "--tilt": box.tilt } as CSSProperties}>
       <BoxPhoto box={box} placeholder={`${t.productPhoto} — ${box.name}`} />
       {!soldOut && (
-        <div ref={burstRef} className={s.burst} aria-hidden>
+        <div ref={burstRef} className={`${s.burst} ${box.left <= LOW_STOCK ? s.burstLow : ""}`} aria-hidden>
           <StarburstShape />
           <div className={s.burstText}>
             <span className={s.burstNum}>{box.left}</span>

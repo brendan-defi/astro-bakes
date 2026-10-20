@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import type { Box, Locale } from "@/lib/data";
 import { placeOrderAction, startCheckoutAction } from "@/app/[locale]/checkout/actions";
 import { useSignInFlow } from "@/lib/use-sign-in";
@@ -12,6 +12,7 @@ import { getStrings, type Strings } from "@/lib/i18n";
 import { useCart, type CartLine } from "@/lib/cart";
 import { lookupPostal, normalisePostal, outsideWards, type PostalHit } from "@/lib/postal";
 import { clearHold, readHold, startHold, type Hold } from "@/lib/hold";
+import { celebrate } from "@/lib/particles";
 import { formatReservationRef, parseReservationRef, reservationStatus, reservedLines, totals, type Reservation } from "@/lib/reservation";
 import { ArrowLeftIcon, CardIcon, CheckIcon, ClockIcon, StarShape, TruckIcon, WarningIcon } from "./icons";
 import { Logo } from "./Logo";
@@ -219,6 +220,14 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
     if (step !== "done" || placed) return;
     try { const raw = window.sessionStorage.getItem(ORDER_KEY); if (raw) setPlaced(JSON.parse(raw)); } catch {}
   }, [step, placed]);
+  // Celebrate once, when this tab places the order: not when a reload restores it from sessionStorage.
+  const celebrateNext = useRef(false);
+  const doneAvatarRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (step !== "done" || !placed || !celebrateNext.current) return;
+    celebrateNext.current = false;
+    celebrate(doneAvatarRef.current);
+  }, [step, placed]);
 
   async function placeOrder() {
     if (!hit || !drop || busy) return;
@@ -251,6 +260,7 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
       }
       const order: PlacedOrder = { ...res.order, address: addr, hit, gift: giftText };
       try { window.sessionStorage.setItem(ORDER_KEY, JSON.stringify(order)); } catch {}
+      celebrateNext.current = true;
       setPlaced(order);
       clearHold();
       cart.clear();
@@ -536,7 +546,7 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
               {step === "done" && (
                 <div className={s.doneContent}>
                   <section className={s.doneHero}>
-                    <div className={s.doneAvatar}>
+                    <div ref={doneAvatarRef} className={s.doneAvatar}>
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img src="/images/astro-cookie.jpg" alt={t.astroCookieAlt} />
                       <StarShape fill="var(--butter)" />

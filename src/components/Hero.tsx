@@ -37,7 +37,7 @@ function HeroOpen({ locale, drop }: { locale: Locale; drop: Drop }) {
               <div className={s.ticketSub}>{t.ships} {fmtDate(drop.shipAt, locale)}</div>
             </div>
           </div>
-          <a href="#boxes" className={`btn btn-primary ${s.heroCta}`}>
+          <a href="#boxes" className={`btn btn-primary sheen ${s.heroCta}`}>
             {t.pickYourBoxes}
             <ArrowDownIcon />
           </a>
