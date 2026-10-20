@@ -33,10 +33,17 @@ describe("legal pages", () => {
     expect(row(en, "Address")).toBe("Disclosed without delay on request.");
   });
 
-  it("shows the shipping fee from settings, or where to find it when unset", () => {
-    expect(row(legalDocument("tokushoho", "ja", { ...base, shippingFee: 800 })!, "商品代金以外の必要料金")).toContain("¥800");
-    expect(row(legalDocument("tokushoho", "en", { ...base, shippingFee: 800 })!, "Additional fees")).toContain("¥800");
-    expect(row(legalDocument("tokushoho", "ja", { ...base, shippingFee: null })!, "商品代金以外の必要料金")).toContain("カート画面");
+  it("says shipping is included in the price, ships by Japan Post, and lets the time slot be chosen", () => {
+    const ja = legalDocument("tokushoho", "ja", base)!;
+    const en = legalDocument("tokushoho", "en", base)!;
+    expect(row(ja, "商品代金以外の必要料金")).toContain("商品価格に含まれています");
+    expect(row(en, "Additional fees")).toContain("included in the price");
+    expect(row(ja, "商品の引渡時期")).toContain("日本郵便");
+    expect(row(ja, "商品の引渡時期")).toContain("時間帯はご注文時にお選び");
+    expect(row(en, "Delivery")).toContain("Japan Post");
+    expect(row(en, "Delivery")).toContain("choose a delivery time slot");
+    expect(allText(ja).join("\n")).not.toContain("ヤマト");
+    expect(allText(en).join("\n")).not.toContain("Yamato");
   });
 
   it("states the cancellation policy (D22) and the per-customer limit plainly", () => {

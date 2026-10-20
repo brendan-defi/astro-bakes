@@ -1,5 +1,4 @@
 import type { Locale, Settings } from "./data";
-import { yen } from "./format";
 
 /**
  * The three legal pages (PRD 1.8): 特定商取引法に基づく表記, privacy policy, terms. Static copy in both
@@ -63,9 +62,7 @@ export function legalDocument(slug: string, locale: Locale, settings: Settings):
 
 function tokushoho(locale: Locale, s: Settings): LegalSection[] {
   const ja = locale === "ja";
-  const fee = s.shippingFee == null
-    ? (ja ? "送料：ご注文前のカート画面に表示します（東京23区内一律）。" : "Shipping: shown in the cart before you order (one flat fee across Tokyo's 23 wards).")
-    : (ja ? `送料：1回のご注文につき ${yen(s.shippingFee)}（税込・東京23区内一律）。これ以外の料金はかかりません。` : `Shipping: ${yen(s.shippingFee)} per order, tax included, one flat fee across Tokyo's 23 wards. There are no other charges.`);
+  const fee = ja ? "送料は商品価格に含まれています。これ以外の料金はかかりません。" : "Shipping is included in the price of each box. There are no other charges.";
   const seller = s.legalSellerName.trim()
     || (ja ? `Astro Bakes（個人事業主）\n氏名は${ON_REQUEST.ja}` : `Astro Bakes (sole proprietorship)\nThe proprietor's name is ${ON_REQUEST.en.toLowerCase()}`);
   const rows: LegalRow[] = [
@@ -79,7 +76,7 @@ function tokushoho(locale: Locale, s: Settings): LegalSection[] {
     { label: ja ? "支払方法" : "Payment methods", value: ja ? "クレジットカード、PayPay（いずれも Stripe による決済）。" : "Credit card or PayPay, both processed by Stripe." },
     { label: ja ? "支払時期" : "Payment timing", value: ja ? "ご注文時にお支払いいただきます（前払い）。" : "Paid in full when you place the order." },
     { label: ja ? "申込期間" : "Ordering period", value: ja ? "各ドロップ（販売回）の受付期間内のみご注文いただけます。受付期間は商品ページに表示します。" : "Orders are taken only while a drop is open. The dates are shown on the drop page." },
-    { label: ja ? "商品の引渡時期" : "Delivery", value: ja ? "各ドロップごとに定める発送日にヤマト運輸で発送し、原則として発送日の翌日にお届けします。発送日は商品ページとご注文確認メールに記載します。お届け日時の指定はできません。" : "Every order in a drop ships by Yamato on that drop's ship date and normally arrives the next day. The ship date is shown on the drop page and in your confirmation email. Delivery dates and times cannot be chosen." },
+    { label: ja ? "商品の引渡時期" : "Delivery", value: ja ? "各ドロップごとに定める発送日に日本郵便で発送し、原則として発送日の翌日にお届けします。発送日は商品ページとご注文確認メールに記載します。お届け日は変更できませんが、お届け時間帯はご注文時にお選びいただけます。" : "Every order in a drop ships by Japan Post on that drop's ship date and normally arrives the next day. The ship date is shown on the drop page and in your confirmation email. The delivery date cannot be changed, but you can choose a delivery time slot when you order." },
     { label: ja ? "配送地域" : "Delivery area", value: ja ? "東京23区内のみ。" : "Tokyo's 23 wards only." },
     { label: ja ? "返品・キャンセルについて" : "Returns and cancellations", value: ja
       ? "【お客様都合】ドロップの受付締切までは、アカウントページからいつでもキャンセルでき、全額を返金します。受付締切後のキャンセルはお受けできません。食品のため、お客様都合による返品・交換もお受けしておりません。\n【不良品・未着】商品の破損・品違い・未着の場合は、お届け予定日から3日以内にメールでご連絡ください。当店の負担で再送または全額返金いたします。"
@@ -98,7 +95,7 @@ function privacy(locale: Locale, s: Settings): LegalSection[] {
       { heading: "取得する情報", paragraphs: ["ご注文とアカウントの利用にあたり、次の情報をお預かりします。"], bullets: ["お名前", "メールアドレス", "電話番号", "お届け先住所（ギフトの場合はお届け先のお名前と住所）", "ご注文履歴", "ギフトメッセージ", "お知らせメールの配信設定"], },
       { paragraphs: ["クレジットカード番号などの決済情報は当店では取得・保存しません。決済は決済代行会社 Stripe が取り扱います。"] },
       { heading: "利用目的", bullets: ["ご注文の受付、商品の発送、ご注文に関するご連絡", "ご注文確認・発送のお知らせなど、取引に必要なメールの送信", "同意いただいた方への、ドロップの告知メールの送信（いつでも配信停止できます）", "不正利用の防止と、法令上の義務の履行"] },
-      { heading: "第三者への提供・委託", paragraphs: ["業務に必要な範囲で、次の事業者に情報の取り扱いを委託します。これ以外に、法令に基づく場合を除き、第三者に提供・販売することはありません。"], bullets: ["Stripe（決済処理）", "Resend（メール送信）", "Vercel、Neon（サイトの運用とデータの保管）", "ヤマト運輸（配送：お届け先のお名前・住所・電話番号）"] },
+      { heading: "第三者への提供・委託", paragraphs: ["業務に必要な範囲で、次の事業者に情報の取り扱いを委託します。これ以外に、法令に基づく場合を除き、第三者に提供・販売することはありません。"], bullets: ["Stripe（決済処理）", "Resend（メール送信）", "Vercel、Neon（サイトの運用とデータの保管）", "日本郵便（配送：お届け先のお名前・住所・電話番号）"] },
       { heading: "Cookie について", paragraphs: ["ログイン状態とカートの内容を保持するために必要な最小限の Cookie のみを使用します。広告目的の Cookie や Google Analytics などのアクセス解析ツールは使用していません。"] },
       { heading: "保存期間と削除", paragraphs: ["ご注文の記録は、帳簿の保存義務のため法令で定める期間保存します。アカウントの削除をご希望の場合はメールでご連絡ください。アカウントを削除し、保存期間の経過後にご注文記録から個人を特定できる情報を消去します。"] },
       { heading: "開示・訂正・利用停止", paragraphs: ["ご本人からの開示、訂正、利用停止のご請求には、ご本人であることを確認のうえ、遅滞なく対応します。"] },
@@ -111,7 +108,7 @@ function privacy(locale: Locale, s: Settings): LegalSection[] {
     { heading: "What we collect", paragraphs: ["To take and deliver your order, and to run your account, we keep:"], bullets: ["Your name", "Email address", "Phone number", "Delivery address (for gifts, the recipient's name and address)", "Order history", "Gift messages", "Your email notification preference"] },
     { paragraphs: ["We never see or store card numbers or other payment details. Payments are processed by Stripe."] },
     { heading: "Why we use it", bullets: ["To take your order, ship it, and contact you about it", "To send the emails a transaction needs, such as order confirmations and shipping notices", "To tell you about upcoming drops, only if you opted in (you can switch this off at any time)", "To prevent fraud and meet our legal obligations"] },
-    { heading: "Who we share it with", paragraphs: ["We pass information to these providers only as far as running the shop requires. We do not otherwise share or sell it, except where the law requires."], bullets: ["Stripe (payment processing)", "Resend (sending email)", "Vercel and Neon (hosting and database)", "Yamato Transport (delivery: the recipient's name, address and phone number)"] },
+    { heading: "Who we share it with", paragraphs: ["We pass information to these providers only as far as running the shop requires. We do not otherwise share or sell it, except where the law requires."], bullets: ["Stripe (payment processing)", "Resend (sending email)", "Vercel and Neon (hosting and database)", "Japan Post (delivery: the recipient's name, address and phone number)"] },
     { heading: "Cookies", paragraphs: ["We use only the cookies needed to keep you signed in and to remember your cart. There are no advertising cookies and no analytics trackers such as Google Analytics."] },
     { heading: "How long we keep it", paragraphs: ["Order records are kept for the period Japanese bookkeeping law requires. If you would like your account deleted, email us: we delete the account, and once the retention period has passed we remove anything in the order records that identifies you."] },
     { heading: "Access and correction", paragraphs: ["You can ask to see, correct, or stop the use of your information. We will act without delay once we have confirmed it is you."] },
@@ -128,8 +125,8 @@ function terms(locale: Locale, s: Settings): LegalSection[] {
       { paragraphs: ["本規約は、Astro Bakes（以下「当店」）のウェブサイトで商品をご注文いただく際に適用されます。ご注文をもって本規約に同意いただいたものとします。"] },
       { heading: "販売の仕組み（ドロップ）", paragraphs: ["当店の商品は、「ドロップ」と呼ぶ期間限定の予約販売でのみ販売します。各ドロップには受付期間、ボックスごとの販売上限数、発送日が定められています。上限数に達したボックスは、受付期間中でも販売を終了します。", `お一人様につき各ボックス${PER_CUSTOMER}個までご注文いただけます。`] },
       { heading: "ご注文と契約の成立", paragraphs: ["注文内容の最終確認画面で「注文を確定」ボタンを押し、お支払いが完了した時点で売買契約が成立します。成立後、ご登録のメールアドレスに注文確認メールをお送りします。"] },
-      { heading: "価格と支払い", paragraphs: ["価格はすべて税込で表示します。送料はご注文1回につき一律で、カート画面とご注文前の確認画面に表示します。お支払いはご注文時に、クレジットカードまたは PayPay（Stripe による決済）でお願いします。"] },
-      { heading: "配送", paragraphs: ["お届け先は東京23区内に限ります。各ドロップの発送日にヤマト運輸で発送し、原則として翌日にお届けします。お届け日時の指定はできません。ご不在の場合は、配送業者の不在連絡票に従って再配達をご依頼ください。", "ギフトとして、ご自身以外のお届け先を指定することができます。その場合もお届け先は東京23区内に限ります。"] },
+      { heading: "価格と支払い", paragraphs: ["価格はすべて税込で表示します。送料は商品価格に含まれており、追加の料金はかかりません。お支払いはご注文時に、クレジットカードまたは PayPay（Stripe による決済）でお願いします。"] },
+      { heading: "配送", paragraphs: ["お届け先は東京23区内に限ります。各ドロップの発送日に日本郵便で発送し、原則として翌日にお届けします。お届け日は変更できませんが、お届け時間帯はご注文時にお選びいただけます。ご不在の場合は、不在連絡票に従って再配達をご依頼ください。", "ギフトとして、ご自身以外のお届け先を指定することができます。その場合もお届け先は東京23区内に限ります。"] },
       { heading: "キャンセルと返金", paragraphs: ["ドロップの受付締切までは、アカウントページからいつでもキャンセルでき、お支払いいただいた全額をお支払い方法に応じて返金します。受付締切後は、キャンセルおよびお客様都合による返品・交換はお受けできません。", "商品の破損・品違い・未着の場合は、お届け予定日から3日以内にメールでご連絡ください。当店の負担で再送または全額返金いたします。"] },
       { heading: "当店の都合による中止", paragraphs: ["やむを得ない事情により当店がドロップを中止した場合は、ご注文いただいたすべてのお客様に全額を返金し、メールでお知らせします。"] },
       { heading: "商品について", paragraphs: ["商品はすべて手作りのため、形や焼き色に個体差があります。アレルゲン情報は各商品に表示しています。小麦・卵・乳・くるみなどを扱う同じ厨房で製造しているため、微量混入の可能性があることをご了承ください。", "お届け後は、商品に記載または同封の案内に従って保存し、お早めにお召し上がりください。"] },
@@ -144,8 +141,8 @@ function terms(locale: Locale, s: Settings): LegalSection[] {
     { paragraphs: ["These terms apply to orders placed on the Astro Bakes (\"we\") website. By placing an order you agree to them."] },
     { heading: "How drops work", paragraphs: ["We sell only through limited-time preorders called drops. Each drop has an ordering period, a cap per box, and a single ship date. A box that reaches its cap sells out even if the drop is still open.", `Each customer may order up to ${PER_CUSTOMER} of each box per drop.`] },
     { heading: "Placing an order", paragraphs: ["A sale is concluded when you press the \"Place order\" button on the final confirmation screen and your payment succeeds. We then send a confirmation email to the address on your account."] },
-    { heading: "Prices and payment", paragraphs: ["All prices include tax. Shipping is one flat fee per order, shown in the cart and on the confirmation screen before you order. Payment is taken when you order, by credit card or PayPay, processed by Stripe."] },
-    { heading: "Delivery", paragraphs: ["We deliver within Tokyo's 23 wards only. Every order in a drop ships by Yamato on the drop's ship date and normally arrives the next day. Delivery dates and times cannot be chosen. If nobody is in, please arrange redelivery using the carrier's notice.", "You can send an order as a gift to any address within the 23 wards."] },
+    { heading: "Prices and payment", paragraphs: ["All prices include tax. Shipping is included in the price of each box; there are no extra charges. Payment is taken when you order, by credit card or PayPay, processed by Stripe."] },
+    { heading: "Delivery", paragraphs: ["We deliver within Tokyo's 23 wards only. Every order in a drop ships by Japan Post on the drop's ship date and normally arrives the next day. The delivery date cannot be changed, but you can choose a delivery time slot when you order. If nobody is in, please arrange redelivery using Japan Post's notice.", "You can send an order as a gift to any address within the 23 wards."] },
     { heading: "Cancellations and refunds", paragraphs: ["Until the drop closes you can cancel from your account page at any time, and we refund the full amount to your original payment method. After the drop closes, orders cannot be cancelled, and as these are food items we cannot accept returns or exchanges.", "If an item arrives damaged, wrong, or not at all, email us within 3 days of the expected delivery date and we will resend or refund in full at our cost."] },
     { heading: "If we have to cancel", paragraphs: ["If we have to cancel a drop for reasons beyond our control, every order is refunded in full and we let you know by email."] },
     { heading: "About the products", paragraphs: ["Everything is made by hand, so shapes and colours vary. Allergens are listed on each box. Everything is made in one kitchen that handles wheat, eggs, dairy and walnuts, so traces are possible.", "After delivery, please store as described on the packaging or the enclosed note, and enjoy soon."] },

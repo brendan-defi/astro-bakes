@@ -22,23 +22,25 @@ describe("FAQ", () => {
     expect(FAQ_DESCRIPTION.en).not.toMatch(JAPANESE);
   });
 
-  it("takes the shipping fee and contact address from settings", () => {
-    const fee = (locale: "ja" | "en", shippingFee: number | null) => faqEntries(locale, { ...base, shippingFee }).find((e) => e.id === "fee")!.a.join(" ");
-    expect(fee("ja", 800)).toContain("¥800");
-    expect(fee("en", 800)).toContain("¥800");
-    expect(fee("en", null)).toContain("shown in the cart");
-    expect(fee("ja", null)).toContain("カート画面");
+  it("takes the contact address from settings and says shipping is included", () => {
+    const fee = (locale: "ja" | "en") => faqEntries(locale, base).find((e) => e.id === "fee")!.a.join(" ");
+    expect(fee("ja")).toContain("商品価格に含まれています");
+    expect(fee("en")).toContain("included in the price");
     const contact = (locale: "ja" | "en") => faqEntries(locale, { ...base, contactEmail: "owner@example.com" }).find((e) => e.id === "contact")!.a.join(" ");
     expect(contact("ja")).toContain("owner@example.com");
     expect(contact("en")).toContain("owner@example.com");
   });
 
-  it("gives the PRD's answers: 23 wards, no pickup, no date choice, 5 per box, cancel until close", () => {
+  it("gives the owner's answers: 23 wards, no pickup, fixed date but a chosen time slot, Japan Post, handwritten cards, 5 per box, cancel until close", () => {
     const en = Object.fromEntries(faqEntries("en", base).map((e) => [e.id, e.a.join(" ")]));
     expect(en.where).toMatch(/23 wards/);
     expect(en.where).toMatch(/not Yokohama/);
     expect(en.pickup).toMatch(/delivery only/);
-    expect(en.date).toMatch(/^No\./);
+    expect(en.date).toMatch(/^The date, no/);
+    expect(en.date).toMatch(/time slot when you order/);
+    expect(en.delivery).toContain("Japan Post");
+    expect(en.gift).toContain("handwrite");
+    expect(Object.values(en).join(" ")).not.toContain("Yamato");
     expect(en.limit).toContain("up to 5 of each box");
     expect(en.cancel).toMatch(/Until the drop closes, yes/);
   });
