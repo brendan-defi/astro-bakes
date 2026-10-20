@@ -119,7 +119,8 @@
 .form14 { display: flex; flex-direction: column; gap: 14px; }
 .inline { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; font-weight: 700; }
 .inline svg { flex: none; margin-top: 2px; }
-.codeInput { height: 68px; font-family: var(--font-display), sans-serif; font-size: 32px; letter-spacing: 0.4em; text-align: center; }
+/* The letter-spacing also trails the last digit; the matching indent puts the digits back in the middle. */
+.codeInput { height: 68px; font-family: var(--font-display), sans-serif; font-size: 32px; letter-spacing: 0.4em; text-indent: 0.4em; text-align: center; }
 .codeRow { display: flex; flex-direction: column; gap: 10px; }
 .resendRow { display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: 14px; font-weight: 700; }
 .resendBtn { min-height: 44px; padding: 0 16px; border: var(--border-thin); border-radius: var(--radius-pill); background: var(--white); color: var(--ink); font: inherit; font-weight: 900; }

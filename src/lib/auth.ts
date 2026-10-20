@@ -7,8 +7,8 @@ import type { Locale } from "./data";
 import { sendEmail } from "./email";
 import { signInEmail } from "./email-templates";
 import { readSessionToken } from "./session-cookie";
+import { CODE_LENGTH } from "./sign-in-code";
 import {
-  CODE_LENGTH,
   codeMatches,
   EMAIL,
   flowMatches,

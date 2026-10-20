@@ -13,6 +13,7 @@ import { useCart, type CartLine } from "@/lib/cart";
 import { lookupPostal, normalisePostal, outsideWards, type PostalHit } from "@/lib/postal";
 import { clearHold, readHold, startHold, type Hold } from "@/lib/hold";
 import { formatReservationRef, parseReservationRef, reservationStatus, reservedLines, totals, type Reservation } from "@/lib/reservation";
+import { CodeInput } from "./CodeInput";
 import { ArrowLeftIcon, CardIcon, CheckIcon, ClockIcon, StarShape, TruckIcon, WarningIcon } from "./icons";
 import { Logo } from "./Logo";
 import { Stepper } from "./Stepper";
@@ -389,7 +390,7 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
                   <form className={s.form} onSubmit={(e) => { e.preventDefault(); void auth.verify(); }}>
                     <label htmlFor="co-code" className="label">{t.sixDigit}</label>
                     <div className={s.codeRow}>
-                      <input id="co-code" type="text" inputMode="numeric" autoComplete="one-time-code" maxLength={6} placeholder="000000" className={`input ${s.codeInput}`} value={auth.code} onChange={(e) => auth.setCode(e.target.value.replace(/\D/g, "").slice(0, 6))} />
+                      <CodeInput id="co-code" value={auth.code} onChange={auth.setCode} />
                       <button type="submit" className="btn btn-primary" disabled={auth.code.length !== 6 || auth.busy}>{t.continue}</button>
                     </div>
                   </form>
