@@ -1,7 +1,8 @@
 import { and, asc, eq, gt, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { boxes as boxesTable, dropBoxes as dropBoxesTable, drops as dropsTable, inventoryHolds, orderItems, orders, settings as settingsTable, type BoxRow, type DropBoxRow } from "@/db/schema";
-import { settings as defaultSettings, type Box, type Drop, type Locale, type Settings } from "./data";
+import { arrivalDate, settings as defaultSettings, type Box, type Drop, type Locale, type Settings } from "./data";
+import { arrivalOffsetDays } from "./settings";
 import { isUuid } from "./uuid";
 
 /**
@@ -9,8 +10,6 @@ import { isUuid } from "./uuid";
  * the active catalogue, and admin settings, mapped onto the view types the
  * components already use. Server components only; never import from the client.
  */
-
-const DAY = 86_400_000;
 
 /** Card colours and tilts are presentation, not data; cycle them by position. */
 const PALETTE = [
@@ -52,14 +51,15 @@ function toBox(box: BoxRow, locale: Locale, i: number, inDrop?: Pick<DropBoxRow,
   };
 }
 
-/** Every drop, oldest first, with its boxes. Arrival is ship date + 1 (D21). `excludeCartId` is the viewer's own checkout. */
+/** Every drop, oldest first, with its boxes. Arrival is the ship date plus the arrival offset (D21). `excludeCartId` is the viewer's own checkout. */
 export async function loadDrops(locale: Locale, excludeCartId: string | null = null): Promise<Drop[]> {
-  const [rows, held] = await Promise.all([
+  const [rows, held, offset] = await Promise.all([
     getDb().query.drops.findMany({
       orderBy: [asc(dropsTable.openAt)],
       with: { dropBoxes: { orderBy: [asc(dropBoxesTable.sort)], with: { box: true } } },
     }),
     activeHolds(excludeCartId),
+    arrivalOffsetDays(),
   ]);
   return rows.map((d) => ({
     id: d.slug,
@@ -69,7 +69,7 @@ export async function loadDrops(locale: Locale, excludeCartId: string | null = n
     openAt: d.openAt,
     closeAt: d.closeAt,
     shipAt: d.shipAt,
-    arriveAt: new Date(d.shipAt.getTime() + DAY),
+    arriveAt: arrivalDate(d.shipAt, offset),
     boxes: d.dropBoxes.map((db, i) => toBox(db.box, locale, i, db, held.get(db.id) ?? 0)),
   }));
 }
@@ -100,16 +100,19 @@ export async function loadSettings(): Promise<Settings> {
   const kv = Object.fromEntries(rows.map((r) => [r.key, r.value])) as Record<string, unknown>;
   const num = (k: string, d: number | null) => (typeof kv[k] === "number" ? (kv[k] as number) : d);
   const str = (k: string, d: string) => (typeof kv[k] === "string" ? (kv[k] as string) : d);
+  // Links left empty in the admin fall back to the defaults (instagram.com, the notify-me form).
+  const link = (k: string, d: string) => (typeof kv[k] === "string" && kv[k] ? (kv[k] as string) : d);
   return {
     shippingFee: num("shipping_fee", defaultSettings.shippingFee),
     shippingArea: str("shipping_area", defaultSettings.shippingArea),
-    instagramUrl: str("instagram_url", defaultSettings.instagramUrl),
-    lineUrl: str("line_url", defaultSettings.lineUrl),
+    instagramUrl: link("instagram_url", defaultSettings.instagramUrl),
+    lineUrl: link("line_url", defaultSettings.lineUrl),
     contactEmail: str("contact_email", defaultSettings.contactEmail),
     holdMinutes: num("hold_minutes", defaultSettings.holdMinutes) ?? defaultSettings.holdMinutes,
     legalSellerName: str("legal_seller_name", defaultSettings.legalSellerName),
     legalOperator: str("legal_operator", defaultSettings.legalOperator),
     legalAddress: str("legal_address", defaultSettings.legalAddress),
     legalPhone: str("legal_phone", defaultSettings.legalPhone),
+    arrivalOffsetDays: num("arrival_offset_days", defaultSettings.arrivalOffsetDays) ?? defaultSettings.arrivalOffsetDays,
   };
 }

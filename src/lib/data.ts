@@ -57,6 +57,8 @@ export interface Settings {
   legalOperator: string;
   legalAddress: string;
   legalPhone: string;
+  /** Days from the ship date to the expected arrival (D21, PRD 4.9): Japan Post's next day within Tokyo by default. */
+  arrivalOffsetDays: number;
 }
 
 /** The signed-in customer, if any (PRD 2.3 / 2.4 / 2.5). */
@@ -73,6 +75,13 @@ export interface Viewer {
 const JST = (iso: string) => new Date(iso + "+09:00");
 const DAY = 86_400_000;
 
+export const DEFAULT_ARRIVAL_OFFSET_DAYS = 1;
+
+/** A drop's expected arrival: its ship date plus the arrival offset from settings (D21). */
+export function arrivalDate(shipAt: Date, offsetDays = DEFAULT_ARRIVAL_OFFSET_DAYS): Date {
+  return new Date(shipAt.getTime() + offsetDays * DAY);
+}
+
 export const settings: Settings = {
   shippingFee: 0, // shipping is included in the box price (D19, 2026-10-20)
   shippingArea: "Tokyo 23 wards",
@@ -84,6 +93,7 @@ export const settings: Settings = {
   legalOperator: "",
   legalAddress: "",
   legalPhone: "",
+  arrivalOffsetDays: DEFAULT_ARRIVAL_OFFSET_DAYS,
 };
 
 export const boxes: Box[] = [

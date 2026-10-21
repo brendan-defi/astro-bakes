@@ -8,7 +8,10 @@ import s from "@/app/admin/admin.module.css";
  * The admin sections (PRD 4: Dashboard · Drops · Boxes · Orders · Customers ·
  * Announcements · Settings). Each one joins this list in the PR that builds it.
  */
-export const ADMIN_SECTIONS: { href: string; label: string }[] = [{ href: "/admin", label: "Dashboard" }];
+export const ADMIN_SECTIONS: { href: string; label: string }[] = [
+  { href: "/admin", label: "Dashboard" },
+  { href: "/admin/settings", label: "Settings" },
+];
 
 export function AdminNav() {
   const pathname = usePathname();
