@@ -43,6 +43,13 @@
       "when": 1792475493096,
       "tag": "0005_thick_jane_foster",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1792549992323,
+      "tag": "0006_steady_randall_flagg",
+      "breakpoints": true
     }
   ]
 }

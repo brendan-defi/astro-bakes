@@ -1,4 +1,5 @@
 import { relations, sql } from "drizzle-orm";
+import { DELIVERY_SLOTS } from "../lib/delivery-slots";
 import {
   boolean,
   date,
@@ -48,6 +49,8 @@ export const orderStateEnum = pgEnum("order_state", [
   "cancelled",
 ]);
 export const paymentMethodEnum = pgEnum("payment_method", ["card", "paypay"]);
+/** The customer's delivery time slot (D21); the date is fixed by the drop. */
+export const deliverySlotEnum = pgEnum("delivery_time_slot", DELIVERY_SLOTS);
 
 const timestamps = {
   createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
@@ -350,8 +353,10 @@ export const orders = pgTable(
     line1: text().notNull(),
     line2: text(),
     wardCode: text(),
-    /** One optional message per order, printed on a card (D11). */
+    /** One optional message per order, handwritten on a card (D11). */
     giftMessage: text(),
+    /** Delivery time slot (D21); "none" is Japan Post's 希望なし. Changeable until the drop closes. */
+    deliveryTimeSlot: deliverySlotEnum().notNull().default("none"),
     subtotal: integer().notNull(),
     shippingFee: integer().notNull(),
     total: integer().notNull(),

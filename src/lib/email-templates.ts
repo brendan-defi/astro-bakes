@@ -1,6 +1,7 @@
 import { PREFERRED_DAYS_AHEAD, type CustomOrderRequest } from "./custom-order-rules";
 import type { Locale } from "./data";
 import { getStrings } from "./i18n";
+import type { DeliverySlot } from "./delivery-slots";
 
 /**
  * Transactional email copy (PRD 5.3). Plain HTML with a text alternative; no
@@ -67,11 +68,14 @@ export interface OrderEmailData {
   arriveDate: string;
   closeDateTime: string;
   giftMessage: string | null;
+  /** Delivery time slot (D21); "none" reads as no preference. */
+  timeSlot: DeliverySlot;
 }
 
 /** Sent on paid (PRD 3.6): the confirmation screen's content plus the cancellation terms and links. */
 export function orderConfirmationEmail(opts: { locale: Locale; order: OrderEmailData }): Email {
   const { locale, order: o } = opts;
+  const slot = getStrings(locale).deliverySlots[o.timeSlot ?? "none"];
   const orderUrl = `${SITE}/${locale}/account/orders/${encodeURIComponent(o.number)}`;
   const legalUrl = `${SITE}/${locale}/legal/tokushoho`;
   const rows = o.lines.map((l) => `<tr><td style="padding:4px 0">${esc(l.name)} × ${l.qty}</td><td style="padding:4px 0;text-align:right">${yen(l.lineTotal)}</td></tr>`).join("");
@@ -85,10 +89,10 @@ export function orderConfirmationEmail(opts: { locale: Locale; order: OrderEmail
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 14px;font-size:15px">${rows}${totals}</table>
 <p style="margin:0 0 6px"><strong>お届け先</strong><br>${esc(o.shipToName)} 様<br>${esc(o.addressLine)}</p>
 ${gift}
-<p style="margin:0 0 14px"><strong>${esc(o.shipDate)}</strong> に日本郵便で発送し、<strong>${esc(o.arriveDate)}</strong> にお届け予定です。</p>
+<p style="margin:0 0 14px"><strong>${esc(o.shipDate)}</strong> に日本郵便で発送し、<strong>${esc(o.arriveDate)}（${esc(slot)}）</strong> にお届け予定です。お届け時間帯はドロップの受付締切まで注文ページから変更できます。</p>
 <p style="margin:0 0 14px;font-size:14px">キャンセルはドロップ終了（${esc(o.closeDateTime)}）まで無料・全額返金で承ります。終了後はキャンセルできません。</p>
 <p style="margin:0 0 6px"><a href="${esc(orderUrl)}" style="font-weight:700">注文を見る</a> · <a href="${esc(legalUrl)}">特定商取引法に基づく表記</a></p>`;
-    const text = `ご注文 ${o.number} を承りました。\n\n${o.lines.map((l) => `${l.name} × ${l.qty}  ${yen(l.lineTotal)}`).join("\n")}\n小計 ${yen(o.subtotal)}${o.shippingFee > 0 ? ` / 送料 ${yen(o.shippingFee)}` : ""} / 合計 ${yen(o.total)}\n\nお届け先: ${o.shipToName} 様\n${o.addressLine}\n${o.giftMessage ? `ギフトメッセージ: ${o.giftMessage}\n` : ""}\n${o.shipDate} に発送、${o.arriveDate} にお届け予定です。\nキャンセルはドロップ終了（${o.closeDateTime}）まで無料・全額返金。\n\n注文を見る: ${orderUrl}\n特定商取引法に基づく表記: ${legalUrl}`;
+    const text = `ご注文 ${o.number} を承りました。\n\n${o.lines.map((l) => `${l.name} × ${l.qty}  ${yen(l.lineTotal)}`).join("\n")}\n小計 ${yen(o.subtotal)}${o.shippingFee > 0 ? ` / 送料 ${yen(o.shippingFee)}` : ""} / 合計 ${yen(o.total)}\n\nお届け先: ${o.shipToName} 様\n${o.addressLine}\n${o.giftMessage ? `ギフトメッセージ: ${o.giftMessage}\n` : ""}\n${o.shipDate} に発送、${o.arriveDate}（${slot}）にお届け予定です。お届け時間帯は受付締切まで注文ページから変更できます。\nキャンセルはドロップ終了（${o.closeDateTime}）まで無料・全額返金。\n\n注文を見る: ${orderUrl}\n特定商取引法に基づく表記: ${legalUrl}`;
     return { subject, html: layout("ja", subject, body), text };
   }
   const subject = `You're in: order ${o.number}`;
@@ -96,10 +100,10 @@ ${gift}
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 14px;font-size:15px">${rows}${totals}</table>
 <p style="margin:0 0 6px"><strong>Delivering to</strong><br>${esc(o.shipToName)}<br>${esc(o.addressLine)}</p>
 ${gift}
-<p style="margin:0 0 14px">Ships <strong>${esc(o.shipDate)}</strong> by Japan Post and arrives <strong>${esc(o.arriveDate)}</strong>.</p>
+<p style="margin:0 0 14px">Ships <strong>${esc(o.shipDate)}</strong> by Japan Post and arrives <strong>${esc(o.arriveDate)}, ${esc(slot)}</strong>. You can change the delivery time on your order page until the drop closes.</p>
 <p style="margin:0 0 14px;font-size:14px">Cancel free, with a full refund, until the drop closes (${esc(o.closeDateTime)}). After that, orders can't be cancelled.</p>
 <p style="margin:0 0 6px"><a href="${esc(orderUrl)}" style="font-weight:700">View your order</a> · <a href="${esc(legalUrl)}">特定商取引法に基づく表記</a></p>`;
-  const text = `Order ${o.number} is confirmed. Thank you!\n\n${o.lines.map((l) => `${l.name} × ${l.qty}  ${yen(l.lineTotal)}`).join("\n")}\nSubtotal ${yen(o.subtotal)}${o.shippingFee > 0 ? ` / Shipping ${yen(o.shippingFee)}` : ""} / Total ${yen(o.total)} (tax incl.)\n\nDelivering to ${o.shipToName}\n${o.addressLine}\n${o.giftMessage ? `Gift card: ${o.giftMessage}\n` : ""}\nShips ${o.shipDate} by Japan Post, arrives ${o.arriveDate}.\nCancel free, with a full refund, until the drop closes (${o.closeDateTime}).\n\nView your order: ${orderUrl}\n特定商取引法に基づく表記: ${legalUrl}`;
+  const text = `Order ${o.number} is confirmed. Thank you!\n\n${o.lines.map((l) => `${l.name} × ${l.qty}  ${yen(l.lineTotal)}`).join("\n")}\nSubtotal ${yen(o.subtotal)}${o.shippingFee > 0 ? ` / Shipping ${yen(o.shippingFee)}` : ""} / Total ${yen(o.total)} (tax incl.)\n\nDelivering to ${o.shipToName}\n${o.addressLine}\n${o.giftMessage ? `Gift card: ${o.giftMessage}\n` : ""}\nShips ${o.shipDate} by Japan Post, arrives ${o.arriveDate}, ${slot}. You can change the delivery time on your order page until the drop closes.\nCancel free, with a full refund, until the drop closes (${o.closeDateTime}).\n\nView your order: ${orderUrl}\n特定商取引法に基づく表記: ${legalUrl}`;
   return { subject, html: layout("en", subject, body), text };
 }
 

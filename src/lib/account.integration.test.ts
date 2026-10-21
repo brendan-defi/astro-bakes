@@ -7,7 +7,7 @@ import { eq, sql } from "drizzle-orm";
 import * as schema from "@/db/schema";
 import { closeDb } from "@/db";
 import { seed } from "@/db/seed";
-import { cancelOrder, loadOrder, loadOrders, setMarketingOptIn, updateProfile } from "@/lib/account";
+import { cancelOrder, changeTimeSlot, loadOrder, loadOrders, setMarketingOptIn, updateProfile } from "@/lib/account";
 import { mergeQuantities } from "@/lib/cart";
 import { placeOrder, startCheckout } from "@/lib/checkout";
 import { setEmailTransport, type OutgoingEmail } from "@/lib/email";
@@ -127,6 +127,23 @@ describe.skipIf(!URL)("account", () => {
     expect(await cancelOrder(other, number)).toEqual({ ok: false, error: "not_found" });
     expect((await loadOrder(c, number, "en"))!.status).toBe("confirmed");
     expect(sent.filter((e) => e.type === "order_cancelled")).toHaveLength(0);
+  });
+
+  it("lets the customer change the delivery time slot until the drop closes, and only on their own order (D21)", async () => {
+    const c = await customer("slot@test.invalid");
+    const other = await customer("slot-other@test.invalid");
+    const number = await order(c);
+    expect(await changeTimeSlot(c, number, "morning")).toEqual({ ok: false, error: "closed" }); // seeded drop: closed by the clock
+    expect((await loadOrder(c, number, "en"))!).toMatchObject({ timeSlot: "none", canChangeSlot: false });
+    await setDrop("open", new Date(Date.now() + 3_600_000));
+    expect((await loadOrder(c, number, "en"))!.canChangeSlot).toBe(true);
+    expect(await changeTimeSlot(c, number, "18_20")).toEqual({ ok: true, slot: "18_20" });
+    expect((await loadOrder(c, number, "en"))!.timeSlot).toBe("18_20");
+    expect(await changeTimeSlot(other, number, "morning")).toEqual({ ok: false, error: "not_found" });
+    expect(await changeTimeSlot(c, number, "20_21")).toEqual({ ok: false, error: "invalid" });
+    expect((await loadOrder(c, number, "en"))!.timeSlot).toBe("18_20");
+    await cancelOrder(c, number);
+    expect(await changeTimeSlot(c, number, "morning")).toEqual({ ok: false, error: "not_changeable" });
   });
 
   it("offers 'order again' only when the open drop carries the same boxes", async () => {
