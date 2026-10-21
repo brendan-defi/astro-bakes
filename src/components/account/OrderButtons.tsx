@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { cancelOrderAction } from "@/app/[locale]/account/actions";
-import { mergeQuantities, storageKey, type Quantities } from "@/lib/cart";
+import { addToSavedCart, type Quantities } from "@/lib/cart";
 import type { Box, Locale } from "@/lib/data";
 import { getStrings } from "@/lib/i18n";
 import a from "../account.module.css";
@@ -64,10 +64,7 @@ export function ReorderButton({ locale, dropId, items, boxes }: { locale: Locale
       type="button"
       className="btn btn-primary"
       onClick={() => {
-        const key = storageKey(dropId);
-        let existing: Quantities = {};
-        try { existing = JSON.parse(window.localStorage.getItem(key) ?? "{}") as Quantities; } catch {}
-        try { window.localStorage.setItem(key, JSON.stringify(mergeQuantities(existing, items, boxes))); } catch {}
+        addToSavedCart(dropId, items, boxes);
         router.push(`/${locale}/checkout`);
       }}
     >

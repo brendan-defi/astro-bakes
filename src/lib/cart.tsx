@@ -1,8 +1,9 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useEffectEvent, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, type ReactNode } from "react";
 import type { Box } from "./data";
 import { demoEnabled } from "./demo";
+import { readStored, useHydrated, useStored, writeStored } from "./stored";
 
 export type Quantities = Record<string, number>;
 
@@ -30,7 +31,14 @@ interface CartValue {
   hydrated: boolean;
 }
 
-const CartContext = createContext<CartValue | null>(null);
+/** What the provider shares: which drop, and its boxes and fee. None of it changes at hydration; the saved cart is read by useCart. */
+interface CartScope {
+  dropId: string;
+  boxes: Box[];
+  shippingFee: number | null;
+}
+
+const CartContext = createContext<CartScope | null>(null);
 
 export function maxFor(box: Box): number {
   return Math.min(box.left, box.maxPerCustomer);
@@ -57,6 +65,23 @@ export function mergeQuantities(existing: Quantities, add: Quantities, boxes: Bo
   return sanitize(merged, boxes);
 }
 
+/** A saved cart as stored; anything unreadable counts as empty. */
+function parseQuantities(raw: string | null): Quantities {
+  if (!raw) return {};
+  try {
+    const q: unknown = JSON.parse(raw);
+    return q && typeof q === "object" ? (q as Quantities) : {};
+  } catch {
+    return {};
+  }
+}
+
+/** "Order again" from the account page, where no cart is on show: add to the drop's saved cart. */
+export function addToSavedCart(dropId: string, add: Quantities, boxes: Box[]) {
+  const key = storageKey(dropId);
+  writeStored("local", key, JSON.stringify(mergeQuantities(parseQuantities(readStored("local", key)), add, boxes)));
+}
+
 /** ?demo=cart / ?demo=soldout sample carts; development and previews only (see demo.ts). */
 const DEMO_CARTS: Record<string, Quantities> = {
   cart: { "cookie-box": 1, "banana-bread": 1 },
@@ -70,54 +95,52 @@ interface ProviderProps {
   /** Boxes on sale in that drop: prices, remaining stock and per-customer limits for clamping. */
   boxes: Box[];
   shippingFee: number | null;
-  /** Seed for the first render; wins over anything saved. */
-  initial?: Quantities;
 }
 
-/** The quantities are tagged with the drop they were loaded for, so a drop switch can never persist one drop's cart under another's key. */
-interface CartState {
-  dropId: string;
-  qty: Quantities;
-  hydrated: boolean;
+/**
+ * The cart is the drop's localStorage entry (client-side until sign-in, PRD 3.3), read straight from there rather
+ * than copied into state: every tab showing the drop sees the same cart, and switching drops reads the other entry.
+ */
+export function CartProvider({ children, dropId, boxes, shippingFee }: ProviderProps) {
+  const key = storageKey(dropId);
+  // Only to re-check the saved cart below. It never reaches the context, so the switch from the server's empty
+  // cart to the saved one can't push an update into a part of the page that's still hydrating (a Suspense boundary).
+  const raw = useStored("local", key);
+  const scope = useMemo(() => ({ dropId, boxes, shippingFee }), [dropId, boxes, shippingFee]);
+
+  // A ?demo= sample cart replaces the saved one whenever a drop's cart loads.
+  useEffect(() => {
+    const demo = demoEnabled ? new URLSearchParams(window.location.search).get("demo") : null;
+    if (demo && DEMO_CARTS[demo]) writeStored("local", key, JSON.stringify(DEMO_CARTS[demo]));
+  }, [key]);
+
+  // Save the cart back clamped to this drop's stock, so a box that sold out stays out even if stock frees up later.
+  useEffect(() => {
+    const saved = readStored("local", key);
+    if (saved === null) return;
+    const clamped = JSON.stringify(sanitize(parseQuantities(saved), boxes));
+    if (saved !== clamped) writeStored("local", key, clamped);
+  }, [key, raw, boxes]);
+
+  return <CartContext.Provider value={scope}>{children}</CartContext.Provider>;
 }
 
-export function CartProvider({ children, dropId, boxes, shippingFee, initial }: ProviderProps) {
-  const [state, setState] = useState<CartState>({ dropId, qty: initial ?? {}, hydrated: false });
-  // The current boxes, without making a change to them a reason to reload the cart.
-  const sanitizeForBoxes = useEffectEvent((qty: Quantities) => sanitize(qty, boxes));
+/** The cart, read from storage where it's used, so each part of the page switches to it once that part has hydrated. */
+export function useCart(): CartValue {
+  const scope = useContext(CartContext);
+  if (!scope) throw new Error("useCart must be used inside <CartProvider>");
+  const { dropId, boxes, shippingFee } = scope;
+  const key = storageKey(dropId);
+  const raw = useStored("local", key);
+  const hydrated = useHydrated();
+  const qty = useMemo(() => sanitize(parseQuantities(raw), boxes), [raw, boxes]);
 
-  // Load this drop's cart on mount and again whenever the drop changes (client-side until sign-in, PRD 3.3).
-  useEffect(() => {
-    let qty: Quantities = initial ?? {};
-    try {
-      const demo = demoEnabled ? new URLSearchParams(window.location.search).get("demo") : null;
-      if (demo && DEMO_CARTS[demo]) qty = DEMO_CARTS[demo];
-      else if (!initial) {
-        const raw = window.localStorage.getItem(storageKey(dropId));
-        if (raw) qty = JSON.parse(raw) as Quantities;
-      }
-    } catch {}
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- the cart is in localStorage, which only exists after mount
-    setState({ dropId, qty: sanitizeForBoxes(qty), hydrated: true });
-    // `initial` only seeds the first load.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dropId]);
-
-  // Persist, but only a cart that was loaded for the drop currently on show.
-  const current = state.hydrated && state.dropId === dropId;
-  useEffect(() => {
-    if (!current) return;
-    try {
-      window.localStorage.setItem(storageKey(dropId), JSON.stringify(state.qty));
-    } catch {}
-  }, [current, dropId, state.qty]);
-
+  // Read-modify-write on storage, so several changes in one event build on each other.
   const update = useCallback((fn: (q: Quantities) => Quantities) => {
-    setState((s) => {
-      const qty = fn(s.qty);
-      return qty === s.qty ? s : { ...s, qty };
-    });
-  }, []);
+    const current = sanitize(parseQuantities(readStored("local", key)), boxes);
+    const next = fn(current);
+    if (next !== current) writeStored("local", key, JSON.stringify(sanitize(next, boxes)));
+  }, [key, boxes]);
 
   const set = useCallback((id: string, n: number) => {
     const box = boxes.find((b) => b.id === id);
@@ -141,23 +164,13 @@ export function CartProvider({ children, dropId, boxes, shippingFee, initial }: 
 
   const clear = useCallback(() => update(() => ({})), [update]);
 
-  const value = useMemo<CartValue>(() => {
-    // While a different drop's cart is still in state, expose an empty one rather than a stale one.
-    const qty = state.dropId === dropId ? state.qty : {};
+  return useMemo<CartValue>(() => {
     const lines: CartLine[] = boxes
       .filter((b) => (qty[b.id] ?? 0) > 0)
       .map((b) => ({ box: b, qty: qty[b.id], lineTotal: b.price * qty[b.id] }));
     const count = lines.reduce((s, l) => s + l.qty, 0);
     const subtotal = lines.reduce((s, l) => s + l.lineTotal, 0);
     const total = shippingFee == null || count === 0 ? null : subtotal + shippingFee;
-    return { qty, boxes, set, inc, dec, clear, lines, count, subtotal, shippingFee, total, hydrated: current };
-  }, [state, dropId, current, set, inc, dec, clear, boxes, shippingFee]);
-
-  return <CartContext.Provider value={value}>{children}</CartContext.Provider>;
-}
-
-export function useCart(): CartValue {
-  const v = useContext(CartContext);
-  if (!v) throw new Error("useCart must be used inside <CartProvider>");
-  return v;
+    return { qty, boxes, set, inc, dec, clear, lines, count, subtotal, shippingFee, total, hydrated };
+  }, [qty, hydrated, set, inc, dec, clear, boxes, shippingFee]);
 }
