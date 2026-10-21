@@ -51,7 +51,8 @@ export function SettingsForm({ initial }: { initial: Record<string, SettingValue
         focusNext.current = SETTING_FIELDS.find((f) => r.errors[f.key])?.key ?? null;
         return;
       }
-      const next = toDraft(r.values);
+      // The answer holds only the editable fields, normalised; read-only ones (the shipping fee) keep what's shown.
+      const next = { ...saved, ...toDraft(r.values) };
       setSaved(next);
       setDraft(next);
       setErrors({});

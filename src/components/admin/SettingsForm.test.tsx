@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { SETTING_DEFAULTS } from "@/lib/settings-fields";
+import { SETTING_DEFAULTS, validateSettings } from "@/lib/settings-fields";
 import { SettingsForm } from "./SettingsForm";
 
 const actions = vi.hoisted(() => ({ saveSettingsAction: vi.fn() }));
@@ -40,6 +40,19 @@ describe("SettingsForm", () => {
     // Browsers trim an email field's value themselves; the server lower-cases it.
     expect(sent).toMatchObject({ owner_email: "Owner@Example.com", arrival_offset_days: "3", jp_fragile: false, legal_seller_name: "並川洋美" });
     expect((screen.getByLabelText("Owner email") as HTMLInputElement).value).toBe("owner@example.com");
+  });
+
+  it("keeps showing the stored shipping fee after a save, whose answer leaves read-only fields out", async () => {
+    // The real action's answer: validateSettings' editable values only, no shipping_fee.
+    actions.saveSettingsAction.mockImplementation(async (draft: Record<string, unknown>) => validateSettings(draft));
+    render(<SettingsForm initial={{ ...initial, shipping_fee: 800 }} />);
+    expect(screen.getByText("¥800 per order")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Owner email"), { target: { value: "owner@example.com" } });
+    fireEvent.click(save());
+    await waitFor(() => expect(status()).toMatch(/^Saved/));
+    expect("shipping_fee" in (await actions.saveSettingsAction.mock.results[0].value).values).toBe(false);
+    expect(screen.getByText("¥800 per order")).toBeTruthy();
+    expect(save().disabled).toBe(true);
   });
 
   it("marks the fields the server turned down, focuses the first, and clears a mark once it's edited", async () => {
