@@ -134,6 +134,8 @@ Remaining counts and sold-out badges on boxes follow D6.
 
 **Data.** Subscriber (email, locale, source=homepage, consented_at). Single opt-in with explicit consent text satisfies 特定電子メール法; double opt-in isn't worth the friction at this scale.
 
+**Built (2026-10-21).** Signups are stored (`src/lib/subscribe.ts`) and the success state appears only once they are: one row per email, normalised; signing up again refreshes the consent time and language and brings back an unsubscribed address. An email that already belongs to a customer is left alone (their own toggle, 2.4, governs it) with the same reply, so the form reveals no accounts. A honeypot field turns bots away quietly. Signed-in customers see a status with a link to their email settings when they are on the list, and a one-tap "Email me when Drop N opens" button when they are not; neither shows an email field. Not yet: a per-IP signup limit (needs a column, so a migration) and the welcome email.
+
 **Open.** Whether to send a welcome email on signup. Proposal: yes, one line, with the next drop date if known.
 
 ### [~] 1.6 Global nav & footer
