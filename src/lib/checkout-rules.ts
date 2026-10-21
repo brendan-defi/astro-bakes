@@ -1,3 +1,4 @@
+import { normalisePhone } from "./phone";
 import { lookupPostal, normalisePostal, outsideWards } from "./postal";
 
 /**
@@ -47,17 +48,21 @@ export interface DeliveryInput {
   line2: string;
 }
 
-/** Server-side copy of the delivery rules: required fields and a 7-digit code that resolves inside the 23 wards (D20). */
+/**
+ * Server-side copy of the delivery rules: required fields, a Japanese phone number, and a 7-digit code that
+ * resolves inside the 23 wards (D20). `phone` and `postal` come back normalised, ready to store.
+ */
 export function validateDelivery(d: DeliveryInput) {
   const postal = normalisePostal(d?.postal ?? "");
   const hit = postal.length === 7 ? lookupPostal(postal) : null;
+  const phone = typeof d?.phone === "string" ? normalisePhone(d.phone) : null;
   const errors: string[] = [];
   if (!d?.name?.trim()) errors.push("name");
-  if (!d?.phone?.trim()) errors.push("phone");
+  if (!phone) errors.push("phone");
   if (!d?.line1?.trim()) errors.push("line1");
   if (!hit) errors.push(outsideWards(postal) ? "area" : "postal");
   else if (!hit.deliverable) errors.push("area");
-  return { ok: errors.length === 0, errors, postal, hit };
+  return { ok: errors.length === 0, errors, phone: phone ?? "", postal, hit };
 }
 
 export const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;

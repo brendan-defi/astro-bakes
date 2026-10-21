@@ -150,6 +150,8 @@
 .giftField { margin-top: -6px; }
 .counter { align-self: flex-end; font-size: 12px; font-weight: 700; }
 .inputError { border-color: #c0392b; }
+.err { display: flex; align-items: center; gap: 6px; color: #c0392b; font-size: 13px; font-weight: 900; }
+.err svg { flex: none; }
 @media (min-width: 900px) {
   .fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)); gap: 16px; }
   .fields :global(.field) { gap: 6px; }

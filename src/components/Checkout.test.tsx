@@ -23,12 +23,12 @@ const drop: CheckoutDrop = { id: "drop-03", number: 3, name: "Drop 03 · October
 const customer: CheckoutCustomer = { email: "you@example.com", name: "山田 花子", phone: "090-1234-5678", postal: "1530061", line1: "1-2-3", line2: "" };
 
 /** A signed-in customer with a live reservation, at the given checkout step. */
-function mountAt(step: "delivery" | "pay" | "done") {
+function mountAt(step: "delivery" | "pay" | "done", who: CheckoutCustomer = customer) {
   const held = { checkoutId: CHECKOUT_ID, revision: 1, expiresAt: Date.now() + 600_000, items: { "cookie-box": 1 } };
   startHold({ checkoutId: held.checkoutId, revision: held.revision, expires: held.expiresAt });
   const tree = () => (
     <CartProvider dropId="drop-03" boxes={boxes} shippingFee={800}>
-      <Checkout locale="en" drop={drop} lineUrl="#" held={held} customer={customer} />
+      <Checkout locale="en" drop={drop} lineUrl="#" held={held} customer={who} />
     </CartProvider>
   );
   nav.params = new URLSearchParams(`step=${step}`);
@@ -103,6 +103,25 @@ describe("Checkout gift message", () => {
     placeOrder();
     await waitFor(() => expect(actions.placeOrderAction).toHaveBeenCalledTimes(1));
     expect(actions.placeOrderAction.mock.calls[0][0]).toMatchObject({ gift: "Happy birthday, Mum!", checkoutId: CHECKOUT_ID, revision: 1 });
+  });
+});
+
+describe("Checkout phone number", () => {
+  it("drops letters, and won't continue with a number that isn't one", () => {
+    const push = vi.spyOn(nav.router, "push");
+    mountAt("delivery", { ...customer, phone: "dsfasd" }); // saved before phone numbers were checked
+    const phone = document.getElementById("co-phone") as HTMLInputElement;
+    const next = () => fireEvent.click(screen.getByRole("button", { name: t.continueToPayment }));
+    next();
+    expect(push).not.toHaveBeenCalled();
+    expect(phone.getAttribute("aria-invalid")).toBe("true");
+    expect(screen.getByText(t.phoneInvalid)).toBeTruthy();
+
+    fireEvent.change(phone, { target: { value: "090-1234-5678abc" } });
+    expect(phone.value).toBe("090-1234-5678");
+    next();
+    expect(push).toHaveBeenCalledExactlyOnceWith(expect.stringContaining("step=pay"));
+    push.mockRestore();
   });
 });
 

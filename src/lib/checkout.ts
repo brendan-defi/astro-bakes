@@ -265,7 +265,7 @@ async function placeOrderTx(input: PlaceInput, cartId: string | null, customerId
     const customer = await tx.query.customers.findFirst({ where: eq(customers.id, customerId), columns: { id: true, email: true, deletedAt: true } });
     if (!customer || customer.deletedAt) return { ok: false as const, error: "signed_out" as const };
     const email = customer.email;
-    await tx.update(customers).set({ name: input.delivery.name.trim(), phone: input.delivery.phone.trim(), updatedAt: now }).where(eq(customers.id, customerId));
+    await tx.update(customers).set({ name: input.delivery.name.trim(), phone: delivery.phone, updatedAt: now }).where(eq(customers.id, customerId));
     const saved = {
       customerId,
       postalCode: delivery.postal,
@@ -313,7 +313,7 @@ async function placeOrderTx(input: PlaceInput, cartId: string | null, customerId
     // Everything about where and when it goes, in one place: a later "reuse the pending order" update (Stripe) rewrites the same fields.
     const snapshot = {
       shipToName: input.delivery.name.trim(),
-      phone: input.delivery.phone.trim(),
+      phone: delivery.phone,
       postalCode: delivery.postal,
       prefecture: hit.prefecture,
       city: hit.city,

@@ -222,7 +222,7 @@ export async function updateProfile(customerId: string, input: ProfileInput): Pr
   const now = new Date();
   const locale: Locale = input.locale === "ja" ? "ja" : "en";
   await getDb().transaction(async (tx) => {
-    await tx.update(customers).set({ name: input.name.trim(), phone: input.phone.trim(), locale, updatedAt: now }).where(eq(customers.id, customerId));
+    await tx.update(customers).set({ name: input.name.trim(), phone: delivery.phone, locale, updatedAt: now }).where(eq(customers.id, customerId));
     const saved = { customerId, postalCode: delivery.postal, prefecture: hit.prefecture, city: hit.city, town: hit.town, line1: input.address.line1.trim(), line2: input.address.line2?.trim() || null, wardCode: hit.wardCode };
     await tx.insert(addresses).values(saved).onConflictDoUpdate({ target: addresses.customerId, set: { ...saved, updatedAt: now } });
   });

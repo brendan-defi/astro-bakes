@@ -161,8 +161,8 @@ describe.skipIf(!TEST_DATABASE_URL)("account", () => {
   it("updates the profile and saved address with the checkout's rules, and the preference", async () => {
     const c = await customer("profile@test.invalid");
     const bad = await updateProfile(c, { name: "", phone: "1", locale: "en", address: { name: "", phone: "1", postal: "180-0004", line1: "", line2: "" } });
-    expect(bad).toEqual({ ok: false, error: "invalid", errors: ["name", "line1", "area"] });
-    expect(await updateProfile(c, { name: "花子", phone: "090-1111-2222", locale: "ja", address: { name: "花子", phone: "090-1111-2222", postal: "１５０－０００１", line1: "5-6", line2: "" } })).toEqual({ ok: true });
+    expect(bad).toEqual({ ok: false, error: "invalid", errors: ["name", "phone", "line1", "area"] });
+    expect(await updateProfile(c, { name: "花子", phone: "０９０ー１１１１ー２２２２", locale: "ja", address: { name: "花子", phone: "０９０ー１１１１ー２２２２", postal: "１５０－０００１", line1: "5-6", line2: "" } })).toEqual({ ok: true });
     const me = await db.query.customers.findFirst({ where: eq(schema.customers.id, c), with: { address: true } });
     expect(me).toMatchObject({ name: "花子", phone: "090-1111-2222", locale: "ja", marketingOptIn: true, address: { postalCode: "1500001", city: "渋谷区", line1: "5-6", line2: null, wardCode: "13113" } });
     await setMarketingOptIn(c, false);

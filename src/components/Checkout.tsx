@@ -10,10 +10,12 @@ import { demoEnabled } from "@/lib/demo";
 import { fmtCountdown, fmtDate, fmtDateTime, yen } from "@/lib/format";
 import { getStrings, type Strings } from "@/lib/i18n";
 import { useCart, type CartLine } from "@/lib/cart";
-import { lookupPostal, normalisePostal, outsideWards, type PostalHit } from "@/lib/postal";
+import { cleanPhoneInput, normalisePhone } from "@/lib/phone";
+import { cleanPostalInput, lookupPostal, normalisePostal, outsideWards, type PostalHit } from "@/lib/postal";
 import { clearHold, readHold, startHold, type Hold } from "@/lib/hold";
 import { celebrate } from "@/lib/particles";
 import { formatReservationRef, parseReservationRef, reservationStatus, reservedLines, totals, type Reservation } from "@/lib/reservation";
+import { CleanInput } from "./CleanInput";
 import { CodeInput } from "./CodeInput";
 import { ArrowLeftIcon, CardIcon, CheckIcon, ClockIcon, StarShape, TruckIcon, WarningIcon } from "./icons";
 import { Logo } from "./Logo";
@@ -235,7 +237,8 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
     setPostalTried(true);
     setHit(lookupPostal(addr.postal));
   }
-  const addrValid = addr.name.trim() && addr.phone.trim() && addr.line1.trim() && hit?.deliverable;
+  const addrValid = addr.name.trim() && normalisePhone(addr.phone) && addr.line1.trim() && hit?.deliverable;
+  const phoneBad = touched && !normalisePhone(addr.phone);
   const addressLine = hit ? `〒${addr.postal} ${hit.prefecture}${hit.city}${hit.town}${addr.line1}${addr.line2 ? " " + addr.line2 : ""}` : "";
   const shortAddress = hit ? `${hit.prefecture}${hit.city}${hit.town}${addr.line1}` : "";
 
@@ -466,14 +469,17 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
                       </div>
                       <div className="field">
                         <label htmlFor="co-phone" className="label">{t.phone} {jaHint("電話番号")}</label>
-                        <input id="co-phone" type="tel" autoComplete="tel" required className={`input ${touched && !addr.phone.trim() ? s.inputError : ""}`} value={addr.phone} onChange={(e) => setAddr({ ...addr, phone: e.target.value })} />
-                        <span className="hint">{t.phoneHint}</span>
+                        <CleanInput id="co-phone" type="tel" autoComplete="tel" required clean={cleanPhoneInput} className={`input ${phoneBad ? s.inputError : ""}`} value={addr.phone} onValueChange={(phone) => setAddr({ ...addr, phone })}
+                          aria-invalid={phoneBad || undefined} aria-describedby="co-phone-hint" />
+                        {phoneBad
+                          ? <span id="co-phone-hint" className={s.err}><WarningIcon size={16} />{t.phoneInvalid}</span>
+                          : <span id="co-phone-hint" className="hint">{t.phoneHint}</span>}
                       </div>
                       <div className="field">
                         <label htmlFor="co-postal" className="label">{t.postalCode} {jaHint("郵便番号")}</label>
                         <div className={s.postalRow}>
-                          <input id="co-postal" type="text" inputMode="numeric" autoComplete="postal-code" className="input" value={addr.postal}
-                            onChange={(e) => { setAddr({ ...addr, postal: e.target.value }); setPostalTried(false); setHit(null); }}
+                          <CleanInput id="co-postal" type="text" inputMode="numeric" autoComplete="postal-code" clean={cleanPostalInput} className="input" value={addr.postal}
+                            onValueChange={(postal) => { setAddr({ ...addr, postal }); setPostalTried(false); setHit(null); }}
                             onBlur={() => { if (normalisePostal(addr.postal).length === 7) doLookup(); }}
                             onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); doLookup(); } }} />
                           <button type="button" className={s.lookupBtn} onClick={doLookup}>{t.lookUp}</button>

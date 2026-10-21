@@ -1,3 +1,4 @@
+import { DASHES } from "./phone";
 import { BUILDINGS, CODES, WARDS, WARD_PREFIXES } from "./postal-tokyo23";
 
 /**
@@ -13,6 +14,21 @@ export interface PostalHit {
   wardCode: string;
   /** true when we deliver there. Every hit is in the 23 wards; a per-ward allow list in Settings (D20) would narrow this. */
   deliverable: boolean;
+}
+
+/**
+ * What the postal-code field keeps as you type: up to 7 half-width digits and one hyphen, "153-0061" at most.
+ * Hyphens after the first are dropped rather than counted, so a doubled one can't push out a digit.
+ */
+export function cleanPostalInput(text: string): string {
+  let out = "";
+  let digits = 0;
+  for (const c of text.normalize("NFKC").replace(DASHES, "-")) {
+    if (digits === 7) break;
+    if (/\d/.test(c)) { out += c; digits++; }
+    else if (c === "-" && !out.includes("-")) out += c;
+  }
+  return out;
 }
 
 export function normalisePostal(input: string): string {

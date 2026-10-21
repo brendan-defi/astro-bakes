@@ -65,6 +65,13 @@ describe("validateDelivery", () => {
     expect(validateDelivery({ ...good, name: " ", phone: "", line1: "" }).errors).toEqual(["name", "phone", "line1"]);
   });
 
+  it("rejects a phone number that isn't a Japanese one, and normalises one that is", () => {
+    expect(validateDelivery({ ...good, phone: "dsfasd" }).errors).toEqual(["phone"]);
+    expect(validateDelivery({ ...good, phone: "090-1234-567" }).errors).toEqual(["phone"]);
+    expect(validateDelivery({ ...good, phone: 9012345678 as unknown as string }).errors).toEqual(["phone"]);
+    expect(validateDelivery({ ...good, phone: "＋８１ ９０ー１２３４ー５６７８" })).toMatchObject({ ok: true, phone: "090-1234-5678" });
+  });
+
   it("rejects unknown and out-of-area postal codes (D20)", () => {
     expect(validateDelivery({ ...good, postal: "153-0099" }).errors).toEqual(["postal"]);
     expect(validateDelivery({ ...good, postal: "180-0004" }).errors).toEqual(["area"]);
