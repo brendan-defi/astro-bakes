@@ -1,7 +1,7 @@
-import { act, renderHook } from "@testing-library/react";
+import { act, cleanup, renderHook } from "@testing-library/react";
 import { hydrateRoot } from "react-dom/client";
 import { renderToString } from "react-dom/server";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Suspense, type ReactNode } from "react";
 import { CartProvider, maxFor, mergeQuantities, sanitize, storageKey, useCart } from "./cart";
 import type { Box } from "./data";
@@ -29,6 +29,8 @@ beforeEach(() => {
   window.localStorage.clear();
   window.history.replaceState({}, "", "/");
 });
+// Unmount each test's carts: one left mounted would still be listening to storage in the next test.
+afterEach(cleanup);
 
 describe("maxFor / sanitize", () => {
   it("caps at the lower of remaining stock and the per-customer limit", () => {
@@ -79,13 +81,15 @@ describe("CartProvider", () => {
     expect(result.current.total).toBeNull();
   });
 
-  it("restores the saved cart for the drop, sanitised, and persists changes", () => {
+  it("shows the saved cart clamped to this drop's stock, and saves only the box that changes", () => {
     window.localStorage.setItem(storageKey("drop-03"), JSON.stringify({ "cookie-box": 2, "banana-bread": 9, ghost: 4 }));
     const { result } = mount({ dropId: "drop-03", boxes, shippingFee: 800 });
     expect(result.current.hydrated).toBe(true);
     expect(result.current.qty).toEqual({ "cookie-box": 2, "banana-bread": 3 });
     act(() => result.current.inc("cookie-box"));
-    expect(saved("drop-03")).toEqual({ "cookie-box": 3, "banana-bread": 3 });
+    expect(saved("drop-03")).toEqual({ "cookie-box": 3, "banana-bread": 9, ghost: 4 });
+    act(() => result.current.dec("banana-bread")); // from the 3 shown, not the 9 saved
+    expect(saved("drop-03")).toEqual({ "cookie-box": 3, "banana-bread": 2, ghost: 4 });
   });
 
   it("survives corrupt storage", () => {
@@ -124,25 +128,56 @@ describe("CartProvider", () => {
     expect(saved("drop-04")).toEqual({ "banana-bread": 2 });
   });
 
-  it("clamps the new drop's cart to the new stock when the drop and its boxes change together", () => {
+  it("shows the new drop's cart clamped to the new stock when the drop and its boxes change together", () => {
     // Review of #24: the switch has to use the new drop's boxes, not the old ones.
     window.localStorage.setItem(storageKey("drop-04"), JSON.stringify({ "cookie-box": 5 }));
     const { result, update } = mount({ dropId: "drop-03", boxes, shippingFee: 800 });
     act(() => result.current.set("cookie-box", 4));
     update({ dropId: "drop-04", boxes: [box({ id: "cookie-box", left: 2 }), loaf] });
     expect(result.current.qty).toEqual({ "cookie-box": 2 });
-    expect(saved("drop-04")).toEqual({ "cookie-box": 2 });
+    expect(saved("drop-04")).toEqual({ "cookie-box": 5 }); // shown clamped, not rewritten
     expect(saved("drop-03")).toEqual({ "cookie-box": 4 });
   });
 
-  it("keeps the cart when the same drop's boxes refresh, clamped to the new stock", () => {
+  it("keeps the cart when the same drop's boxes refresh, showing it clamped to the new stock", () => {
     const { result, update } = mount({ dropId: "drop-03", boxes, shippingFee: 800 });
     act(() => { result.current.set("cookie-box", 4); result.current.set("banana-bread", 2); });
     update({ boxes: [box({ id: "cookie-box", price: 1200, left: 7 }), loaf] }); // a price change: quantities untouched
     expect(result.current.qty).toEqual({ "cookie-box": 4, "banana-bread": 2 });
     update({ boxes: [box({ id: "cookie-box", left: 3 }), loaf] }); // stock sold elsewhere
     expect(result.current.qty).toEqual({ "cookie-box": 3, "banana-bread": 2 });
-    expect(saved("drop-03")).toEqual({ "cookie-box": 3, "banana-bread": 2 });
+    expect(saved("drop-03")).toEqual({ "cookie-box": 4, "banana-bread": 2 });
+    update({ boxes: [box({ id: "cookie-box", left: 7 }), loaf] }); // and freed up again
+    expect(result.current.qty).toEqual({ "cookie-box": 4, "banana-bread": 2 });
+  });
+
+  it("does not let an idle stale tab shrink a newer tab's cart", () => {
+    // Review of #24 (follow-up): an older tab clamped every incoming change to its own stock and saved that.
+    const { result } = mount({ dropId: "drop-03", boxes: [box({ id: "cookie-box", left: 1 })], shippingFee: 800 });
+    act(() => result.current.set("cookie-box", 1));
+    const key = storageKey("drop-03");
+    window.localStorage.setItem(key, JSON.stringify({ "cookie-box": 3 }));
+    act(() => { window.dispatchEvent(new StorageEvent("storage", { key, storageArea: window.localStorage })); });
+    expect(saved("drop-03")).toEqual({ "cookie-box": 3 });
+    expect(result.current.qty).toEqual({ "cookie-box": 1 }); // the old tab still only shows what it thinks is left
+  });
+
+  it("lets a tab with older stock change its own boxes without touching the rest of a newer tab's cart", () => {
+    const older = mount({ dropId: "drop-03", boxes: [box({ id: "cookie-box", left: 1 }), loaf], shippingFee: 800 });
+    const newer = mount({ dropId: "drop-03", boxes: [box({ id: "cookie-box", left: 5 }), loaf, box({ id: "matcha-box" })], shippingFee: 800 });
+    act(() => { newer.result.current.set("cookie-box", 3); newer.result.current.set("matcha-box", 1); });
+    expect(older.result.current.qty).toEqual({ "cookie-box": 1 });
+    act(() => older.result.current.inc("banana-bread"));
+    expect(saved("drop-03")).toEqual({ "cookie-box": 3, "matcha-box": 1, "banana-bread": 1 }); // a box the older tab doesn't know stays too
+    expect(newer.result.current.qty).toEqual({ "cookie-box": 3, "matcha-box": 1, "banana-bread": 1 });
+  });
+
+  it("drops junk from the saved cart when it next changes, but keeps real quantities this tab can't sell", () => {
+    window.localStorage.setItem(storageKey("drop-03"), JSON.stringify({ "cookie-box": "lots", "banana-bread": -2, "sampler-box": 1.5 }));
+    const { result } = mount({ dropId: "drop-03", boxes, shippingFee: 800 });
+    expect(result.current.qty).toEqual({}); // sold out here, as far as this tab knows
+    act(() => result.current.set("cookie-box", 1));
+    expect(saved("drop-03")).toEqual({ "sampler-box": 1, "cookie-box": 1 });
   });
 
   it("follows changes made in another tab", () => {
@@ -184,9 +219,11 @@ describe("CartProvider", () => {
     container.innerHTML = renderToString(tree);
     expect(container.textContent).toBe("loading");
     const errors: unknown[] = [];
-    await act(async () => { hydrateRoot(container, tree, { onRecoverableError: (e) => { errors.push(e); } }); });
+    let root: ReturnType<typeof hydrateRoot> | undefined;
+    await act(async () => { root = hydrateRoot(container, tree, { onRecoverableError: (e) => { errors.push(e); } }); });
     expect(errors).toEqual([]);
     expect(container.textContent).toBe("saved 2");
+    act(() => root?.unmount()); // not RTL's, so cleanup() doesn't know about it
   });
 
   it("seeds a sample cart from ?demo= outside production", () => {

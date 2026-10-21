@@ -76,6 +76,16 @@ function parseQuantities(raw: string | null): Quantities {
   }
 }
 
+/** The saved entries that are real quantities. Junk goes, but nothing is clamped: that needs stock, which a tab may know less about than the tab that saved it. */
+function wholeQuantities(q: Quantities): Quantities {
+  const out: Quantities = {};
+  for (const [id, raw] of Object.entries(q)) {
+    const n = Math.floor(Number(raw));
+    if (Number.isFinite(n) && n > 0) out[id] = n;
+  }
+  return out;
+}
+
 /** "Order again" from the account page, where no cart is on show: add to the drop's saved cart. */
 export function addToSavedCart(dropId: string, add: Quantities, boxes: Box[]) {
   const key = storageKey(dropId);
@@ -100,12 +110,15 @@ interface ProviderProps {
 /**
  * The cart is the drop's localStorage entry (client-side until sign-in, PRD 3.3), read straight from there rather
  * than copied into state: every tab showing the drop sees the same cart, and switching drops reads the other entry.
+ *
+ * Each tab's stock and boxes come from its own server render, so an older tab can know less than a newer one. A tab
+ * therefore only clamps what it shows, never what's saved, and a change writes just the box it changes. The server
+ * re-checks stock at checkout either way (PRD 3.3).
  */
 export function CartProvider({ children, dropId, boxes, shippingFee }: ProviderProps) {
   const key = storageKey(dropId);
-  // Only to re-check the saved cart below. It never reaches the context, so the switch from the server's empty
-  // cart to the saved one can't push an update into a part of the page that's still hydrating (a Suspense boundary).
-  const raw = useStored("local", key);
+  // Only the drop and its boxes and fee: none of it changes at hydration, so the switch from the server's empty cart
+  // to the saved one (in useCart) can't push an update into a part of the page that's still hydrating.
   const scope = useMemo(() => ({ dropId, boxes, shippingFee }), [dropId, boxes, shippingFee]);
 
   // A ?demo= sample cart replaces the saved one whenever a drop's cart loads.
@@ -113,14 +126,6 @@ export function CartProvider({ children, dropId, boxes, shippingFee }: ProviderP
     const demo = demoEnabled ? new URLSearchParams(window.location.search).get("demo") : null;
     if (demo && DEMO_CARTS[demo]) writeStored("local", key, JSON.stringify(DEMO_CARTS[demo]));
   }, [key]);
-
-  // Save the cart back clamped to this drop's stock, so a box that sold out stays out even if stock frees up later.
-  useEffect(() => {
-    const saved = readStored("local", key);
-    if (saved === null) return;
-    const clamped = JSON.stringify(sanitize(parseQuantities(saved), boxes));
-    if (saved !== clamped) writeStored("local", key, clamped);
-  }, [key, raw, boxes]);
 
   return <CartContext.Provider value={scope}>{children}</CartContext.Provider>;
 }
@@ -135,34 +140,24 @@ export function useCart(): CartValue {
   const hydrated = useHydrated();
   const qty = useMemo(() => sanitize(parseQuantities(raw), boxes), [raw, boxes]);
 
-  // Read-modify-write on storage, so several changes in one event build on each other.
-  const update = useCallback((fn: (q: Quantities) => Quantities) => {
-    const current = sanitize(parseQuantities(readStored("local", key)), boxes);
-    const next = fn(current);
-    if (next !== current) writeStored("local", key, JSON.stringify(sanitize(next, boxes)));
+  // Change one box, starting from what this tab shows for it, and leave every other saved entry as it is. Reads
+  // storage at the time of the change, so several changes in one event build on each other.
+  const change = useCallback((id: string, to: (shown: number) => number) => {
+    const box = boxes.find((b) => b.id === id);
+    if (!box) return;
+    const saved = wholeQuantities(parseQuantities(readStored("local", key)));
+    const shown = Math.min(maxFor(box), saved[id] ?? 0);
+    const next = Math.max(0, Math.min(maxFor(box), Math.floor(to(shown))));
+    if (next === shown) return;
+    if (next > 0) saved[id] = next;
+    else delete saved[id];
+    writeStored("local", key, JSON.stringify(saved));
   }, [key, boxes]);
 
-  const set = useCallback((id: string, n: number) => {
-    const box = boxes.find((b) => b.id === id);
-    if (!box) return;
-    const clamped = Math.max(0, Math.min(maxFor(box), Math.floor(n)));
-    update((q) => (q[id] === clamped ? q : { ...q, [id]: clamped }));
-  }, [boxes, update]);
-
-  const inc = useCallback((id: string) => {
-    const box = boxes.find((b) => b.id === id);
-    if (!box) return;
-    update((q) => {
-      const next = Math.min(maxFor(box), (q[id] ?? 0) + 1);
-      return q[id] === next ? q : { ...q, [id]: next };
-    });
-  }, [boxes, update]);
-
-  const dec = useCallback((id: string) => {
-    update((q) => (id in q ? { ...q, [id]: Math.max(0, q[id] - 1) } : q));
-  }, [update]);
-
-  const clear = useCallback(() => update(() => ({})), [update]);
+  const set = useCallback((id: string, n: number) => change(id, () => n), [change]);
+  const inc = useCallback((id: string) => change(id, (n) => n + 1), [change]);
+  const dec = useCallback((id: string) => change(id, (n) => n - 1), [change]);
+  const clear = useCallback(() => writeStored("local", key, JSON.stringify({})), [key]);
 
   return useMemo<CartValue>(() => {
     const lines: CartLine[] = boxes
