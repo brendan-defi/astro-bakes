@@ -25,7 +25,7 @@ export default async function BoxesPage() {
       ) : (
         <table className={s.table}>
           <thead>
-            <tr><th>Box</th><th>What's in it</th><th className={s.num}>Price</th><th className={s.num}>Default cap</th><th className={s.num}>Per customer</th><th>Status</th></tr>
+            <tr><th>Box</th><th>What’s in it</th><th className={s.num}>Price</th><th className={s.num}>Default cap</th><th className={s.num}>Per customer</th><th>Status</th></tr>
           </thead>
           <tbody>
             {boxes.map((b) => (

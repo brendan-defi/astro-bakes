@@ -176,7 +176,7 @@ export function BoxForm({ slug, initial, items, created = false }: { slug: strin
         </section>
 
         <section aria-labelledby="box-sec-recipe" className={`panel ${s.formSection}`}>
-          <h2 id="box-sec-recipe" className={s.sectionTitle}>What's inside</h2>
+          <h2 id="box-sec-recipe" className={s.sectionTitle}>What’s inside</h2>
           <p className={s.sectionIntro}>The recipe is what the kitchen bakes for one box; the production sheet adds these up. Items are managed on the Items tab.</p>
           <div className={s.fields}>
             <FieldRow label="Recipe *" error={errors.recipe} errorId={fieldId("recipe") + "-err"}>
@@ -241,7 +241,7 @@ export function BoxForm({ slug, initial, items, created = false }: { slug: strin
 
         <section aria-labelledby="box-sec-sale" className={`panel ${s.formSection}`}>
           <h2 id="box-sec-sale" className={s.sectionTitle}>Price and availability</h2>
-          <p className={s.sectionIntro}>These are defaults: a drop copies them when it's set up, then keeps its own. Changing them here never changes a drop that already exists.</p>
+          <p className={s.sectionIntro}>These are defaults: a drop copies them when it’s set up, then keeps its own. Changing them here never changes a drop that already exists.</p>
           <div className={s.fields}>
             <FieldRow id={fieldId("price")} label="Price (税込) *" help={help.price} error={errors.price}>
               <div className={s.withUnit}><span>¥</span><input {...text("price", help.price, { inputMode: "numeric" })} className={`input ${s.numInput}`} /></div>
