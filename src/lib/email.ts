@@ -48,6 +48,28 @@ const resendTransport: EmailTransport = async (email, from) => {
 
 let transport: EmailTransport = resendTransport;
 
+/**
+ * How long a send may take before it counts as failed. Some callers hold a lock across the send (the welcome
+ * email, email-lock.ts), so a slow provider mustn't hold up an unsubscribe or a sign-in for long. A timeout
+ * doesn't prove the provider rejected the email, so callers that retry keep the same idempotency key.
+ */
+const DEFAULT_SEND_TIMEOUT_MS = 10_000;
+let sendTimeoutMs = DEFAULT_SEND_TIMEOUT_MS;
+
+/** Tests shorten the deadline to exercise it. */
+export function setEmailSendTimeout(ms: number | null) {
+  sendTimeoutMs = ms ?? DEFAULT_SEND_TIMEOUT_MS;
+}
+
+function withDeadline(send: Promise<SendOutcome>, ms: number): Promise<SendOutcome> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<SendOutcome>((resolve) => {
+    timer = setTimeout(() => resolve({ ok: false, error: `timed out after ${ms} ms (the provider may still deliver it)` }), ms);
+  });
+  send.catch(() => {}); // a send that settles after the deadline mustn't surface as an unhandled rejection
+  return Promise.race([send, late]).finally(() => clearTimeout(timer));
+}
+
 /** Tests swap the transport to capture what would have been sent. */
 export function setEmailTransport(t: EmailTransport | null) {
   transport = t ?? resendTransport;
@@ -67,7 +89,7 @@ export async function sendEmail(email: OutgoingEmail, opts: { conn?: LogConn } =
   let outcome: SendOutcome;
   try {
     const replyTo = email.replyTo ?? (email.type === "internal" ? undefined : await contactEmail().catch(() => undefined));
-    outcome = await transport({ ...email, ...(replyTo ? { replyTo } : {}) }, fromAddress());
+    outcome = await withDeadline(transport({ ...email, ...(replyTo ? { replyTo } : {}) }, fromAddress()), sendTimeoutMs);
   } catch (e) {
     outcome = { ok: false, error: e instanceof Error ? e.message : String(e) };
   }

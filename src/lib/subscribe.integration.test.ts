@@ -7,7 +7,7 @@ import { lockEmail } from "@/lib/email-lock";
 import { hashIp } from "@/lib/auth-rules";
 import { deliverWelcome, retryPendingWelcomes, SIGNUPS_PER_IP_PER_HOUR, subscribe, WELCOME_MAX_ATTEMPTS } from "@/lib/subscribe";
 import { unsubscribe, verifyUnsubscribe } from "@/lib/unsubscribe";
-import { setEmailTransport, type OutgoingEmail } from "@/lib/email";
+import { setEmailSendTimeout, setEmailTransport, type OutgoingEmail } from "@/lib/email";
 import { clearTestData, closeTestDb, resetDatabase, testDb, TEST_DATABASE_URL } from "@/test/db";
 
 /** Notify-me signups (PRD 1.5) against a real Postgres (TEST_DATABASE_URL). */
@@ -409,5 +409,66 @@ describe.skipIf(!TEST_DATABASE_URL)("subscribe", () => {
     expect(final.welcomeAttempts).toBeLessThanOrEqual(WELCOME_MAX_ATTEMPTS);
     expect(final.welcomeSentAt).not.toBeNull();
     expect(welcomes()).toHaveLength(4); // three failures, one delivery
+  });
+
+  it("gives up on a provider that hangs after the send deadline, freeing the address for an unsubscribe, and retries under the same key", async () => {
+    setEmailSendTimeout(150);
+    let release!: () => void;
+    mail.hold = new Promise<void>((r) => { release = r; });
+    try {
+      const signup = track(subscribe({ email: "hang@test.invalid", locale: "en" }));
+      await until(() => welcomes().length === 1, "the welcome to reach the provider");
+      const optOut = track(unsubscribe("other-hang@test.invalid")); // a different address isn't held up at all
+      await optOut.promise;
+      expect(await signup.promise).toEqual({ ok: true });
+      expect(await row("hang@test.invalid")).toMatchObject({ welcomeSentAt: null, welcomeAttempts: 1 });
+      const [log] = await db.select().from(schema.notificationLog).where(eq(schema.notificationLog.to, "hang@test.invalid"));
+      expect(log.error).toMatch(/timed out/);
+    } finally {
+      release();
+      mail.hold = null;
+      setEmailSendTimeout(null);
+    }
+    expect(await retryPendingWelcomes({ now: new Date(Date.now() + 2 * MIN) })).toEqual(["sent"]);
+    const keys = welcomes().filter((m) => m.to === "hang@test.invalid").map((m) => m.idempotencyKey);
+    expect(new Set(keys).size).toBe(1); // a timeout isn't proof it wasn't delivered, so the retry reuses the key
+  });
+
+  it("delivers more welcomes at once than the app has database connections, each on just its own", async () => {
+    mail.failing = "provider down";
+    const emails = Array.from({ length: 6 }, (_, i) => `pool${i}@test.invalid`); // the app's pool holds 5
+    for (const email of emails) await subscribe({ email, locale: "en" });
+    mail.failing = null;
+    const ids = await Promise.all(emails.map(async (email) => (await row(email)).id));
+    const before = welcomes().length;
+    let release!: () => void;
+    mail.hold = new Promise<void>((r) => { release = r; });
+    const later = new Date(Date.now() + 2 * MIN);
+    const deliveries = Promise.all(ids.map((id) => deliverWelcome(id, later)));
+    try {
+      await until(() => welcomes().length - before >= 5, "five deliveries to be with the provider at once");
+    } finally {
+      release();
+      mail.hold = null;
+    }
+    // If logging or the reply-to lookup needed a second connection, the five holders would wait on the pool forever.
+    const outcome = await Promise.race([deliveries, new Promise<"stuck">((r) => setTimeout(() => r("stuck"), 10_000))]);
+    expect(outcome).toEqual(Array(6).fill("sent"));
+  });
+
+  it("keeps the delivery result when writing the log row fails", async () => {
+    await db.execute(sql`alter table notification_log add constraint block_welcome_logs check (type <> 'welcome') not valid`);
+    try {
+      await subscribe({ email: "nolog-ok@test.invalid", locale: "en" });
+      expect((await row("nolog-ok@test.invalid")).welcomeSentAt).not.toBeNull();
+      mail.failing = "provider down";
+      await subscribe({ email: "nolog-fail@test.invalid", locale: "en" });
+      expect(await row("nolog-fail@test.invalid")).toMatchObject({ welcomeAttempts: 1, welcomeSentAt: null });
+      expect((await row("nolog-fail@test.invalid")).welcomeNextAttemptAt).not.toBeNull();
+      expect(await db.select().from(schema.notificationLog).where(eq(schema.notificationLog.type, "welcome"))).toHaveLength(0);
+    } finally {
+      mail.failing = null;
+      await db.execute(sql`alter table notification_log drop constraint block_welcome_logs`);
+    }
   });
 });
