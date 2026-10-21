@@ -18,12 +18,17 @@ import { describe, expect, it } from "vitest";
  * of a route, a page's default export, and any inline "use server" function.
  * The check must sit directly in the entry point's body, outside nested
  * functions, as `await requireAdmin()`: unawaited, it would gate nothing.
+ * An entry point re-exported from another module can't be seen into, so it
+ * counts as unguarded, and `export * from` in an entry-point file fails closed:
+ * write the gated function in the page, route or actions file itself.
  */
 const ROOT = join(process.cwd(), "src/app/admin");
 const PUBLIC = new Set(["sign-in/page.tsx", "auth/actions.ts", "auth/verify/route.ts"]);
 const HTTP_METHODS = new Set(["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]);
 
 type Gate = "admin" | "host";
+/** The label of an `export * from`: it may export any name, so it stands in for every entry point. */
+const WILDCARD = "*";
 type Entry = { label: string; body: ts.Node | undefined };
 
 function files(dir: string): string[] {
@@ -86,9 +91,16 @@ function exportsOf(sf: ts.SourceFile): Entry[] {
       entries.push({ label: "default", body: ts.isIdentifier(s.expression) ? local.get(s.expression.text) : functionOf(s.expression)?.body });
     }
     if (ts.isExportDeclaration(s) && !s.isTypeOnly) {
-      // Re-exports from another module can't be checked here; local ones resolve to their declaration.
-      if (s.moduleSpecifier || !s.exportClause || !ts.isNamedExports(s.exportClause)) entries.push({ label: s.getText(sf), body: undefined });
-      else for (const el of s.exportClause.elements) if (!el.isTypeOnly) entries.push({ label: el.name.text, body: local.get((el.propertyName ?? el.name).text) });
+      // `export * from` could export anything, so it counts as every name (WILDCARD) and fails closed.
+      if (!s.exportClause) entries.push({ label: WILDCARD, body: undefined });
+      else if (ts.isNamespaceExport(s.exportClause)) entries.push({ label: s.exportClause.name.text, body: undefined });
+      else {
+        // Each name keeps its own entry. One re-exported from another module can't be checked here (no body); a local
+        // one resolves to its declaration.
+        for (const el of s.exportClause.elements) {
+          if (!el.isTypeOnly) entries.push({ label: el.name.text, body: s.moduleSpecifier ? undefined : local.get((el.propertyName ?? el.name).text) });
+        }
+      }
     }
   }
   return entries;
@@ -114,8 +126,8 @@ export function unguarded(name: string, src: string): string[] {
   const base = name.split("/").pop();
   let entries: Entry[] = [];
   if (usesServer(sf.statements)) entries = exportsOf(sf);
-  else if (base === "route.ts") entries = exportsOf(sf).filter((e) => HTTP_METHODS.has(e.label));
-  else if (base === "page.tsx") entries = exportsOf(sf).filter((e) => e.label === "default");
+  else if (base === "route.ts") entries = exportsOf(sf).filter((e) => HTTP_METHODS.has(e.label) || e.label === WILDCARD);
+  else if (base === "page.tsx") entries = exportsOf(sf).filter((e) => e.label === "default" || e.label === WILDCARD);
   entries.push(...inlineActions(sf));
   return entries.filter((e) => !gated(e.body, gate)).map((e) => `${name}: ${e.label}`);
 }
@@ -152,7 +164,20 @@ describe("admin gate coverage", () => {
     const inline = `export default async function Page() {\n  await requireAdmin();\n  async function save() {\n    "use server";\n    return 1;\n  }\n  return null;\n}\n`;
     expect(unguarded("drops/page.tsx", inline)).toEqual(["drops/page.tsx: inline action at line 3"]);
     const reexport = `"use server";\nasync function save() { return 1; }\nexport { save };\nexport { other } from "./elsewhere";\n`;
-    expect(unguarded("a/actions.ts", reexport)).toEqual(["a/actions.ts: save", 'a/actions.ts: export { other } from "./elsewhere";']);
+    expect(unguarded("a/actions.ts", reexport)).toEqual(["a/actions.ts: save", "a/actions.ts: other"]);
+  });
+
+  it("flags pages and route methods re-exported from another module, which it can't see into", () => {
+    expect(unguarded("orders/export/route.ts", 'export { GET, POST } from "./handlers";\nexport const dynamic = "force-dynamic";')).toEqual(["orders/export/route.ts: GET", "orders/export/route.ts: POST"]);
+    expect(unguarded("orders/export/route.ts", 'export { handle as GET } from "./handlers";')).toEqual(["orders/export/route.ts: GET"]);
+    expect(unguarded("orders/page.tsx", 'export { default } from "./OrdersPage";')).toEqual(["orders/page.tsx: default"]);
+    expect(unguarded("orders/page.tsx", 'export { OrdersPage as default } from "./OrdersPage";')).toEqual(["orders/page.tsx: default"]);
+    // A wildcard could export anything, so it fails closed in an entry-point file.
+    expect(unguarded("orders/export/route.ts", 'export * from "./handlers";')).toEqual(["orders/export/route.ts: *"]);
+    expect(unguarded("orders/page.tsx", 'export * from "./OrdersPage";')).toEqual(["orders/page.tsx: *"]);
+    expect(unguarded("a/actions.ts", '"use server";\nexport * from "./more";')).toEqual(["a/actions.ts: *"]);
+    // Type-only re-exports aren't entry points.
+    expect(unguarded("orders/page.tsx", 'export type { Props } from "./OrdersPage";\nexport default async function P() { await requireAdmin(); }')).toEqual([]);
   });
 
   it("holds the signed-out sign-in pieces to the host check instead, and leaves components alone", () => {
