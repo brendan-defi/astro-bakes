@@ -1,3 +1,4 @@
+import { DASHES } from "./phone";
 import { BUILDINGS, CODES, WARDS, WARD_PREFIXES } from "./postal-tokyo23";
 
 /**
@@ -13,6 +14,11 @@ export interface PostalHit {
   wardCode: string;
   /** true when we deliver there. Every hit is in the 23 wards; a per-ward allow list in Settings (D20) would narrow this. */
   deliverable: boolean;
+}
+
+/** What the postal-code field keeps as you type: half-width digits and a hyphen, "153-0061" at most. */
+export function cleanPostalInput(text: string): string {
+  return text.normalize("NFKC").replace(DASHES, "-").replace(/[^\d-]/g, "").slice(0, 8);
 }
 
 export function normalisePostal(input: string): string {

@@ -1,6 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { lookupPostal, normalisePostal, outsideWards } from "./postal";
+import { cleanPostalInput, lookupPostal, normalisePostal, outsideWards } from "./postal";
 import { CODES, WARDS } from "./postal-tokyo23";
+
+describe("cleanPostalInput", () => {
+  it("keeps digits and a hyphen as they're typed, and no more than a code's worth", () => {
+    expect(cleanPostalInput("abc")).toBe("");
+    expect(cleanPostalInput("〒153-0062")).toBe("153-0062");
+    expect(cleanPostalInput("１５３ー００６２")).toBe("153-0062");
+    expect(cleanPostalInput("153-00621234")).toBe("153-0062");
+  });
+});
 
 describe("lookupPostal", () => {
   it("finds real addresses across the 23 wards, not just a sample list", () => {

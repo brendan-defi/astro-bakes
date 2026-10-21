@@ -5,7 +5,9 @@ import { useRouter } from "next/navigation";
 import { updateProfileAction } from "@/app/[locale]/account/actions";
 import type { Locale } from "@/lib/data";
 import { getStrings } from "@/lib/i18n";
-import { lookupPostal, normalisePostal, outsideWards, type PostalHit } from "@/lib/postal";
+import { cleanPhoneInput, normalisePhone } from "@/lib/phone";
+import { cleanPostalInput, lookupPostal, normalisePostal, outsideWards, type PostalHit } from "@/lib/postal";
+import { CleanInput } from "../CleanInput";
 import { CheckIcon, WarningIcon } from "../icons";
 import s from "../checkout.module.css";
 import a from "../account.module.css";
@@ -26,7 +28,8 @@ export function ProfileForm({ locale, initial }: { locale: Locale; initial: Prof
   const [status, setStatus] = useState<"saved" | "error" | null>(null);
   const set = (patch: Partial<ProfileValues>) => setV((p) => ({ ...p, ...patch }));
   const doLookup = () => { setPostalTried(true); setHit(lookupPostal(v.postal)); };
-  const valid = v.name.trim() && v.phone.trim() && v.line1.trim() && hit?.deliverable;
+  const valid = v.name.trim() && normalisePhone(v.phone) && v.line1.trim() && hit?.deliverable;
+  const phoneBad = touched && !normalisePhone(v.phone);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -57,14 +60,17 @@ export function ProfileForm({ locale, initial }: { locale: Locale; initial: Prof
         </div>
         <div className="field">
           <label htmlFor="pf-phone" className="label">{t.phone} {jaHint("電話番号")}</label>
-          <input id="pf-phone" type="tel" autoComplete="tel" required className={`input ${touched && !v.phone.trim() ? s.inputError : ""}`} value={v.phone} onChange={(e) => set({ phone: e.target.value })} />
-          <span className="hint">{t.phoneHint}</span>
+          <CleanInput id="pf-phone" type="tel" autoComplete="tel" required clean={cleanPhoneInput} className={`input ${phoneBad ? s.inputError : ""}`} value={v.phone} onValueChange={(phone) => set({ phone })}
+            aria-invalid={phoneBad || undefined} aria-describedby="pf-phone-hint" />
+          {phoneBad
+            ? <span id="pf-phone-hint" className={s.err}><WarningIcon size={16} />{t.phoneInvalid}</span>
+            : <span id="pf-phone-hint" className="hint">{t.phoneHint}</span>}
         </div>
         <div className="field">
           <label htmlFor="pf-postal" className="label">{t.postalCode} {jaHint("郵便番号")}</label>
           <div className={s.postalRow}>
-            <input id="pf-postal" type="text" inputMode="numeric" autoComplete="postal-code" className="input" value={v.postal}
-              onChange={(e) => { set({ postal: e.target.value }); setPostalTried(false); setHit(null); }}
+            <CleanInput id="pf-postal" type="text" inputMode="numeric" autoComplete="postal-code" clean={cleanPostalInput} className="input" value={v.postal}
+              onValueChange={(postal) => { set({ postal }); setPostalTried(false); setHit(null); }}
               onBlur={() => { if (normalisePostal(v.postal).length === 7) doLookup(); }}
               onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); doLookup(); } }} />
             <button type="button" className={s.lookupBtn} onClick={doLookup}>{t.lookUp}</button>
