@@ -19,7 +19,32 @@ const CODE_ERRORS = {
   expired: "That code has expired. Ask for a new one.",
   locked: "Too many wrong codes. Ask for a new one.",
 };
+const RETRY = "Something went wrong. Check your connection and try again.";
 const RESEND_MS = 30_000;
+
+/**
+ * The address a code was sent to and when it may be resent, per tab, so reloading the code screen keeps it. Its own key:
+ * the shop's sign-in keeps the same thing under ab-auth-pending, and the two flows mustn't pick up each other's address.
+ */
+const PENDING_KEY = "ab-admin-auth-pending";
+interface Pending {
+  email: string;
+  resendAt: number;
+}
+function readPending(): Pending | null {
+  try {
+    const p = JSON.parse(window.sessionStorage.getItem(PENDING_KEY) ?? "null") as Partial<Pending> | null;
+    return p && typeof p.email === "string" && p.email ? { email: p.email, resendAt: Number(p.resendAt) || 0 } : null;
+  } catch {
+    return null;
+  }
+}
+function writePending(p: Pending | null) {
+  try {
+    if (p) window.sessionStorage.setItem(PENDING_KEY, JSON.stringify(p));
+    else window.sessionStorage.removeItem(PENDING_KEY);
+  } catch {}
+}
 
 /** Email → code, as on the shop (PRD 2.1, 5.4); the link in the email works too, in this browser. English only. */
 export function AdminSignIn({ next, error }: { next: string; error: string | null }) {
@@ -35,6 +60,12 @@ export function AdminSignIn({ next, error }: { next: string; error: string | nul
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
+    const pending = readPending();
+    if (pending) {
+      setEmail(pending.email);
+      setResendAt(pending.resendAt);
+      setSent(true);
+    }
     const id = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(id);
   }, []);
@@ -49,9 +80,14 @@ export function AdminSignIn({ next, error }: { next: string; error: string | nul
         setNotice(r.error === "rate_limited" ? "Too many requests. Wait ten minutes and try again." : "That doesn't look like an email address.");
         return;
       }
+      const at = Date.now() + RESEND_MS;
+      writePending({ email: email.trim(), resendAt: at });
       setCode("");
       setSent(true);
-      setResendAt(Date.now() + RESEND_MS);
+      setResendAt(at);
+    } catch {
+      // The server action didn't answer (offline, deploy, server error): keep the address and let them try again.
+      setNotice(RETRY);
     } finally {
       setBusy(false);
     }
@@ -69,10 +105,13 @@ export function AdminSignIn({ next, error }: { next: string; error: string | nul
         setBusy(false);
         return;
       }
+      writePending(null);
       setDone(true);
+      // Stay busy while the dashboard loads, so nothing is sent twice.
       router.replace(r.next);
       router.refresh();
     } catch {
+      setNotice(RETRY);
       setBusy(false);
     }
   }
@@ -114,7 +153,7 @@ export function AdminSignIn({ next, error }: { next: string; error: string | nul
               </div>
             </form>
             <div className={s.row}>
-              <button type="button" className={s.linkBtn} onClick={() => { setSent(false); setNotice(null); }}>Use a different email</button>
+              <button type="button" className={s.linkBtn} onClick={() => { writePending(null); setSent(false); setNotice(null); }}>Use a different email</button>
               <button type="button" className={s.linkBtn} disabled={resendLeft > 0 || busy} onClick={() => void request()}>
                 {resendLeft > 0 ? `Resend in ${fmtCountdown(resendLeft)}` : "Resend"}
               </button>
