@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { orderConfirmationEmail } from "./email-templates";
+import { orderConfirmationEmail, welcomeEmail } from "./email-templates";
 import { customOrderRequestEmail, signInEmail } from "./email-templates";
 
 describe("signInEmail", () => {
@@ -47,6 +47,22 @@ describe("customOrderRequestEmail", () => {
   it("flags requests with under two weeks' notice", () => {
     expect(customOrderRequestEmail({ request, locale: "en", noticeDays: 13 }).text).toContain("Notice: 13 days (under two weeks)");
     expect(customOrderRequestEmail({ request, locale: "en", noticeDays: 14 }).text).toContain("Notice: 14 days\n");
+  });
+});
+
+describe("welcomeEmail", () => {
+  const opts = { unsubscribeUrl: "https://astrobakes.xyz/en/unsubscribe?e=abc&t=def", senderName: "並川洋美", contactEmail: "hello@astrobakes.xyz" };
+  it("confirms the sign-up, puts the one-click way out next to the notice, and names the sender, in both languages", () => {
+    const en = welcomeEmail({ locale: "en", ...opts });
+    expect(en.text).toContain("Didn't sign up, or changed your mind? Unsubscribe in one click:\nhttps://astrobakes.xyz/en/unsubscribe?e=abc&t=def");
+    expect(en.html).toContain('href="https://astrobakes.xyz/en/unsubscribe?e=abc&amp;t=def"');
+    expect(en.text).toContain("From 並川洋美");
+    expect(en.text).toContain("/en/legal/tokushoho");
+    expect(en.text).not.toMatch(/Drop \d|¥/); // a confirmation, not a promotion
+    const ja = welcomeEmail({ locale: "ja", ...opts, unsubscribeUrl: "https://astrobakes.xyz/ja/unsubscribe?e=abc&t=def" });
+    expect(ja.text).toContain("ワンクリックで停止できます：\nhttps://astrobakes.xyz/ja/unsubscribe?e=abc&t=def");
+    expect(ja.text).toContain("送信者：並川洋美");
+    expect(ja.html).toContain('lang="ja"');
   });
 });
 

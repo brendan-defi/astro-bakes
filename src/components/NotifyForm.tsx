@@ -39,7 +39,7 @@ export function NotifyForm({ locale, id, label, button, consent, variant, extra 
     try {
       // Success is shown only once the signup is stored (PRD 1.5): Subscriber(email, locale, source=homepage, consented_at).
       const r = await subscribeAction({ email, locale, website });
-      if (!r.ok) { setError(r.error === "invalid" ? t.notifyInvalid : t.notifyFailed); return; }
+      if (!r.ok) { setError(r.error === "invalid" ? t.notifyInvalid : r.error === "rate_limited" ? t.notifyRateLimited : t.notifyFailed); return; }
       // Fire from the button before the success state replaces it.
       burst(buttonRef.current, { kind: ["star", "heart", "sprinkle"], count: 14, power: 420 });
       setDone(email.trim());

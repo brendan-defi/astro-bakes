@@ -1,6 +1,6 @@
 import "server-only";
 import { Resend } from "resend";
-import { getDb } from "@/db";
+import { getDb, type Db } from "@/db";
 import { notificationLog } from "@/db/schema";
 import type { Email } from "./email-templates";
 import { contactEmail } from "./settings";
@@ -24,27 +24,66 @@ export interface OutgoingEmail extends Email {
    * customer, on a custom-order request to the owner). Internal emails to the owner get none.
    */
   replyTo?: string;
+  /** Extra headers, e.g. List-Unsubscribe on drop emails (unsubscribe.ts). */
+  headers?: Record<string, string>;
   customerId?: string | null;
   orderId?: string | null;
 }
 
 export type SendOutcome = { ok: true; providerMessageId: string | null } | { ok: false; error: string };
-export type EmailTransport = (email: OutgoingEmail, from: string) => Promise<SendOutcome>;
+/** `signal` is aborted when the send deadline passes; a transport should stop its request then. */
+export type EmailTransport = (email: OutgoingEmail, from: string, signal?: AbortSignal) => Promise<SendOutcome>;
 
-const resendTransport: EmailTransport = async (email, from) => {
+const resendTransport: EmailTransport = async (email, from, signal) => {
   const key = process.env.RESEND_API_KEY;
   if (!key) return { ok: false, error: "RESEND_API_KEY is not set" };
   const resend = new Resend(key);
   // The SDK reports API errors in the result, not by throwing.
   const { data, error } = await resend.emails.send(
-    { from, to: [email.to], subject: email.subject, html: email.html, text: email.text, ...(email.replyTo ? { replyTo: email.replyTo } : {}) },
-    { idempotencyKey: email.idempotencyKey },
+    { from, to: [email.to], subject: email.subject, html: email.html, text: email.text, ...(email.replyTo ? { replyTo: email.replyTo } : {}), ...(email.headers && Object.keys(email.headers).length ? { headers: email.headers } : {}) },
+    { idempotencyKey: email.idempotencyKey, signal },
   );
   if (error) return { ok: false, error: `${error.name}: ${error.message}` };
   return { ok: true, providerMessageId: data?.id ?? null };
 };
 
 let transport: EmailTransport = resendTransport;
+
+/**
+ * How long a send may take before it counts as failed. Some callers hold a lock across the send (the welcome
+ * email, email-lock.ts), so a slow provider mustn't hold up an unsubscribe or a sign-in for long. A timeout
+ * doesn't prove the provider rejected the email, so callers that retry keep the same idempotency key.
+ */
+const DEFAULT_SEND_TIMEOUT_MS = 10_000;
+let sendTimeoutMs = DEFAULT_SEND_TIMEOUT_MS;
+
+/** Tests shorten the deadline to exercise it. */
+export function setEmailSendTimeout(ms: number | null) {
+  sendTimeoutMs = ms ?? DEFAULT_SEND_TIMEOUT_MS;
+}
+
+/**
+ * Run a send with a deadline. When it passes, the request is aborted (not just abandoned), so a hung provider
+ * doesn't leave requests piling up, and the send counts as failed. Aborting can't recall an email the provider
+ * already accepted, hence the wording and the retries' stable idempotency key.
+ */
+async function withDeadline(start: (signal: AbortSignal) => Promise<SendOutcome>, ms: number): Promise<SendOutcome> {
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<SendOutcome>((resolve) => {
+    timer = setTimeout(() => {
+      controller.abort(new Error(`send deadline of ${ms} ms passed`));
+      resolve({ ok: false, error: `timed out after ${ms} ms and aborted (the provider may still deliver it)` });
+    }, ms);
+  });
+  try {
+    const send = start(controller.signal);
+    send.catch(() => {}); // the aborted request rejects after the deadline; that mustn't surface as an unhandled rejection
+    return await Promise.race([send, late]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 /** Tests swap the transport to capture what would have been sent. */
 export function setEmailTransport(t: EmailTransport | null) {
@@ -58,23 +97,29 @@ export function fromAddress(): string {
   return `Astro Bakes <hello@${domain}>`;
 }
 
-export async function sendEmail(email: OutgoingEmail): Promise<SendOutcome> {
+/** A transaction to write the log row in: a caller holding a lock across the send (the welcome) stays on one connection. */
+type LogConn = Parameters<Parameters<Db["transaction"]>[0]>[0];
+
+export async function sendEmail(email: OutgoingEmail, opts: { conn?: LogConn } = {}): Promise<SendOutcome> {
   let outcome: SendOutcome;
   try {
     const replyTo = email.replyTo ?? (email.type === "internal" ? undefined : await contactEmail().catch(() => undefined));
-    outcome = await transport({ ...email, ...(replyTo ? { replyTo } : {}) }, fromAddress());
+    outcome = await withDeadline((signal) => transport({ ...email, ...(replyTo ? { replyTo } : {}) }, fromAddress(), signal), sendTimeoutMs);
   } catch (e) {
     outcome = { ok: false, error: e instanceof Error ? e.message : String(e) };
   }
   try {
-    await getDb().insert(notificationLog).values({
+    const row = {
       type: email.type,
       to: email.to,
       customerId: email.customerId ?? null,
       orderId: email.orderId ?? null,
       providerMessageId: outcome.ok ? outcome.providerMessageId : null,
       error: outcome.ok ? null : outcome.error,
-    });
+    };
+    // In the caller's transaction, under a savepoint, so a failed log write can't abort it.
+    if (opts.conn) await opts.conn.transaction((sp) => sp.insert(notificationLog).values(row));
+    else await getDb().insert(notificationLog).values(row);
   } catch (e) {
     console.error("notification_log write failed", e);
   }
