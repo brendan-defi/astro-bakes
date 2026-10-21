@@ -1,4 +1,5 @@
 import { Pool } from "pg";
+import { parse } from "pg-connection-string";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { sql } from "drizzle-orm";
@@ -15,19 +16,29 @@ import { setEmailTransport, type OutgoingEmail } from "@/lib/email";
  *
  * Every suite drops and recreates the `public` schema, so each worktree or
  * session should use its own database (`create database astro_test_<topic>`),
- * and a non-local host is refused unless TEST_DATABASE_ALLOW_REMOTE=1.
+ * and a host that isn't this machine is refused unless
+ * TEST_DATABASE_ALLOW_REMOTE=1.
  */
+const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "::1"]);
+
 export const TEST_DATABASE_URL = process.env.TEST_DATABASE_URL;
 if (TEST_DATABASE_URL) {
   assertLocal(TEST_DATABASE_URL);
   process.env.DATABASE_URL = TEST_DATABASE_URL;
 }
 
-/** Throws unless the URL names a local Postgres; the suites wipe the schema they're given. */
+/**
+ * Throws unless the URL connects to a Postgres on this machine; the suites wipe the schema they're given. The host
+ * checked is the one node-postgres will actually use: it parses the string with pg-connection-string, where a
+ * `?host=` parameter overrides the URL's hostname, and an empty host falls back to PGHOST, so that's refused too.
+ * A local port can still be a tunnel to somewhere else; this catches the pasted-URL mistake, not that.
+ */
 export function assertLocal(url: string, allowRemote = process.env.TEST_DATABASE_ALLOW_REMOTE === "1") {
-  const host = new URL(url).hostname;
-  if (allowRemote || ["localhost", "127.0.0.1", "[::1]", "::1"].includes(host)) return;
-  throw new Error(`TEST_DATABASE_URL points at ${host}; the integration tests drop its public schema. Use a local database, or set TEST_DATABASE_ALLOW_REMOTE=1 if this really is a throwaway.`);
+  if (allowRemote) return;
+  const host = parse(url).host ?? "";
+  // A Unix socket path is on this machine by definition.
+  if (LOCAL_HOSTS.has(host) || host.startsWith("/")) return;
+  throw new Error(`TEST_DATABASE_URL connects to ${host || "an unnamed host"}; the integration tests drop its public schema. Use a local database, or set TEST_DATABASE_ALLOW_REMOTE=1 if this really is a throwaway.`);
 }
 
 /** A Drizzle client for the suite's own queries (null pool and a placeholder db when skipped). */
