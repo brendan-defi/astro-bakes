@@ -71,9 +71,9 @@ export async function submitCustomOrder(input: CustomOrderSubmission, ctx: Submi
   return { ok: true };
 }
 
-/** Where requests go: the custom_order_email setting, else the store's contact email (PRD 4.9). */
+/** Where requests go: the custom_order_email override, else the owner email, else the store's contact email (PRD 4.9). */
 export async function ownerInbox(): Promise<string> {
-  const rows = await getDb().select().from(settings).where(inArray(settings.key, ["custom_order_email", "contact_email"]));
+  const rows = await getDb().select().from(settings).where(inArray(settings.key, ["custom_order_email", "owner_email", "contact_email"]));
   const value = (k: string) => rows.find((row) => row.key === k && typeof row.value === "string" && row.value)?.value as string | undefined;
-  return value("custom_order_email") ?? value("contact_email") ?? defaultSettings.contactEmail;
+  return value("custom_order_email") ?? value("owner_email") ?? value("contact_email") ?? defaultSettings.contactEmail;
 }

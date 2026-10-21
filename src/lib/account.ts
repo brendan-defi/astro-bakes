@@ -2,7 +2,7 @@ import "server-only";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { addresses, customers, dropBoxes, drops, inventoryHolds, orders, refunds } from "@/db/schema";
-import { effectiveState, type Box, type Locale } from "./data";
+import { arrivalDate, effectiveState, type Box, type Locale } from "./data";
 import { validateDelivery, type DeliveryInput } from "./checkout-rules";
 import { sendEmail } from "./email";
 import { orderCancelledEmail, orderConfirmationEmail, type OrderEmailData } from "./email-templates";
@@ -10,6 +10,7 @@ import { fmtDate, fmtDateTime } from "./format";
 import { canCancel, canChangeSlot, orderStatus, type OrderStatus } from "./order-status";
 import { isDeliverySlot, type DeliverySlot } from "./delivery-slots";
 import { loadDrops } from "./drops";
+import { arrivalOffsetDays } from "./settings";
 
 /**
  * The account area (PRD 2.3–2.6, 3.8, D22): profile and saved address,
@@ -18,9 +19,9 @@ import { loadDrops } from "./drops";
  * signed-in customer's id.
  */
 
-const DAY = 86_400_000;
+// Arrival only decides shipped vs complete (a few days later), which nothing here depends on; the default offset will do.
 const liveState = (d: { state: Drops["state"]; openAt: Date; closeAt: Date; shipAt: Date }, now = new Date()) =>
-  effectiveState({ ...d, arriveAt: new Date(d.shipAt.getTime() + DAY) }, now);
+  effectiveState({ ...d, arriveAt: arrivalDate(d.shipAt) }, now);
 type Drops = typeof drops.$inferSelect;
 
 // ---------------------------------------------------------------- orders
@@ -96,7 +97,8 @@ export async function loadOrder(customerId: string, number: string, locale: Loca
   const now = new Date();
   const summary = toSummary(o, locale, now);
   // "Order again": the same boxes in whatever drop is open right now, if it carries them all.
-  const open = (await loadDrops(locale, excludeCartId)).find((d) => effectiveState(d, now) === "open") ?? null;
+  const [allDrops, offset] = await Promise.all([loadDrops(locale, excludeCartId), arrivalOffsetDays()]);
+  const open = allDrops.find((d) => effectiveState(d, now) === "open") ?? null;
   const onSale = open ? new Set(open.boxes.map((b) => b.id)) : null;
   const reorder = open && onSale && summary.lines.every((l) => onSale.has(l.slug)) ? { dropId: open.id, items: Object.fromEntries(summary.lines.map((l) => [l.slug, l.qty])), boxes: open.boxes } : null;
   const refund = o.refunds[0] ? { amount: o.refunds[0].amount, issued: !!o.refunds[0].issuedAt } : null;
@@ -114,7 +116,7 @@ export async function loadOrder(customerId: string, number: string, locale: Loca
     paymentMethod: o.paymentMethodType,
     trackingNumber: o.trackingNumber,
     shipAt: o.drop.shipAt,
-    arriveAt: new Date(o.drop.shipAt.getTime() + DAY),
+    arriveAt: arrivalDate(o.drop.shipAt, offset),
     closeAt: o.drop.closeAt,
     refund,
     reorder,
@@ -186,6 +188,7 @@ export async function sendOrderConfirmation(orderId: string): Promise<void> {
   const o = await getDb().query.orders.findFirst({ where: eq(orders.id, orderId), with: { ...withItems, customer: { columns: { email: true } } } });
   if (!o) return;
   const locale = o.locale;
+  const offset = await arrivalOffsetDays();
   const data: OrderEmailData = {
     number: o.number,
     lines: o.items.map((i) => ({ name: (locale === "ja" && i.nameJa) || i.nameEn, qty: i.qty, lineTotal: i.qty * i.unitPrice })),
@@ -195,7 +198,7 @@ export async function sendOrderConfirmation(orderId: string): Promise<void> {
     shipToName: o.shipToName,
     addressLine: addressLine(o),
     shipDate: fmtDate(o.drop.shipAt, locale),
-    arriveDate: fmtDate(new Date(o.drop.shipAt.getTime() + DAY), locale),
+    arriveDate: fmtDate(arrivalDate(o.drop.shipAt, offset), locale),
     closeDateTime: fmtDateTime(o.drop.closeAt, locale),
     giftMessage: o.giftMessage,
     timeSlot: o.deliveryTimeSlot,

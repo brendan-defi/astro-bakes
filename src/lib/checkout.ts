@@ -2,12 +2,12 @@ import "server-only";
 import { and, eq, gt, inArray, notInArray, sql } from "drizzle-orm";
 import { getDb, type Db } from "@/db";
 import { addresses, carts, customers, dropBoxes, drops, inventoryHolds, orderItems, orders, settings as settingsTable } from "@/db/schema";
-import { effectiveState, settings as defaultSettings, type Locale } from "./data";
+import { arrivalDate, effectiveState, settings as defaultSettings, type Locale } from "./data";
 import { demoEnabled } from "./demo";
 import { orderNumber, reconcile, validateDelivery, type DeliveryInput, type ReCheckChange } from "./checkout-rules";
 import { isDeliverySlot, type DeliverySlot } from "./delivery-slots";
 import { isUuid } from "./uuid";
-import { sendOrderConfirmation } from "./account";
+import { afterOrderPaid } from "./order-paid";
 
 export { reconcile, orderNumber, validateDelivery } from "./checkout-rules";
 export type { ReCheckChange, Available, DeliveryInput } from "./checkout-rules";
@@ -35,11 +35,10 @@ export type { ReCheckChange, Available, DeliveryInput } from "./checkout-rules";
  */
 
 export type Conn = Db | Parameters<Parameters<Db["transaction"]>[0]>[0];
-const DAY = 86_400_000;
-
 /** A drop whose reservations may still be completed: anything an admin hasn't pulled (cancelled) or unpublished (draft). */
 function sellable(drop: { state: string; openAt: Date; closeAt: Date; shipAt: Date }, now: Date) {
-  const state = effectiveState({ ...drop, arriveAt: new Date(drop.shipAt.getTime() + DAY) } as Parameters<typeof effectiveState>[0], now);
+  // Arrival only moves shipped to complete, which doesn't matter here; the default offset will do (also below).
+  const state = effectiveState({ ...drop, arriveAt: arrivalDate(drop.shipAt) } as Parameters<typeof effectiveState>[0], now);
   return state !== "cancelled" && state !== "draft";
 }
 
@@ -131,7 +130,7 @@ export async function startCheckout(input: StartInput, cartId: string | null): P
   const drop = await db.query.drops.findFirst({ where: eq(drops.slug, input.dropId) });
   if (!drop) return { ok: false, error: "drop_closed" };
   const now = new Date();
-  const live = effectiveState({ ...drop, arriveAt: new Date(drop.shipAt.getTime() + DAY) }, now) === "open";
+  const live = effectiveState({ ...drop, arriveAt: arrivalDate(drop.shipAt) }, now) === "open";
   const demoOpen = demoEnabled && input.flags?.state === "open";
   if (!live && !demoOpen) return { ok: false, error: "drop_closed" };
   const holdMinutes = await setting(db, "hold_minutes", defaultSettings.holdMinutes);
@@ -228,8 +227,8 @@ export type PlaceResult =
 /** `customerId` is the signed-in customer (D12); an order is never placed for an unverified email. */
 export async function placeOrder(input: PlaceInput, cartId: string | null, customerId: string | null): Promise<PlaceResult> {
   const result = await placeOrderTx(input, cartId, customerId);
-  // The confirmation email goes after the transaction commits (PRD 3.6); the Stripe webhook will take this over.
-  if (result.ok && result.orderId) await sendOrderConfirmation(result.orderId).catch((e) => console.error("order confirmation failed", e));
+  // The paid-order emails go after the transaction commits (PRD 3.6); the Stripe webhook will take this over.
+  if (result.ok && result.orderId) await afterOrderPaid(result.orderId);
   return result;
 }
 
