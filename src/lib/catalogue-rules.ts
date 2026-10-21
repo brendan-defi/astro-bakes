@@ -11,6 +11,8 @@ import { ALLERGENS, allergenNamed } from "./allergens";
 
 export const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const SLUG_MAX = 40;
+/** Path segments the admin routes use beside /[slug] (/admin/boxes/new): a record slugged like one could never be opened. */
+export const RESERVED_SLUGS = new Set(["new"]);
 
 /** A slug suggestion from an English name: "4 Cookie Box" → "4-cookie-box". */
 export function slugify(name: string): string {
@@ -48,6 +50,7 @@ function slug(errors: Errors, raw: Raw, creating: boolean): string {
   const v = typeof raw.slug === "string" ? raw.slug.trim() : "";
   if (!v) errors.slug = "Required.";
   else if (v.length > SLUG_MAX || !SLUG.test(v)) errors.slug = `Lower-case letters, digits and single hyphens, at most ${SLUG_MAX} characters.`;
+  else if (RESERVED_SLUGS.has(v)) errors.slug = `“${v}” is taken by the admin's own pages; choose another.`;
   return v;
 }
 
@@ -121,11 +124,12 @@ export function validateBox(raw: Raw, { creating }: { creating: boolean }): Vali
     recipeIn.forEach((line, i) => {
       const l = (line ?? {}) as Raw;
       const itemSlug = typeof l.itemSlug === "string" ? l.itemSlug.trim() : "";
+      // Errors name the field that failed (recipe.N.item, recipe.N.qty), so the form can mark and focus that input.
       const lineErrors: Errors = {};
       const qty = int(lineErrors, l, "qty", 1, 99);
-      if (!itemSlug) errors[`recipe.${i}`] = "Choose an item.";
-      else if (seen.has(itemSlug)) errors[`recipe.${i}`] = "This item is already in the box; change the quantity instead.";
-      else if (lineErrors.qty) errors[`recipe.${i}`] = `Quantity: ${lineErrors.qty.toLowerCase()}`;
+      if (!itemSlug) errors[`recipe.${i}.item`] = "Choose an item.";
+      else if (seen.has(itemSlug)) errors[`recipe.${i}.item`] = "This item is already in the box; change the quantity instead.";
+      if (lineErrors.qty) errors[`recipe.${i}.qty`] = lineErrors.qty;
       seen.add(itemSlug);
       recipe.push({ itemSlug, qty });
     });

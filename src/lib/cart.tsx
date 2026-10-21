@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, type ReactNode } from "react";
 import type { Box } from "./data";
 import { demoEnabled } from "./demo";
+import { qtyOf } from "./quantities";
 import { readStored, useHydrated, useStored, writeStored } from "./stored";
 
 export type Quantities = Record<string, number>;
@@ -52,7 +53,7 @@ export function storageKey(dropId: string): string {
 export function sanitize(qty: Quantities, boxes: Box[]): Quantities {
   const out: Quantities = {};
   for (const box of boxes) {
-    const n = Math.min(maxFor(box), Math.floor(Number(qty[box.id] ?? 0)));
+    const n = Math.min(maxFor(box), Math.floor(Number(qtyOf(qty, box.id))));
     if (Number.isFinite(n) && n > 0) out[box.id] = n;
   }
   return out;
@@ -68,7 +69,7 @@ export function mergeQuantities(existing: Quantities, add: Quantities, boxes: Bo
   for (const [id, n] of Object.entries(add)) {
     const box = boxes.find((b) => b.id === id);
     if (!box) continue;
-    const current = merged[id] ?? 0;
+    const current = qtyOf(merged, id);
     const next = Math.max(current, Math.min(maxFor(box), current + Math.floor(Number(n))));
     if (next > 0) merged[id] = next;
   }
@@ -156,7 +157,7 @@ export function useCart(): CartValue {
     const box = boxes.find((b) => b.id === id);
     if (!box) return;
     const saved = wholeQuantities(parseQuantities(readStored("local", key)));
-    const shown = Math.min(maxFor(box), saved[id] ?? 0);
+    const shown = Math.min(maxFor(box), qtyOf(saved, id));
     const next = Math.max(0, Math.min(maxFor(box), Math.floor(to(shown))));
     if (next === shown) return;
     if (next > 0) saved[id] = next;
@@ -171,8 +172,8 @@ export function useCart(): CartValue {
 
   return useMemo<CartValue>(() => {
     const lines: CartLine[] = boxes
-      .filter((b) => (qty[b.id] ?? 0) > 0)
-      .map((b) => ({ box: b, qty: qty[b.id], lineTotal: b.price * qty[b.id] }));
+      .filter((b) => qtyOf(qty, b.id) > 0)
+      .map((b) => ({ box: b, qty: qtyOf(qty, b.id), lineTotal: b.price * qtyOf(qty, b.id) }));
     const count = lines.reduce((s, l) => s + l.qty, 0);
     const subtotal = lines.reduce((s, l) => s + l.lineTotal, 0);
     const total = shippingFee == null || count === 0 ? null : subtotal + shippingFee;

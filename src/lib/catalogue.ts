@@ -136,7 +136,7 @@ export async function saveBox(value: BoxValue, slug: string | null): Promise<Sav
   const itemRows = await db.select({ id: items.id, slug: items.slug }).from(items).where(inArray(items.slug, value.recipe.map((l) => l.itemSlug)));
   const ids = new Map(itemRows.map((r) => [r.slug, r.id]));
   const missing = value.recipe.findIndex((l) => !ids.has(l.itemSlug));
-  if (missing >= 0) return { ok: false, errors: { [`recipe.${missing}`]: "That item doesn't exist any more." } };
+  if (missing >= 0) return { ok: false, errors: { [`recipe.${missing}.item`]: "That item doesn't exist any more." } };
 
   const fields = {
     nameEn: value.nameEn,

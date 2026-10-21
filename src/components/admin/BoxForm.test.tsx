@@ -69,7 +69,7 @@ describe("BoxForm", () => {
   });
 
   it("shows the server's errors by the field or recipe line, focusing the first", async () => {
-    actions.saveBoxAction.mockResolvedValue({ ok: false, errors: { price: "A whole number from 50 to 100,000.", "recipe.1": "This item is already in the box; change the quantity instead." } });
+    actions.saveBoxAction.mockResolvedValue({ ok: false, errors: { price: "A whole number from 50 to 100,000.", "recipe.1.item": "This item is already in the box; change the quantity instead." } });
     render(<BoxForm slug="cookie-box" initial={BOX} items={ITEMS} />);
     fireEvent.change(screen.getByLabelText("Price (税込) *"), { target: { value: "10" } });
     fireEvent.click(save());
@@ -77,5 +77,30 @@ describe("BoxForm", () => {
     expect(screen.getByText(/already in the box/)).toBeTruthy();
     expect(document.activeElement).toBe(screen.getByLabelText("Price (税込) *"));
     expect(status()).toMatch(/need fixing/);
+    const item2 = screen.getByLabelText("Item 2");
+    expect(item2.getAttribute("aria-invalid")).toBe("true");
+    expect(document.getElementById(item2.getAttribute("aria-describedby")!)?.textContent).toMatch(/already in the box/);
+  });
+
+  it("marks, describes and focuses a recipe quantity the server turned down, not the item beside it", async () => {
+    actions.saveBoxAction.mockResolvedValue({ ok: false, errors: { "recipe.0.qty": "A whole number from 1 to 99." } });
+    render(<BoxForm slug="cookie-box" initial={BOX} items={ITEMS} />);
+    fireEvent.change(screen.getByLabelText("Quantity of item 1"), { target: { value: "0" } });
+    fireEvent.click(save());
+    const qty = screen.getByLabelText("Quantity of item 1");
+    await waitFor(() => expect(document.activeElement).toBe(qty));
+    expect(qty.getAttribute("aria-invalid")).toBe("true");
+    expect(document.getElementById(qty.getAttribute("aria-describedby")!)?.textContent).toBe("Quantity: A whole number from 1 to 99.");
+    expect(screen.getByLabelText("Item 1").getAttribute("aria-invalid")).toBeNull();
+  });
+
+  it("focuses 'Add an item' when the recipe is empty", async () => {
+    actions.saveBoxAction.mockResolvedValue({ ok: false, errors: { recipe: "Add at least one item: the production sheet counts what to bake from this." } });
+    render(<BoxForm slug="cookie-box" initial={BOX} items={ITEMS} />);
+    for (const b of screen.getAllByRole("button", { name: "Remove" })) fireEvent.click(b);
+    fireEvent.click(save());
+    const add = screen.getByRole("button", { name: "+ Add an item" });
+    await waitFor(() => expect(document.activeElement).toBe(add));
+    expect(document.getElementById(add.getAttribute("aria-describedby")!)?.textContent).toMatch(/at least one item/);
   });
 });

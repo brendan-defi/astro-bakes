@@ -12,9 +12,10 @@ const item = (over: Record<string, unknown> = {}) => ({ slug: "cake-slice", name
 const errors = (r: { ok: boolean; errors?: Record<string, string> }) => (r.ok ? {} : r.errors!);
 
 describe("allergens", () => {
-  it("lists the 8 required and 20 recommended, each with its Japanese label on the shop", () => {
-    expect(REQUIRED_ALLERGENS).toHaveLength(8);
-    expect(RECOMMENDED_ALLERGENS).toHaveLength(20);
+  it("lists the 9 required (cashew since the agency's 2026-04-01 notice) and 19 recommended, each labelled in Japanese on the shop", () => {
+    expect(REQUIRED_ALLERGENS.map((a) => a.name)).toEqual(["Egg", "Milk", "Wheat", "Buckwheat", "Peanut", "Shrimp", "Crab", "Walnut", "Cashew"]);
+    expect(RECOMMENDED_ALLERGENS).toHaveLength(19);
+    expect(RECOMMENDED_ALLERGENS.map((a) => a.name)).not.toContain("Cashew");
     const ja = getStrings("ja");
     for (const a of ALLERGENS) expect(ja.allergen(a.name)).toBe(a.ja);
     expect(new Set(ALLERGENS.map((a) => a.name.toLowerCase())).size).toBe(28);
@@ -44,6 +45,10 @@ describe("validateItem", () => {
   it("requires both names, a unit and a whole count; a slug only when creating", () => {
     expect(Object.keys(errors(validateItem(item({ nameJa: "", productionUnit: " ", unitsPerProductionUnit: "0" }), { creating: true }))).sort()).toEqual(["nameJa", "productionUnit", "unitsPerProductionUnit"]);
     expect(errors(validateItem(item({ slug: "Cake Slice" }), { creating: true })).slug).toMatch(/Lower-case/);
+    // "new" is the admin's own /new page beside /[slug]: a record slugged "new" could never be opened.
+    expect(errors(validateItem(item({ slug: "new" }), { creating: true })).slug).toMatch(/taken by the admin's own pages/);
+    expect(errors(validateBox(box({ slug: "new" }), { creating: true })).slug).toMatch(/taken by the admin's own pages/);
+    expect(slugify("New")).toBe("new");
     const edit = validateItem(item({ slug: "anything goes" }), { creating: false });
     expect(edit.ok && edit.value.slug).toBe("");
   });
@@ -66,9 +71,15 @@ describe("validateBox", () => {
 
   it("needs a recipe of distinct items with sensible quantities, and says which line is wrong", () => {
     expect(errors(validateBox(box({ recipe: [] }), { creating: true })).recipe).toMatch(/at least one item/);
-    const e = errors(validateBox(box({ recipe: [{ itemSlug: "a", qty: "1" }, { itemSlug: "", qty: "1" }, { itemSlug: "a", qty: "2" }, { itemSlug: "b", qty: "100" }] }), { creating: true }));
-    expect(e).toMatchObject({ "recipe.1": "Choose an item.", "recipe.2": expect.stringMatching(/already in the box/), "recipe.3": expect.stringMatching(/^Quantity/) });
-    expect(e["recipe.0"]).toBeUndefined();
+    const e = errors(validateBox(box({ recipe: [{ itemSlug: "a", qty: "1" }, { itemSlug: "", qty: "1" }, { itemSlug: "a", qty: "2" }, { itemSlug: "b", qty: "100" }, { itemSlug: "", qty: "0" }] }), { creating: true }));
+    // Each error names the field that failed, so the form can mark that input.
+    expect(e).toEqual({
+      "recipe.1.item": "Choose an item.",
+      "recipe.2.item": expect.stringMatching(/already in the box/),
+      "recipe.3.qty": "A whole number from 1 to 99.",
+      "recipe.4.item": "Choose an item.",
+      "recipe.4.qty": "A whole number from 1 to 99.",
+    });
   });
 
   it("requires names in both languages, and an on/off for active", () => {

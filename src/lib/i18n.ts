@@ -418,7 +418,7 @@ const en = {
 
 export type Strings = typeof en;
 
-/** Japanese labels for box allergens, keyed by the stored English name (lower-cased): the 8 required and 20 recommended (allergens.ts). */
+/** Japanese labels for box allergens, keyed by the stored English name (lower-cased): the required and recommended lists in allergens.ts. */
 const ALLERGENS_JA: Record<string, string> = Object.fromEntries(ALLERGENS.map((a) => [a.name.toLowerCase(), a.ja]));
 
 const ja: Strings = {

@@ -39,7 +39,15 @@ const payload = (d: Draft) => ({ ...d, recipe: d.recipe.map(({ itemSlug, qty }) 
 const same = (a: Draft, b: Draft) => JSON.stringify(payload(a)) === JSON.stringify(payload(b));
 /** Error keys in the order the form shows them, for focusing the first. */
 const ORDER = ["nameEn", "nameJa", "slug", "descriptionEn", "descriptionJa", "price", "recipe", "contentsEn", "contentsJa", "allergens", "defaultCap", "defaultMaxPerCustomer", "sort", "active"];
-const fieldId = (key: string) => `box-${key.replace(".", "-")}`;
+const fieldId = (key: string) => `box-${key.replace(/\./g, "-")}`;
+/** The first recipe-line error in the order the form shows them (line by line, item before quantity). */
+const firstLineError = (errors: Record<string, string>) =>
+  Object.keys(errors)
+    .filter((k) => /^recipe\.\d+\.(item|qty)$/.test(k))
+    .sort((a, b) => {
+      const [, ai, af] = a.split("."), [, bi, bf] = b.split(".");
+      return Number(ai) - Number(bi) || (af === "item" ? -1 : 1) - (bf === "item" ? -1 : 1);
+    })[0];
 
 /**
  * Create or edit a box (PRD 4.3). `slug` is null when creating; a new box's slug follows its English name until
@@ -91,8 +99,7 @@ export function BoxForm({ slug, initial, items, created = false }: { slug: strin
       if (!r.ok) {
         setErrors(r.errors);
         setStatus({ kind: "error", text: r.errors.form ?? "Some fields need fixing; they're marked below." });
-        focusNext.current = ORDER.find((k) => r.errors[k]) ?? Object.keys(r.errors).find((k) => k.startsWith("recipe.")) ?? null;
-        if (focusNext.current?.startsWith("recipe.")) focusNext.current = `${focusNext.current}-item`;
+        focusNext.current = ORDER.find((k) => r.errors[k]) ?? firstLineError(r.errors) ?? null;
         return;
       }
       if (creating) {
@@ -172,32 +179,52 @@ export function BoxForm({ slug, initial, items, created = false }: { slug: strin
           <h2 id="box-sec-recipe" className={s.sectionTitle}>What's inside</h2>
           <p className={s.sectionIntro}>The recipe is what the kitchen bakes for one box; the production sheet adds these up. Items are managed on the Items tab.</p>
           <div className={s.fields}>
-            <FieldRow label="Recipe *" error={errors.recipe}>
+            <FieldRow label="Recipe *" error={errors.recipe} errorId={fieldId("recipe") + "-err"}>
               <div className={s.recipe}>
-                {draft.recipe.map((l, i) => (
-                  <div key={l.key}>
-                    <div className={s.recipeRow}>
-                      <select
-                        id={fieldId(`recipe.${i}-item`)}
-                        aria-label={`Item ${i + 1}`}
-                        className="input"
-                        value={l.itemSlug}
-                        aria-invalid={errors[`recipe.${i}`] ? true : undefined}
-                        onChange={(e) => setLine(l.key, { itemSlug: e.target.value })}
-                      >
-                        <option value="">Choose an item…</option>
-                        {items.map((it) => (
-                          <option key={it.slug} value={it.slug} disabled={it.slug !== l.itemSlug && chosen.has(it.slug)}>{it.name}</option>
-                        ))}
-                      </select>
-                      <input aria-label={`Quantity of item ${i + 1}`} className="input" inputMode="numeric" value={l.qty} onChange={(e) => setLine(l.key, { qty: e.target.value })} />
-                      <button type="button" className={s.linkBtn} onClick={() => { setDraft((d) => ({ ...d, recipe: d.recipe.filter((x) => x.key !== l.key) })); touch("recipe"); }}>Remove</button>
+                {draft.recipe.map((l, i) => {
+                  const itemKey = `recipe.${i}.item`, qtyKey = `recipe.${i}.qty`;
+                  return (
+                    <div key={l.key}>
+                      <div className={s.recipeRow}>
+                        <select
+                          id={fieldId(itemKey)}
+                          aria-label={`Item ${i + 1}`}
+                          className="input"
+                          value={l.itemSlug}
+                          aria-invalid={errors[itemKey] ? true : undefined}
+                          aria-describedby={errors[itemKey] ? `${fieldId(itemKey)}-err` : undefined}
+                          onChange={(e) => setLine(l.key, { itemSlug: e.target.value })}
+                        >
+                          <option value="">Choose an item…</option>
+                          {items.map((it) => (
+                            <option key={it.slug} value={it.slug} disabled={it.slug !== l.itemSlug && chosen.has(it.slug)}>{it.name}</option>
+                          ))}
+                        </select>
+                        <input
+                          id={fieldId(qtyKey)}
+                          aria-label={`Quantity of item ${i + 1}`}
+                          className="input"
+                          inputMode="numeric"
+                          value={l.qty}
+                          aria-invalid={errors[qtyKey] ? true : undefined}
+                          aria-describedby={errors[qtyKey] ? `${fieldId(qtyKey)}-err` : undefined}
+                          onChange={(e) => setLine(l.key, { qty: e.target.value })}
+                        />
+                        <button type="button" className={s.linkBtn} onClick={() => { setDraft((d) => ({ ...d, recipe: d.recipe.filter((x) => x.key !== l.key) })); touch("recipe"); }}>Remove</button>
+                      </div>
+                      {errors[itemKey] && <p id={`${fieldId(itemKey)}-err`} className={s.fieldError}>{errors[itemKey]}</p>}
+                      {errors[qtyKey] && <p id={`${fieldId(qtyKey)}-err`} className={s.fieldError}>Quantity: {errors[qtyKey]}</p>}
                     </div>
-                    {errors[`recipe.${i}`] && <p className={s.fieldError}>{errors[`recipe.${i}`]}</p>}
-                  </div>
-                ))}
+                    );
+                })}
                 {draft.recipe.length < MAX_RECIPE_LINES && (
-                  <button type="button" className={s.linkBtn} style={{ alignSelf: "flex-start" }} onClick={() => { setDraft((d) => ({ ...d, recipe: [...d.recipe, { key: ++lineKey, itemSlug: "", qty: "1" }] })); touch("recipe"); }}>
+                  <button
+                    type="button"
+                    id={fieldId("recipe")}
+                    className={s.linkBtn}
+                    style={{ alignSelf: "flex-start" }}
+                    aria-describedby={errors.recipe ? `${fieldId("recipe")}-err` : undefined}
+                    onClick={() => { setDraft((d) => ({ ...d, recipe: [...d.recipe, { key: ++lineKey, itemSlug: "", qty: "1" }] })); touch("recipe"); }}>
                     + Add an item
                   </button>
                 )}
@@ -205,7 +232,7 @@ export function BoxForm({ slug, initial, items, created = false }: { slug: strin
               </div>
             </FieldRow>
             <FieldRow label="Contents line" help={contentsHelp}>{pair("contentsEn", "contentsJa", { textarea: true, rows: 5 })}</FieldRow>
-            <FieldRow label="Allergens" help="Shown on the box card. The 8 required items must be listed when the box contains them." error={errors.allergens}>
+            <FieldRow label="Allergens" help={`Shown on the box card. The ${REQUIRED_ALLERGENS.length} required items (特定原材料) must be listed when the box contains them.`} error={errors.allergens}>
               {allergenGroup("Required (特定原材料)", REQUIRED_ALLERGENS)}
               {allergenGroup("Recommended (推奨表示)", RECOMMENDED_ALLERGENS)}
             </FieldRow>

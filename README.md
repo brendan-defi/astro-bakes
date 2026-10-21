@@ -70,7 +70,7 @@ The owner's portal (PRD §4) lives at **https://admin.astrobakes.xyz/admin**, se
 - **Boxes & items** (`/admin/boxes`, `/admin/items`, PRD 4.3).
   - **Items** are what the kitchen bakes: a name in both languages, what it's baked as (cookie, cake…) and how many go into one (12 slices per cake).
   - **Boxes** have names, descriptions and card contents in both languages, a recipe of items with quantities (what the production sheet will add up), allergens, a price, a default cap and per-customer limit, a menu order and an active flag.
-  - **Allergens** are checkboxes over `src/lib/allergens.ts`: the 8 特定原材料 and the 20 推奨表示, stored by English name. The shop's Japanese labels come from the same list.
+  - **Allergens** are checkboxes over `src/lib/allergens.ts`: the 特定原材料 (9, cashew included since the Consumer Affairs Agency's 2026-04-01 notice) and the 推奨表示 (19), stored by English name. The source and date are cited in that file. The shop's Japanese labels come from the same list.
   - **Slugs** are set when a box or item is created and never change: carts and links use them.
   - **Defaults only:** a box's price and caps are copied when a drop is set up, so editing a box never reprices an existing drop. Hiding a box takes it off the between-drops menu; a drop that carries it keeps selling it.
   - **Rules** live in `src/lib/catalogue-rules.ts` (shared with the forms); reads and writes in `src/lib/catalogue.ts`.

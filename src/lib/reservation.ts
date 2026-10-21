@@ -1,5 +1,6 @@
 import type { Box } from "./data";
 import type { Hold } from "./hold";
+import { qtyOf } from "./quantities";
 
 /**
  * What the browser has reserved on the server (one cart per browser, via the
@@ -53,7 +54,7 @@ export interface ReservedLine {
 
 /** Price the reserved quantities with the drop's boxes, in box order; boxes no longer on sale are skipped. */
 export function reservedLines(items: Record<string, number>, boxes: Box[]): ReservedLine[] {
-  return boxes.filter((b) => (items[b.id] ?? 0) > 0).map((b) => ({ box: b, qty: items[b.id], lineTotal: b.price * items[b.id] }));
+  return boxes.filter((b) => qtyOf(items, b.id) > 0).map((b) => ({ box: b, qty: qtyOf(items, b.id), lineTotal: b.price * qtyOf(items, b.id) }));
 }
 
 export function totals(lines: ReservedLine[], shippingFee: number | null) {

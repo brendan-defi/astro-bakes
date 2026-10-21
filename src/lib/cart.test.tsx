@@ -240,3 +240,27 @@ describe("CartProvider", () => {
     expect(result.current.qty).toEqual({ "cookie-box": 1, "banana-bread": 1 });
   });
 });
+
+describe("boxes slugged like Object.prototype names", () => {
+  // The box editor accepts any lower-case slug, including "constructor" or "valueof"; the cart is a slug-keyed object.
+  it("adds, counts, stores and removes them like any other box", () => {
+    const odd = box({ id: "constructor", price: 800 });
+    const { result } = mount({ dropId: "drop-x", boxes: [odd, cookie], shippingFee: 0 });
+    expect(result.current.qty).toEqual({});
+    act(() => result.current.inc("constructor"));
+    act(() => result.current.inc("cookie-box"));
+    expect(result.current.lines.map((l) => [l.box.id, l.qty])).toEqual([["constructor", 1], ["cookie-box", 1]]);
+    expect(result.current.count).toBe(2);
+    expect(result.current.subtotal).toBe(1800);
+    expect(saved("drop-x")).toEqual({ constructor: 1, "cookie-box": 1 });
+    act(() => result.current.dec("constructor"));
+    expect(result.current.count).toBe(1);
+  });
+
+  it("never reads an inherited property as a quantity", () => {
+    const odd = box({ id: "tostring" });
+    expect(sanitize({}, [box({ id: "constructor" }), odd])).toEqual({});
+    expect(mergeQuantities({}, { constructor: 2 }, [box({ id: "constructor" })])).toEqual({ constructor: 2 });
+  });
+});
+

@@ -1,8 +1,15 @@
 /**
- * Allergens a box can list (PRD 4.3): the 8 特定原材料 that 食品表示法 requires
- * on labels, and the 20 recommended ones (推奨表示). Boxes store the English
- * name; the shop shows it as is in English and by this list in Japanese
- * (i18n.ts), and the box editor offers exactly these. Client-safe.
+ * Allergens a box can list (PRD 4.3): the 特定原材料 that 食品表示法 requires on
+ * labels, and the recommended ones (推奨表示). Boxes store the English name;
+ * the shop shows it as is in English and by this list in Japanese (i18n.ts),
+ * and the box editor offers exactly these. Client-safe.
+ *
+ * Source: Consumer Affairs Agency, 食物アレルギー表示に関する情報, as of the
+ * notice of 2026-04-01, which added cashew to 特定原材料 (9 required, 19
+ * recommended):
+ * https://www.caa.go.jp/policies/policy/food_labeling/food_sanitation/allergy/
+ * When the agency changes the lists, move entries between the two groups
+ * here; stored box data keeps working, since it's keyed by name.
  */
 export interface Allergen {
   /** What boxes.allergens stores and English pages show. */
@@ -19,6 +26,7 @@ export const REQUIRED_ALLERGENS: Allergen[] = [
   { name: "Shrimp", ja: "えび" },
   { name: "Crab", ja: "かに" },
   { name: "Walnut", ja: "くるみ" },
+  { name: "Cashew", ja: "カシューナッツ" },
 ];
 
 export const RECOMMENDED_ALLERGENS: Allergen[] = [
@@ -27,7 +35,6 @@ export const RECOMMENDED_ALLERGENS: Allergen[] = [
   { name: "Squid", ja: "いか" },
   { name: "Salmon roe", ja: "いくら" },
   { name: "Orange", ja: "オレンジ" },
-  { name: "Cashew", ja: "カシューナッツ" },
   { name: "Kiwi", ja: "キウイフルーツ" },
   { name: "Beef", ja: "牛肉" },
   { name: "Sesame", ja: "ごま" },

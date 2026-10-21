@@ -72,8 +72,21 @@ describe.skipIf(!TEST_DATABASE_URL)("catalogue editor", () => {
   it("refuses a taken box slug and a recipe item that no longer exists, saving nothing", async () => {
     expect(await saveBoxAction(newBox({ slug: "cookie-box" }), null)).toEqual({ ok: false, errors: { slug: "Another box already has this slug." } });
     const gone = await saveBoxAction(newBox({ recipe: [{ itemSlug: "cookie-american-choc-chip", qty: "1" }, { itemSlug: "no-such-item", qty: "1" }] }), null);
-    expect(gone).toEqual({ ok: false, errors: { "recipe.1": "That item doesn't exist any more." } });
+    expect(gone).toEqual({ ok: false, errors: { "recipe.1.item": "That item doesn't exist any more." } });
     expect(await db.select().from(schema.boxes).where(eq(schema.boxes.slug, "brownie-box"))).toHaveLength(0);
+  });
+
+  it("refuses the slug 'new' for items and boxes, which would collide with the admin's /new pages", async () => {
+    const item = await saveItemAction({ slug: "new", nameEn: "New", nameJa: "新作", productionUnit: "cookie", unitsPerProductionUnit: "1" }, null);
+    expect(item.ok === false && item.errors.slug).toMatch(/taken by the admin's own pages/);
+    const box = await saveBoxAction(newBox({ slug: "new" }), null);
+    expect(box.ok === false && box.errors.slug).toMatch(/taken by the admin's own pages/);
+    expect(await itemBySlug("new")).toBeNull();
+    expect(await boxBySlug("new")).toBeNull();
+  });
+
+  it("saves a box slugged like an Object.prototype name, which the cart now handles", async () => {
+    expect(await saveBoxAction(newBox({ slug: "constructor" }), null)).toMatchObject({ ok: true, slug: "constructor" });
   });
 
   it("validates before touching the database", async () => {
