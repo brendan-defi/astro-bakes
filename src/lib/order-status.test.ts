@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canCancel, orderStatus } from "./order-status";
+import { canCancel, canChangeSlot, orderStatus } from "./order-status";
 
 const ORDER_STATES = ["pending_payment", "paid", "packed", "shipped", "complete", "expired", "cancelled"] as const;
 /** The drop's lifecycle in time order (PRD 5.2a); draft and cancelled sit outside it. */
@@ -38,6 +38,12 @@ describe("orderStatus", () => {
     expect(orderStatus("pending_payment", "open")).toBe("awaiting_payment");
     expect(orderStatus("cancelled", "open")).toBe("cancelled");
     expect(orderStatus("expired", "open")).toBe("expired");
+  });
+});
+
+describe("canChangeSlot", () => {
+  it("opens and closes with free cancellation across every state (D21)", () => {
+    for (const o of ORDER_STATES) for (const d of DROP_STATES) expect(canChangeSlot(o, d)).toBe(canCancel(o, d));
   });
 });
 

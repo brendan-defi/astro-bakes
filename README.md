@@ -28,6 +28,8 @@ docker run -d --name astro-test-pg -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=
 TEST_DATABASE_URL=postgres://postgres:postgres@localhost:5433/astro_test pnpm test
 ```
 
+Each suite drops and recreates the database's `public` schema, so give every worktree its own database (`docker exec astro-test-pg psql -U postgres -c "create database astro_test_<topic>"`). The shared setup in `src/test/db.ts` (`testDb`, `resetDatabase`, `clearTestData`, `captureEmail`, `closeTestDb`) refuses any host other than this machine (the host node-postgres will actually connect to, so a `?host=` override counts) unless `TEST_DATABASE_ALLOW_REMOTE=1`. That catches a production URL pasted by mistake; it can't tell that a local port is a tunnel to somewhere else, so don't point it at one. New integration suites should start from it.
+
 CI runs type-check and all tests against a Postgres service on every pull request (`.github/workflows/ci.yml`).
 
 ## Database
@@ -55,7 +57,7 @@ Magic link + 6-digit code (D13, PRD 2.1), in `src/lib/auth.ts` with the pure rul
 
 ## Account
 
-`/account` (PRD 2.3–2.6, `src/lib/account.ts`): order history with the customer-facing status (Confirmed → Baking → Shipped → Delivered, Baking derived from the drop state), each order's page with items, address, dates, gift message, payment method and tracking, **cancel while the drop is open** (D22: order cancelled, stock returned, a `refunds` row recorded as owed until Stripe issues it, cancellation email), **order again** when the open drop carries the same boxes, the notification toggle (PRD 2.4), and name/phone/address/language editing with the same postal rules as the checkout. The order confirmation email (PRD 3.6) is sent after an order is placed. Email change and account deletion (PRD 2.6) are not built yet.
+`/account` (PRD 2.3–2.6, `src/lib/account.ts`): order history with the customer-facing status (Confirmed → Baking → Shipped → Delivered, Baking derived from the drop state), each order's page with items, address, dates and the delivery time slot (changeable until the drop closes), gift message, payment method and tracking, **cancel while the drop is open** (D22: order cancelled, stock returned, a `refunds` row recorded as owed until Stripe issues it, cancellation email), **order again** when the open drop carries the same boxes, the notification toggle (PRD 2.4), and name/phone/address/language editing with the same postal rules as the checkout. The order confirmation email (PRD 3.6) is sent after an order is placed. Email change and account deletion (PRD 2.6) are not built yet.
 
 ## Legal pages
 
@@ -67,6 +69,7 @@ Magic link + 6-digit code (D13, PRD 2.1), in `src/lib/auth.ts` with the pure rul
 
 - **Checkout →** calls `startCheckout`: inside a transaction that locks the drop's boxes it re-checks the cart against `cap − sold − active holds`, reports anything gone or cut, and otherwise writes a `carts` row plus 10-minute `inventory_holds`. The cart id goes in an httpOnly `ab-cart` cookie; the hold expiry comes back for the countdown.
 - **Place order** calls `placeOrder`: with an unexpired held cart it creates the customer from the checkout email (unverified until sign-in exists), saves the address, takes the next per-drop sequence under a row lock (`AB-003-017`), writes `orders` + `order_items` with name and price snapshots, then `markPaid` sells the stock and releases the holds. Payment is **mocked**: `markPaid` runs immediately with a note on the order; the Stripe PR moves it into the webhook.
+- **Delivery time slot** (D21): the delivery step offers Japan Post's slots (`src/lib/delivery-slots.ts`, rendered by `SlotOptions`); `placeOrder` stores it on `orders.delivery_time_slot` (missing = `none`, unknown = `invalid`). Customers can change it from the order page while the drop is open (`changeTimeSlot`, same window as cancellation).
 - The storefront's "N left" is `cap − sold − active holds`, leaving out the viewer's own cart (D6, D8). In the checkout steps the summary and the submission are the server's reservation (checkout id + revision), not the editable cart: a tab whose reservation was replaced by another tab is sent back to review.
 - No drop open means no checkout: the cart step shows a closed notice and the actions refuse (PRD 5.2a). A checkout that already holds boxes can still finish after close while its hold lasts (PRD 3.8). Outside production `?state=open` sells the most recent drop and `?demo=soldout` makes the re-check find only 2 cookie boxes and no loaf.
 

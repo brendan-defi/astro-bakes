@@ -7,7 +7,8 @@ import { validateDelivery, type DeliveryInput } from "./checkout-rules";
 import { sendEmail } from "./email";
 import { orderCancelledEmail, orderConfirmationEmail, type OrderEmailData } from "./email-templates";
 import { fmtDate, fmtDateTime } from "./format";
-import { canCancel, orderStatus, type OrderStatus } from "./order-status";
+import { canCancel, canChangeSlot, orderStatus, type OrderStatus } from "./order-status";
+import { isDeliverySlot, type DeliverySlot } from "./delivery-slots";
 import { loadDrops } from "./drops";
 
 /**
@@ -51,6 +52,9 @@ export interface OrderDetail extends OrderSummary {
   subtotal: number;
   shippingFee: number;
   giftMessage: string | null;
+  /** Delivery time slot (D21), changeable while `canChangeSlot`. */
+  timeSlot: DeliverySlot;
+  canChangeSlot: boolean;
   paymentMethod: "card" | "paypay" | null;
   trackingNumber: string | null;
   shipAt: Date;
@@ -106,6 +110,8 @@ export async function loadOrder(customerId: string, number: string, locale: Loca
     subtotal: o.subtotal,
     shippingFee: o.shippingFee,
     giftMessage: o.giftMessage,
+    timeSlot: o.deliveryTimeSlot,
+    canChangeSlot: canChangeSlot(o.state, liveState(o.drop, now)),
     paymentMethod: o.paymentMethodType,
     trackingNumber: o.trackingNumber,
     shipAt: o.drop.shipAt,
@@ -154,6 +160,26 @@ export async function cancelOrder(customerId: string, number: string): Promise<C
   return { ok: true, refunded: result.refunded };
 }
 
+// ---------------------------------------------------------------- delivery time slot (D21)
+
+/** `changed` is false when the order already had that slot, so callers can skip revalidating. */
+export type SlotResult = { ok: true; slot: DeliverySlot; changed: boolean } | { ok: false; error: "invalid" | "not_found" | "closed" | "not_changeable" };
+
+/** Change an order's delivery time slot. Same window as free cancellation (until the drop closes), same lock order as cancelOrder. */
+export async function changeTimeSlot(customerId: string, number: string, slot: unknown): Promise<SlotResult> {
+  if (!isDeliverySlot(slot)) return { ok: false, error: "invalid" };
+  return getDb().transaction(async (tx) => {
+    const [o] = await tx.select().from(orders).where(and(eq(orders.customerId, customerId), eq(orders.number, number))).for("update");
+    if (!o) return { ok: false as const, error: "not_found" as const };
+    const [drop] = await tx.select().from(drops).where(eq(drops.id, o.dropId)).for("update");
+    const dropState = liveState(drop);
+    if (!canChangeSlot(o.state, dropState)) return { ok: false as const, error: dropState === "open" ? ("not_changeable" as const) : ("closed" as const) };
+    const changed = o.deliveryTimeSlot !== slot;
+    if (changed) await tx.update(orders).set({ deliveryTimeSlot: slot, updatedAt: new Date() }).where(eq(orders.id, o.id));
+    return { ok: true as const, slot, changed };
+  });
+}
+
 // ---------------------------------------------------------------- confirmation email (PRD 3.6)
 
 /** Sent once an order is paid; called after the placing transaction commits (and from the Stripe webhook later). */
@@ -173,6 +199,7 @@ export async function sendOrderConfirmation(orderId: string): Promise<void> {
     arriveDate: fmtDate(new Date(o.drop.shipAt.getTime() + DAY), locale),
     closeDateTime: fmtDateTime(o.drop.closeAt, locale),
     giftMessage: o.giftMessage,
+    timeSlot: o.deliveryTimeSlot,
   };
   await sendEmail({ ...orderConfirmationEmail({ locale, order: data }), to: o.customer.email, type: "order_confirmation", idempotencyKey: `order-confirmation/${o.id}`, customerId: o.customerId, orderId: o.id });
 }

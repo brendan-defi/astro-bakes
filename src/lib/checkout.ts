@@ -5,6 +5,7 @@ import { addresses, carts, customers, dropBoxes, drops, inventoryHolds, orderIte
 import { effectiveState, settings as defaultSettings, type Locale } from "./data";
 import { demoEnabled } from "./demo";
 import { orderNumber, reconcile, validateDelivery, type DeliveryInput, type ReCheckChange } from "./checkout-rules";
+import { isDeliverySlot, type DeliverySlot } from "./delivery-slots";
 import { isUuid } from "./uuid";
 import { sendOrderConfirmation } from "./account";
 
@@ -204,6 +205,8 @@ export interface PlaceInput {
   locale: Locale;
   delivery: DeliveryInput;
   gift: string | null;
+  /** Japan Post delivery time slot (D21). Missing means "none", so a tab opened before slots existed can still order. */
+  timeSlot?: DeliverySlot;
   paymentMethod: "card" | "paypay";
 }
 
@@ -214,6 +217,7 @@ export interface PlacedOrder {
   shippingFee: number;
   total: number;
   email: string;
+  timeSlot: DeliverySlot;
 }
 
 export type PlaceResult =
@@ -237,6 +241,8 @@ async function placeOrderTx(input: PlaceInput, cartId: string | null, customerId
   if (!isUuid(cartId)) return { ok: false, error: "hold_expired" };
   if (cartId !== input.checkoutId) return { ok: false, error: "changed" };
   const gift = input.gift?.trim().slice(0, 150) || null;
+  const timeSlot: DeliverySlot | null = input.timeSlot === undefined ? "none" : isDeliverySlot(input.timeSlot) ? input.timeSlot : null;
+  if (!timeSlot) return { ok: false, error: "invalid" };
   const db = getDb();
 
   return db.transaction(async (tx) => {
@@ -304,6 +310,20 @@ async function placeOrderTx(input: PlaceInput, cartId: string | null, customerId
     const subtotal = lines.reduce((s, l) => s + l.qty * l.unitPrice, 0);
     const total = subtotal + shippingFee;
     const number = orderNumber(drop.number, next);
+    // Everything about where and when it goes, in one place: a later "reuse the pending order" update (Stripe) rewrites the same fields.
+    const snapshot = {
+      shipToName: input.delivery.name.trim(),
+      phone: delivery.phone,
+      postalCode: delivery.postal,
+      prefecture: hit.prefecture,
+      city: hit.city,
+      town: hit.town,
+      line1: input.delivery.line1.trim(),
+      line2: input.delivery.line2?.trim() || null,
+      wardCode: hit.wardCode,
+      giftMessage: gift,
+      deliveryTimeSlot: timeSlot,
+    };
     const [order] = await tx
       .insert(orders)
       .values({
@@ -313,16 +333,7 @@ async function placeOrderTx(input: PlaceInput, cartId: string | null, customerId
         dropSequence: next,
         customerId,
         locale: input.locale,
-        shipToName: input.delivery.name.trim(),
-        phone: delivery.phone,
-        postalCode: delivery.postal,
-        prefecture: hit.prefecture,
-        city: hit.city,
-        town: hit.town,
-        line1: input.delivery.line1.trim(),
-        line2: input.delivery.line2?.trim() || null,
-        wardCode: hit.wardCode,
-        giftMessage: gift,
+        ...snapshot,
         subtotal,
         shippingFee,
         total,
@@ -341,7 +352,7 @@ async function placeOrderTx(input: PlaceInput, cartId: string | null, customerId
     return {
       ok: true as const,
       orderId: order.id,
-      order: { number, lines: lines.map((l) => ({ name: name(l), qty: l.qty, lineTotal: l.qty * l.unitPrice })), subtotal, shippingFee, total, email },
+      order: { number, lines: lines.map((l) => ({ name: name(l), qty: l.qty, lineTotal: l.qty * l.unitPrice })), subtotal, shippingFee, total, email, timeSlot },
     };
   });
 }

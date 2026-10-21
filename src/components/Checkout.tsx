@@ -21,6 +21,8 @@ import { ArrowLeftIcon, CardIcon, CheckIcon, ClockIcon, StarShape, TruckIcon, Wa
 import { Logo } from "./Logo";
 import { Stepper } from "./Stepper";
 import { InfoStrip } from "./InfoStrip";
+import { SlotOptions } from "./SlotOptions";
+import type { DeliverySlot } from "@/lib/delivery-slots";
 import s from "./checkout.module.css";
 
 type Step = "cart" | "signin" | "code" | "delivery" | "pay" | "done";
@@ -31,7 +33,8 @@ const PREV: Partial<Record<Step, Step>> = { signin: "cart", code: "signin", deli
 type Change = { kind: "gone"; box: Box; from: number } | { kind: "cut"; box: Box; from: number; to: number; left: number };
 
 interface Address { name: string; phone: string; postal: string; line1: string; line2: string }
-interface PlacedOrder { number: string; lines: { name: string; qty: number; lineTotal: number }[]; subtotal: number; total: number; email: string; address: Address; hit: PostalHit; gift: string | null }
+// timeSlot is optional: an order cached in this tab before slots existed has none.
+interface PlacedOrder { number: string; lines: { name: string; qty: number; lineTotal: number }[]; subtotal: number; total: number; email: string; address: Address; hit: PostalHit; gift: string | null; timeSlot?: DeliverySlot }
 
 /** The open drop being sold, from the server. Dates are ISO strings so the page can pass them to this client component. */
 export interface CheckoutDrop { id: string; number: number; name: string; closeAt: string; shipAt: string; arriveAt: string }
@@ -225,6 +228,8 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
   const [giftMsg, setGiftMsg] = useState("");
   // A blank message means no card; the example text is only a placeholder.
   const giftText = gift && giftMsg.trim() ? giftMsg : null;
+  // Delivery time slot (D21): the date is the drop's, the customer picks the time.
+  const [slot, setSlot] = useState<DeliverySlot>("none");
   const [pay, setPay] = useState<"card" | "paypay">("card");
   const [touched, setTouched] = useState(false);
 
@@ -277,6 +282,7 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
         locale,
         delivery: addr,
         gift: giftText,
+        timeSlot: slot,
         paymentMethod: pay,
       });
       if (!res.ok) {
@@ -303,6 +309,9 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
   // ---- derived ----
   const shipLine = drop ? t.shipsArrives(fmtDate(drop.shipAt, locale), fmtDate(drop.arriveAt, locale)) : "";
   const shipLinePost = drop ? t.shipsByPost(fmtDate(drop.shipAt, locale), fmtDate(drop.arriveAt, locale)) : "";
+  const chosenSlot: DeliverySlot = step === "done" && placed ? (placed.timeSlot ?? "none") : slot;
+  // With the slot, always stated (even "No preference") so the final confirmation screen shows the delivery timing in full.
+  const shipLineSlot = drop ? t.shipsByPostSlot(fmtDate(drop.shipAt, locale), fmtDate(drop.arriveAt, locale), t.deliverySlots[chosenSlot]) : "";
   const feeLabel = yen(cart.shippingFee, "¥[fee]");
   const feeIncluded = cart.shippingFee === 0; // D19: shipping is in the box price, so no fee line
   // In the checkout steps the summary is the server's reservation (what placeOrder will buy); the cart step edits the local cart.
@@ -506,6 +515,13 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
                       </InfoStrip>
                     </div>
 
+                    {drop && (
+                      <div className="stack" style={{ gap: 6 }}>
+                        <SlotOptions locale={locale} name="co-slot" legend={t.slotLegend(fmtDate(drop.arriveAt, locale))} value={slot} onChange={setSlot} />
+                        <span className="small w7">{t.slotHint}</span>
+                      </div>
+                    )}
+
                     <label className={s.giftToggle}>
                       <input type="checkbox" checked={gift} onChange={(e) => setGift(e.target.checked)} />
                       {t.giftToggle}
@@ -554,7 +570,7 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
                     <div className="w9">{addr.name}</div>
                     <div style={{ fontSize: 15 }}>{addressLine}<br />{addr.phone}</div>
                     {giftText && <div className={s.giftNote}><span className="w9">{t.giftCard}</span> {giftText}</div>}
-                    <div className={s.shipLine}><TruckIcon size={20} />{shipLinePost}</div>
+                    <div className={s.shipLine}><TruckIcon size={20} />{shipLineSlot}</div>
                   </section>
 
                   <section aria-label={t.payWith} className={s.paySection}>
@@ -605,7 +621,7 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
                         { bg: "var(--pink)", date: drop ? fmtDate(drop.closeAt, locale) : null, m: t.next1, d: t.dropCloses, sub: t.next1Sub },
                         { bg: "var(--butter)", date: null, m: t.next2, d: `${t.bakeDay}`, d2: t.allAtOnce, sub: t.next2Sub },
                         { bg: "var(--aqua)", date: drop ? fmtDate(drop.shipAt, locale) : null, m: t.next3, d: t.shipsByPostShort, sub: t.next3Sub },
-                        { bg: "var(--lilac)", date: drop ? fmtDate(drop.arriveAt, locale) : null, m: t.next4, d: t.arrivesShort, sub: t.next4Sub(doneName) },
+                        { bg: "var(--lilac)", date: drop ? fmtDate(drop.arriveAt, locale) : null, m: t.next4, d: t.arrivesShort, sub: chosenSlot === "none" ? t.next4Sub(doneName) : `${t.next4Sub(doneName)} ${t.deliverySlots[chosenSlot]}` },
                       ].map((it, i) => (
                         <li key={i} className={s.nextItem}>
                           <span className={s.nextDot} style={{ background: it.bg }} />
@@ -644,7 +660,7 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
             <div className={`${s.tr} ${s.trSub}`}><span>{t.subtotal} · {t.boxCount(summaryCount)}</span><span className={s.v}>{yen(summarySubtotal)}</span></div>
             {!feeIncluded && <div className={s.tr}><span>{t.shipping} <span className={s.sub13}>{t.shippingFlatShort}</span></span><span className={s.v}>{feeLabel}</span></div>}
             <div className={`${s.tr} ${s.trTotal}`}><span className={s.k}>{t.total} <span className={s.sub12}>{t.taxIncl}</span></span><span className={s.v}>{totalLabel}</span></div>
-            <div className={s.summaryStrip}><TruckIcon size={20} />{shipLine}</div>
+            <div className={s.summaryStrip}><TruckIcon size={20} />{step === "delivery" || step === "pay" || step === "done" ? shipLineSlot : shipLine}</div>
           </section>
 
           {isCart && drop && (

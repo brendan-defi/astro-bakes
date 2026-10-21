@@ -47,6 +47,29 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 
+describe("Checkout delivery time slot (D21)", () => {
+  it("sends no preference by default and says so on the review", async () => {
+    const { goTo } = mountAt("delivery");
+    expect((screen.getByLabelText(t.deliverySlots.none) as HTMLInputElement).checked).toBe(true);
+    goTo("pay");
+    expect(screen.getAllByText((_, el) => el?.textContent?.endsWith(`, ${t.deliverySlots.none}`) ?? false).length).toBeGreaterThan(0);
+    placeOrder();
+    await waitFor(() => expect(actions.placeOrderAction).toHaveBeenCalledTimes(1));
+    expect(actions.placeOrderAction.mock.calls[0][0]).toMatchObject({ timeSlot: "none" });
+  });
+
+  it("states the fixed date in the question, and carries the chosen time to the review and the order", async () => {
+    const { goTo } = mountAt("delivery");
+    expect(screen.getByText(/^Arrives .*When suits you\?$/)).toBeTruthy();
+    fireEvent.click(screen.getByLabelText(t.deliverySlots["14_16"]));
+    goTo("pay");
+    expect(screen.getAllByText((_, el) => el?.textContent?.endsWith(`, ${t.deliverySlots["14_16"]}`) ?? false).length).toBeGreaterThan(0);
+    placeOrder();
+    await waitFor(() => expect(actions.placeOrderAction).toHaveBeenCalledTimes(1));
+    expect(actions.placeOrderAction.mock.calls[0][0]).toMatchObject({ timeSlot: "14_16" });
+  });
+});
+
 describe("Checkout gift message", () => {
   it("shows the example only as a placeholder, and sends no message when left blank", async () => {
     const { goTo } = mountAt("delivery");

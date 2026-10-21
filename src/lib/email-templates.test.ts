@@ -51,7 +51,7 @@ describe("customOrderRequestEmail", () => {
 });
 
 describe("orderConfirmationEmail", () => {
-  const order = { number: "AB-003-017", lines: [{ name: "4 Cookie Box", qty: 2, lineTotal: 2000 }], subtotal: 2000, shippingFee: 0, total: 2000, shipToName: "Hanako", addressLine: "〒153-0061 東京都目黒区中目黒1-2-3", shipDate: "Sun, Oct 25", arriveDate: "Mon, Oct 26", closeDateTime: "Sun, Oct 18 · 21:00 JST", giftMessage: null };
+  const order = { number: "AB-003-017", lines: [{ name: "4 Cookie Box", qty: 2, lineTotal: 2000 }], subtotal: 2000, shippingFee: 0, total: 2000, shipToName: "Hanako", addressLine: "〒153-0061 東京都目黒区中目黒1-2-3", shipDate: "Sun, Oct 25", arriveDate: "Mon, Oct 26", closeDateTime: "Sun, Oct 18 · 21:00 JST", giftMessage: null, timeSlot: "none" as const };
   it("leaves the shipping line out when shipping is included, and names Japan Post", () => {
     const en = orderConfirmationEmail({ locale: "en", order });
     expect(en.html).not.toContain("Shipping");
@@ -63,6 +63,17 @@ describe("orderConfirmationEmail", () => {
     expect(ja.text).toContain("小計 ¥2,000 / 合計 ¥2,000");
     expect(ja.html).toContain("日本郵便");
     expect(ja.html).not.toContain("ヤマト");
+  });
+  it("states the delivery time slot and how to change it, in both languages", () => {
+    const en = orderConfirmationEmail({ locale: "en", order: { ...order, timeSlot: "14_16" } });
+    expect(en.html).toContain("Mon, Oct 26, 14:00–16:00");
+    expect(en.text).toContain("arrives Mon, Oct 26, 14:00–16:00");
+    expect(en.text).toContain("change the delivery time on your order page until the drop closes");
+    const ja = orderConfirmationEmail({ locale: "ja", order: { ...order, timeSlot: "morning" } });
+    expect(ja.html).toContain("Mon, Oct 26（午前中）");
+    expect(ja.text).toContain("（午前中）にお届け予定");
+    expect(orderConfirmationEmail({ locale: "en", order }).text).toContain("arrives Mon, Oct 26, No preference");
+    expect(orderConfirmationEmail({ locale: "ja", order }).text).toContain("（希望なし）");
   });
   it("still shows a fee when one is set", () => {
     const en = orderConfirmationEmail({ locale: "en", order: { ...order, shippingFee: 800, total: 2800 } });

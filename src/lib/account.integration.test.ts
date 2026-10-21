@@ -1,23 +1,17 @@
 // @vitest-environment node
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { Pool } from "pg";
-import { drizzle } from "drizzle-orm/node-postgres";
-import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { eq, sql } from "drizzle-orm";
 import * as schema from "@/db/schema";
-import { closeDb } from "@/db";
 import { seed } from "@/db/seed";
-import { cancelOrder, loadOrder, loadOrders, setMarketingOptIn, updateProfile } from "@/lib/account";
+import { cancelOrder, changeTimeSlot, loadOrder, loadOrders, setMarketingOptIn, updateProfile } from "@/lib/account";
 import { mergeQuantities } from "@/lib/cart";
 import { placeOrder, startCheckout } from "@/lib/checkout";
-import { setEmailTransport, type OutgoingEmail } from "@/lib/email";
+import { captureEmail, clearTestData, closeTestDb, resetDatabase, testDb, TEST_DATABASE_URL } from "@/test/db";
 
 /** The account area against a real Postgres (TEST_DATABASE_URL), with the email transport captured. */
-const URL = process.env.TEST_DATABASE_URL;
-if (URL) process.env.DATABASE_URL = URL;
-const pool = URL ? new Pool({ connectionString: URL, max: 2 }) : null;
-const db = pool ? drizzle(pool, { schema, casing: "snake_case" }) : null!;
-const sent: OutgoingEmail[] = [];
+const { pool, db } = testDb();
+const mail = captureEmail();
+const sent = mail.sent;
 const DROP = "drop-03";
 
 async function customer(email: string, over: Partial<typeof schema.customers.$inferInsert> = {}): Promise<string> {
@@ -43,25 +37,18 @@ async function sold(slug: string) {
 }
 const setDrop = (state: "open" | "closed" | "baking" | "shipped", closeAt?: Date) => db.update(schema.drops).set({ state, ...(closeAt ? { closeAt } : {}) }).where(eq(schema.drops.slug, DROP));
 
-describe.skipIf(!URL)("account", () => {
+describe.skipIf(!TEST_DATABASE_URL)("account", () => {
   beforeAll(async () => {
-    await db.execute(sql`drop schema if exists public cascade; create schema public; drop schema if exists drizzle cascade`);
-    await migrate(db, { migrationsFolder: "drizzle" });
-    await seed(db);
-    setEmailTransport(async (email) => { sent.push(email); return { ok: true, providerMessageId: `msg_${sent.length}` }; });
+    await resetDatabase(db);
   });
   beforeEach(async () => {
-    sent.length = 0;
-    await db.execute(sql`truncate refunds, order_items, orders, inventory_holds, carts, auth_tokens, sessions, notification_log cascade`);
-    await db.execute(sql`delete from customers where email like '%@test.invalid'`);
+    mail.reset();
+    await clearTestData(db, ["refunds", "order_items", "orders", "inventory_holds", "carts", "auth_tokens", "sessions", "notification_log"]);
     await seed(db);
   });
   afterAll(async () => {
-    setEmailTransport(null);
-    await db.execute(sql`truncate refunds, order_items, orders, inventory_holds, carts cascade`);
-    await db.execute(sql`delete from customers where email like '%@test.invalid'`);
-    await closeDb();
-    await pool?.end();
+    await clearTestData(db, ["refunds", "order_items", "orders", "inventory_holds", "carts"]);
+    await closeTestDb(pool);
   });
 
   it("sends the confirmation email when an order is placed, with the terms and links (PRD 3.6)", async () => {
@@ -127,6 +114,24 @@ describe.skipIf(!URL)("account", () => {
     expect(await cancelOrder(other, number)).toEqual({ ok: false, error: "not_found" });
     expect((await loadOrder(c, number, "en"))!.status).toBe("confirmed");
     expect(sent.filter((e) => e.type === "order_cancelled")).toHaveLength(0);
+  });
+
+  it("lets the customer change the delivery time slot until the drop closes, and only on their own order (D21)", async () => {
+    const c = await customer("slot@test.invalid");
+    const other = await customer("slot-other@test.invalid");
+    const number = await order(c);
+    expect(await changeTimeSlot(c, number, "morning")).toEqual({ ok: false, error: "closed" }); // seeded drop: closed by the clock
+    expect((await loadOrder(c, number, "en"))!).toMatchObject({ timeSlot: "none", canChangeSlot: false });
+    await setDrop("open", new Date(Date.now() + 3_600_000));
+    expect((await loadOrder(c, number, "en"))!.canChangeSlot).toBe(true);
+    expect(await changeTimeSlot(c, number, "18_20")).toEqual({ ok: true, slot: "18_20", changed: true });
+    expect(await changeTimeSlot(c, number, "18_20")).toEqual({ ok: true, slot: "18_20", changed: false }); // no-op: nothing to revalidate
+    expect((await loadOrder(c, number, "en"))!.timeSlot).toBe("18_20");
+    expect(await changeTimeSlot(other, number, "morning")).toEqual({ ok: false, error: "not_found" });
+    expect(await changeTimeSlot(c, number, "20_21")).toEqual({ ok: false, error: "invalid" });
+    expect((await loadOrder(c, number, "en"))!.timeSlot).toBe("18_20");
+    await cancelOrder(c, number);
+    expect(await changeTimeSlot(c, number, "morning")).toEqual({ ok: false, error: "not_changeable" });
   });
 
   it("offers 'order again' only when the open drop carries the same boxes", async () => {

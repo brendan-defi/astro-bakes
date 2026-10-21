@@ -243,3 +243,15 @@
 
 /* Titan One has no Japanese glyphs, so JA labels set in it use Zen Maru Gothic 900 (handoff p.13). */
 :lang(ja) .rowName, :lang(ja) .soldTag, :lang(ja) .sectionTitle { font-family: var(--font-body), sans-serif; font-weight: 900; }
+
+/* ===== Delivery time slot (D21) ===== */
+.slots { border: 0; margin: 0; padding: 0; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.slots legend { padding: 0; margin-bottom: 8px; }
+.slotGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.slotChip { min-height: 48px; border: var(--border); border-radius: 14px; background: var(--white); color: var(--ink); font-weight: 900; font-size: 14px; display: flex; align-items: center; justify-content: center; text-align: center; padding: 6px 8px; cursor: pointer; }
+.slotChip:first-child { grid-column: 1 / -1; }
+.slotChip:focus-within { outline: 3px solid var(--aqua); outline-offset: 2px; }
+.slotOn { background: var(--aqua); box-shadow: 3px 3px 0 var(--ink); }
+@media (min-width: 900px) {
+  .slotGrid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}

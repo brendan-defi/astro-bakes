@@ -1,14 +1,11 @@
 // @vitest-environment node
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { Pool } from "pg";
-import { drizzle } from "drizzle-orm/node-postgres";
-import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { and, eq, sql } from "drizzle-orm";
 import * as schema from "@/db/schema";
-import { closeDb } from "@/db";
 import { seed } from "@/db/seed";
 import { availability, heldCheckout, markPaid, placeOrder, startCheckout, type PlaceInput } from "@/lib/checkout";
 import { loadDrops } from "@/lib/drops";
+import { captureEmail, clearTestData, closeTestDb, resetDatabase, testDb, TEST_DATABASE_URL } from "@/test/db";
 
 /**
  * The checkout write path against a real Postgres (TEST_DATABASE_URL; see README).
@@ -16,11 +13,8 @@ import { loadDrops } from "@/lib/drops";
  * "open" flag (honoured outside production) and placeOrder is exercised as a
  * checkout finishing after close (PRD 3.8).
  */
-const URL = process.env.TEST_DATABASE_URL;
-if (URL) process.env.DATABASE_URL = URL;
-
-const pool = URL ? new Pool({ connectionString: URL, max: 2 }) : null;
-const db = pool ? drizzle(pool, { schema, casing: "snake_case" }) : null!;
+const { pool, db } = testDb();
+captureEmail(); // placeOrder sends the confirmation; never let a test reach Resend
 const DROP = "drop-03";
 const OPEN = { state: "open" };
 
@@ -64,23 +58,17 @@ async function sold(slug: string) {
 }
 const count = async (table: "orders" | "carts" | "inventory_holds") => Number((await db.execute(sql.raw(`select count(*)::int as n from ${table}`))).rows[0].n);
 
-describe.skipIf(!URL)("checkout write path", () => {
+describe.skipIf(!TEST_DATABASE_URL)("checkout write path", () => {
   beforeAll(async () => {
-    // A dedicated test database: start from nothing so regenerated migrations never collide with stale state.
-    await db.execute(sql`drop schema if exists public cascade; create schema public; drop schema if exists drizzle cascade`);
-    await migrate(db, { migrationsFolder: "drizzle" });
-    await seed(db);
+    await resetDatabase(db);
   });
   beforeEach(async () => {
-    await db.execute(sql`truncate order_items, orders, inventory_holds, carts cascade`);
-    await db.execute(sql`delete from customers where email like '%@test.invalid'`);
+    await clearTestData(db, ["order_items", "orders", "inventory_holds", "carts"]);
     await seed(db); // restores sold_qty
   });
   afterAll(async () => {
-    await db.execute(sql`truncate order_items, orders, inventory_holds, carts cascade`);
-    await db.execute(sql`delete from customers where email like '%@test.invalid'`);
-    await closeDb();
-    await pool?.end();
+    await clearTestData(db, ["order_items", "orders", "inventory_holds", "carts"]);
+    await closeTestDb(pool);
   });
 
   it("refuses a drop that isn't open, unless the demo flag says so", async () => {
@@ -107,6 +95,21 @@ describe.skipIf(!URL)("checkout write path", () => {
     expect(again.ok && again.revision).toBe(2);
     const avail = await availability(db, await dropId(), null);
     expect(avail.get("banana-bread")!.left).toBe(0);
+  });
+
+  it("stores the delivery time slot, treats a missing one as no preference, and rejects an unknown one (D21)", async () => {
+    const c = await customer("slot@test.invalid");
+    const a = await held();
+    const r1 = await placeOrder(input(a, 1, { timeSlot: "14_16" }), a, c);
+    expect(r1.ok && r1.order.timeSlot).toBe("14_16");
+    const [row1] = await db.select({ slot: schema.orders.deliveryTimeSlot }).from(schema.orders).where(eq(schema.orders.number, "AB-003-001"));
+    expect(row1.slot).toBe("14_16");
+    const b = await held();
+    const r2 = await placeOrder(input(b, 1), b, c); // no timeSlot at all: a tab from before slots existed
+    expect(r2.ok && r2.order.timeSlot).toBe("none");
+    const d = await held();
+    expect(await placeOrder(input(d, 1, { timeSlot: "20_21" as never }), d, c)).toEqual({ ok: false, error: "invalid" });
+    expect(await count("orders")).toBe(2);
   });
 
   it("places an order, sells the stock, releases the holds and numbers in sequence", async () => {
