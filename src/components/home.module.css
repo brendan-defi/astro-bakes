@@ -116,7 +116,6 @@
 .heroFine { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; font-size: 13px; font-weight: 700; }
 .heroFine a { font-weight: 900; }
 .heroText .notifyDone { align-self: stretch; margin-top: 6px; }
-.onListText { font-weight: 900; }
 
 /* ===== Boxes as a menu (not open) ===== */
 .boxTag { position: absolute; top: 14px; left: 14px; background: var(--white); border: var(--border-thin); border-radius: var(--radius-pill); padding: 2px 12px; font-size: 13px; font-weight: 900; transform: rotate(-3deg); }

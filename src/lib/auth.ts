@@ -6,6 +6,7 @@ import { authTokens, customers, sessions, subscribers } from "@/db/schema";
 import type { Locale } from "./data";
 import { sendEmail } from "./email";
 import { adminSignInEmail, signInEmail } from "./email-templates";
+import { lockEmail } from "./email-lock";
 import { readSessionToken } from "./session-cookie";
 import { CODE_LENGTH } from "./sign-in-code";
 import {
@@ -249,6 +250,8 @@ async function activeAdmin(conn: Conn, email: string) {
  */
 export async function signIn(tx: Conn, email: string, locale: Locale): Promise<string> {
   const now = new Date();
+  // Serialise with a notify-me signup for the same address, so the subscriber read here can't go stale before the customer row is written.
+  await lockEmail(tx, email);
   const sub = await tx.query.subscribers.findFirst({ where: eq(subscribers.email, email) });
   const [inserted] = await tx
     .insert(customers)

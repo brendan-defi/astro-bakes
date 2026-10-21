@@ -5,6 +5,7 @@ import { customers, subscribers } from "@/db/schema";
 import type { Locale } from "./data";
 import { normaliseEmail } from "./auth-rules";
 import { EMAIL } from "./checkout-rules";
+import { lockEmail } from "./email-lock";
 
 /**
  * Notify-me signup (PRD 1.5): no account needed, single opt-in with the consent line shown beside the
@@ -28,12 +29,17 @@ export async function subscribe(input: SubscribeInput, now = new Date()): Promis
   const email = normaliseEmail(input?.email ?? "");
   if (email.length > 254 || !EMAIL.test(email)) return { ok: false, error: "invalid" };
   const locale: Locale = input.locale === "ja" ? "ja" : "en";
-  const db = getDb();
-  const customer = await db.query.customers.findFirst({ where: eq(customers.email, email), columns: { id: true } });
-  if (customer) return { ok: true };
-  await db
-    .insert(subscribers)
-    .values({ email, locale, source: "homepage", consentedAt: now })
-    .onConflictDoUpdate({ target: subscribers.email, set: { locale, consentedAt: now, unsubscribedAt: null, updatedAt: now } });
+  // The customer check and the write happen under the same per-address lock as a first sign-in (email-lock.ts),
+  // so a signup can neither be overtaken by a sign-in that already read the old subscriber, nor land beside an
+  // account created a moment earlier.
+  await getDb().transaction(async (tx) => {
+    await lockEmail(tx, email);
+    const customer = await tx.query.customers.findFirst({ where: eq(customers.email, email), columns: { id: true } });
+    if (customer) return;
+    await tx
+      .insert(subscribers)
+      .values({ email, locale, source: "homepage", consentedAt: now })
+      .onConflictDoUpdate({ target: subscribers.email, set: { locale, consentedAt: now, unsubscribedAt: null, updatedAt: now } });
+  });
   return { ok: true };
 }

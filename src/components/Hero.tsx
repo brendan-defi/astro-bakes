@@ -6,8 +6,7 @@ import { HeroAstro } from "./HeroAstro";
 import { ScrollLink } from "./ScrollLink";
 import { Countdown } from "./Countdown";
 import { NotifyForm } from "./NotifyForm";
-import { OnListStatus } from "./OnListStatus";
-import { OptInButton } from "./OptInButton";
+import { SignedInDropEmails } from "./SignedInDropEmails";
 import s from "./home.module.css";
 
 /** Drop hero: one of four variants from the drop state (PRD 1.1). */
@@ -58,7 +57,6 @@ function HeroNotOpen({ locale, home }: { locale: Locale; home: HomeData }) {
   // The drop the notify copy refers to: the scheduled one, or the next one after a closed drop.
   const upcoming = state === "scheduled" ? drop : nextDrop;
   const order = state === "closed" && drop && viewer.signedIn && viewer.order?.dropId === drop.id ? viewer.order : null;
-  const onList = viewer.signedIn && viewer.optedIn;
 
   let eyebrow: string, eyebrowClass = "", bubble: string, photo = "/images/astro-cookie.jpg", alt = t.astroAlt;
   if (state === "scheduled" && drop) {
@@ -141,17 +139,16 @@ function HeroNotOpen({ locale, home }: { locale: Locale; home: HomeData }) {
             </div>
           )}
 
-          {onList ? (
+          {viewer.signedIn ? (
             // Signed-in viewers see their notification preference, not an email field (PRD 1.5 / 2.4):
             // a status with a link to the account page's toggle, so nobody unsubscribes from the homepage by accident.
-            <OnListStatus locale={locale} text={upcoming ? t.onListFor(t.dropN(upcoming.number)) : t.onListGeneric} />
-          ) : viewer.signedIn ? (
-            <OptInButton
+            <SignedInDropEmails
               locale={locale}
               variant="hero"
+              optedIn={viewer.optedIn}
+              statusText={upcoming ? t.onListFor(t.dropN(upcoming.number)) : t.onListGeneric}
               label={upcoming ? t.optInNext(t.dropN(upcoming.number)) : t.optInGeneric}
               consent={t.dropEmailsOnly}
-              doneText={upcoming ? t.onListFor(t.dropN(upcoming.number)) : t.onListGeneric}
             />
           ) : (
             <NotifyForm

@@ -1,12 +1,28 @@
 // @vitest-environment node
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import * as schema from "@/db/schema";
+import { signIn } from "@/lib/auth";
+import { lockEmail } from "@/lib/email-lock";
 import { subscribe } from "@/lib/subscribe";
 import { clearTestData, closeTestDb, resetDatabase, testDb, TEST_DATABASE_URL } from "@/test/db";
 
 /** Notify-me signups (PRD 1.5) against a real Postgres (TEST_DATABASE_URL). */
 const { pool, db } = testDb();
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+/** Both records for an address, to check they agree about consent. */
+async function records(email: string) {
+  const [customer] = await db.select().from(schema.customers).where(eq(schema.customers.email, email));
+  const [subscriber] = await db.select().from(schema.subscribers).where(eq(schema.subscribers.email, email));
+  return { customer, subscriber };
+}
+/** The invariant both races used to break: once an account exists, any subscriber row is linked to it and agrees with its opt-in. */
+function expectConsistent({ customer, subscriber }: Awaited<ReturnType<typeof records>>) {
+  expect(customer).toBeDefined();
+  if (!subscriber) return;
+  expect(subscriber.convertedCustomerId).toBe(customer.id);
+  expect(subscriber.unsubscribedAt === null).toBe(customer.marketingOptIn);
+}
 const row = async (email: string) => (await db.select().from(schema.subscribers).where(eq(schema.subscribers.email, email)))[0];
 
 describe.skipIf(!TEST_DATABASE_URL)("subscribe", () => {
@@ -51,5 +67,55 @@ describe.skipIf(!TEST_DATABASE_URL)("subscribe", () => {
     }
     expect(await subscribe({ email: "bot@test.invalid", locale: "en", website: "http://spam.example" })).toEqual({ ok: true });
     expect(await db.select().from(schema.subscribers)).toHaveLength(0);
+  });
+
+  it("waits for a first sign-in that is converting the same address, so the account and the subscriber agree", async () => {
+    const email = "race-a@test.invalid";
+    await subscribe({ email, locale: "en" });
+    await db.update(schema.subscribers).set({ unsubscribedAt: new Date() }).where(eq(schema.subscribers.email, email));
+    let signup!: Promise<unknown>;
+    let settled = false;
+    await db.transaction(async (tx) => {
+      await signIn(tx as never, email, "en"); // has read the unsubscribed row; the customer isn't committed yet
+      signup = subscribe({ email, locale: "en" }).finally(() => { settled = true; });
+      await sleep(300);
+      expect(settled).toBe(false); // held on the same lock until the sign-in commits
+    });
+    expect(await signup).toEqual({ ok: true });
+    const r = await records(email);
+    expectConsistent(r);
+    expect(r.customer.marketingOptIn).toBe(false); // the account's own preference governs from here
+  });
+
+  it("doesn't let a signup that found no account land beside one created a moment later", async () => {
+    const email = "race-b@test.invalid";
+    let release!: () => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    // A SHARE lock on subscribers lets reads through but holds the signup's INSERT, pausing it after its customer check.
+    const holder = db.transaction(async (tx) => { await tx.execute(sql`lock table subscribers in share mode`); await gate; });
+    await sleep(100);
+    const signup = subscribe({ email, locale: "ja" });
+    await sleep(150);
+    const signin = db.transaction((tx) => signIn(tx as never, email, "ja")); // without the shared lock this commits first
+    await sleep(300);
+    release();
+    await holder;
+    await Promise.all([signup, signin]);
+    expectConsistent(await records(email));
+  });
+
+  it("serialises a signup and a first sign-in for a new address whichever reaches the lock first", async () => {
+    const email = "race-c@test.invalid";
+    let release!: () => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    const holder = db.transaction(async (tx) => { await lockEmail(tx as never, email); await gate; });
+    await sleep(100);
+    const signup = subscribe({ email, locale: "ja" });
+    const signin = db.transaction((tx) => signIn(tx as never, email, "ja"));
+    await sleep(200);
+    release();
+    await holder;
+    await Promise.all([signup, signin]);
+    expectConsistent(await records(email));
   });
 });
