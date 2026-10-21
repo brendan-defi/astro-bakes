@@ -7,12 +7,12 @@ const particles = vi.hoisted(() => ({ burst: vi.fn() }));
 vi.mock("@/lib/particles", () => particles);
 
 afterEach(() => { cleanup(); restoreMotion(); particles.burst.mockReset(); });
-const hero = () => render(<HeroAstro photo="/images/astro-cookie.jpg" alt="Astro the border collie" bubble="Drop 03 is open!" />);
+const hero = () => render(<HeroAstro photo="/images/astro-cookie.jpg" alt="Astro the Australian Shepherd" bubble="Drop 03 is open!" />);
 
 describe("HeroAstro", () => {
   it("throws paws, hearts and cookies from where Astro is tapped", () => {
     hero();
-    fireEvent.pointerDown(screen.getByRole("img", { name: "Astro the border collie" }), { clientX: 120, clientY: 340 });
+    fireEvent.pointerDown(screen.getByRole("img", { name: "Astro the Australian Shepherd" }), { clientX: 120, clientY: 340 });
     expect(particles.burst).toHaveBeenCalledWith({ x: 120, y: 340 }, expect.objectContaining({ kind: ["paw", "heart", "cookie", "paw"] }));
   });
 
@@ -25,7 +25,7 @@ describe("HeroAstro", () => {
 
   it("keeps the photo a plain image: its alt text, no button, no tab stop", () => {
     const { container } = hero();
-    expect(screen.getByRole("img", { name: "Astro the border collie" })).toBeTruthy();
+    expect(screen.getByRole("img", { name: "Astro the Australian Shepherd" })).toBeTruthy();
     expect(screen.queryAllByRole("button")).toHaveLength(0);
     expect(container.querySelectorAll("[tabindex]")).toHaveLength(0);
   });
