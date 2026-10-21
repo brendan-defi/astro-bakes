@@ -43,7 +43,7 @@ pnpm db:seed       # load the sample catalogue, Drop 03 / 04, settings, sample c
 pnpm db:studio     # browse the data
 ```
 
-The homepage reads drops, boxes and settings from the database (`src/lib/drops.ts`). Tables: customers, addresses, subscribers, auth_tokens, sessions, notification_log, refunds, drops, boxes, items, box_items, drop_boxes, settings, carts, inventory_holds, orders, order_items.
+The homepage reads drops, boxes and settings from the database (`src/lib/drops.ts`). The notify-me forms (PRD 1.5) store signups in `subscribers` through `subscribeAction` (`src/lib/subscribe.ts`); signed-in customers get a status line or a one-tap opt-in instead, backed by the same preference as the account page. Tables: customers, addresses, subscribers, auth_tokens, sessions, notification_log, refunds, drops, boxes, items, box_items, drop_boxes, settings, carts, inventory_holds, orders, order_items.
 
 ## Sign-in
 

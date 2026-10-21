@@ -2,9 +2,10 @@ import Link from "next/link";
 import { anonymousViewer, type Locale, type Settings, type Viewer } from "@/lib/data";
 import { getStrings } from "@/lib/i18n";
 import { NotifyForm } from "./NotifyForm";
+import { OptInButton } from "./OptInButton";
 import s from "./home.module.css";
 
-/** Notify-me capture (PRD 1.5). Signed-in, opted-in viewers see their preference instead. */
+/** Notify-me capture (PRD 1.5). Signed-in viewers see their preference, or a one-tap opt-in, instead of an email field. */
 export function Notify({ locale, settings, viewer = anonymousViewer }: { locale: Locale; settings: Settings; viewer?: Viewer }) {
   const t = getStrings(locale);
   return (
@@ -15,6 +16,8 @@ export function Notify({ locale, settings, viewer = anonymousViewer }: { locale:
           <p className={s.notifySub}>{t.notifySub}</p>
           {viewer.signedIn && viewer.optedIn ? (
             <div className={s.onListText} role="status">{t.onListAccount} <Link href={`/${locale}/account`}>{t.accountTitle} →</Link></div>
+          ) : viewer.signedIn ? (
+            <OptInButton locale={locale} variant="section" label={t.optInGeneric} consent={t.notifyConsent} doneText={t.onListGeneric} />
           ) : (
             <NotifyForm locale={locale} id="notify-email" variant="section" label={t.emailAddress} button={t.notifyCta} consent={t.notifyConsent} />
           )}

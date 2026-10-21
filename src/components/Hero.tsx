@@ -6,6 +6,8 @@ import { HeroAstro } from "./HeroAstro";
 import { ScrollLink } from "./ScrollLink";
 import { Countdown } from "./Countdown";
 import { NotifyForm } from "./NotifyForm";
+import { OnListStatus } from "./OnListStatus";
+import { OptInButton } from "./OptInButton";
 import s from "./home.module.css";
 
 /** Drop hero: one of four variants from the drop state (PRD 1.1). */
@@ -140,12 +142,17 @@ function HeroNotOpen({ locale, home }: { locale: Locale; home: HomeData }) {
           )}
 
           {onList ? (
-            // Signed-in viewers see their notification preference, not an email field (PRD 1.5 / 2.4).
-            // TODO: persist to Customer.marketing_opt_in
-            <label className={s.onList}>
-              <input type="checkbox" defaultChecked />
-              {upcoming ? t.onListFor(t.dropN(upcoming.number)) : t.onListGeneric}
-            </label>
+            // Signed-in viewers see their notification preference, not an email field (PRD 1.5 / 2.4):
+            // a status with a link to the account page's toggle, so nobody unsubscribes from the homepage by accident.
+            <OnListStatus locale={locale} text={upcoming ? t.onListFor(t.dropN(upcoming.number)) : t.onListGeneric} />
+          ) : viewer.signedIn ? (
+            <OptInButton
+              locale={locale}
+              variant="hero"
+              label={upcoming ? t.optInNext(t.dropN(upcoming.number)) : t.optInGeneric}
+              consent={t.dropEmailsOnly}
+              doneText={upcoming ? t.onListFor(t.dropN(upcoming.number)) : t.onListGeneric}
+            />
           ) : (
             <NotifyForm
               locale={locale}

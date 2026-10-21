@@ -115,8 +115,6 @@
 .heroBtn { flex: 1 1 auto; min-height: 60px; padding: 0 26px; font-size: 19px; }
 .heroFine { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; font-size: 13px; font-weight: 700; }
 .heroFine a { font-weight: 900; }
-.onList { align-self: stretch; display: flex; align-items: center; gap: 12px; min-height: 52px; background: var(--ok-green-bg); border: var(--border); border-radius: 16px; padding: 8px 14px; font-weight: 900; cursor: pointer; }
-.onList input { flex: none; width: 22px; height: 22px; accent-color: var(--ink); margin: 0; }
 .heroText .notifyDone { align-self: stretch; margin-top: 6px; }
 .onListText { font-weight: 900; }
 
@@ -400,3 +398,10 @@
 @keyframes jiggle { 0%, 62%, 100% { rotate: 0deg; translate: 0 0; } 68% { rotate: -16deg; translate: 0 -5px; } 74% { rotate: 13deg; translate: 0 -2px; } 80% { rotate: -8deg; translate: 0 -3px; } 86% { rotate: 4deg; translate: 0 0; } 92% { rotate: -1deg; } }
 @keyframes pop-in { from { scale: 0; opacity: 0; } }
 @keyframes throb { 50% { scale: 1.08; } }
+
+/* Signed-in customers without drop emails: one-tap opt-in instead of an email field (PRD 1.5, 2.4). */
+.optInHero { align-self: stretch; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; margin-top: 6px; }
+.optInSection { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.notifyDone a { color: var(--ink); }
+.notifyError { margin-top: 6px; }
+.hp { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
