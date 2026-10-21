@@ -1,14 +1,11 @@
 // @vitest-environment node
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { Pool } from "pg";
-import { drizzle } from "drizzle-orm/node-postgres";
-import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { and, eq, sql } from "drizzle-orm";
 import * as schema from "@/db/schema";
-import { closeDb } from "@/db";
 import { seed } from "@/db/seed";
 import { availability, heldCheckout, markPaid, placeOrder, startCheckout, type PlaceInput } from "@/lib/checkout";
 import { loadDrops } from "@/lib/drops";
+import { captureEmail, clearTestData, closeTestDb, resetDatabase, testDb, TEST_DATABASE_URL } from "@/test/db";
 
 /**
  * The checkout write path against a real Postgres (TEST_DATABASE_URL; see README).
@@ -16,11 +13,8 @@ import { loadDrops } from "@/lib/drops";
  * "open" flag (honoured outside production) and placeOrder is exercised as a
  * checkout finishing after close (PRD 3.8).
  */
-const URL = process.env.TEST_DATABASE_URL;
-if (URL) process.env.DATABASE_URL = URL;
-
-const pool = URL ? new Pool({ connectionString: URL, max: 2 }) : null;
-const db = pool ? drizzle(pool, { schema, casing: "snake_case" }) : null!;
+const { pool, db } = testDb();
+captureEmail(); // placeOrder sends the confirmation; never let a test reach Resend
 const DROP = "drop-03";
 const OPEN = { state: "open" };
 
@@ -64,23 +58,17 @@ async function sold(slug: string) {
 }
 const count = async (table: "orders" | "carts" | "inventory_holds") => Number((await db.execute(sql.raw(`select count(*)::int as n from ${table}`))).rows[0].n);
 
-describe.skipIf(!URL)("checkout write path", () => {
+describe.skipIf(!TEST_DATABASE_URL)("checkout write path", () => {
   beforeAll(async () => {
-    // A dedicated test database: start from nothing so regenerated migrations never collide with stale state.
-    await db.execute(sql`drop schema if exists public cascade; create schema public; drop schema if exists drizzle cascade`);
-    await migrate(db, { migrationsFolder: "drizzle" });
-    await seed(db);
+    await resetDatabase(db);
   });
   beforeEach(async () => {
-    await db.execute(sql`truncate order_items, orders, inventory_holds, carts cascade`);
-    await db.execute(sql`delete from customers where email like '%@test.invalid'`);
+    await clearTestData(db, ["order_items", "orders", "inventory_holds", "carts"]);
     await seed(db); // restores sold_qty
   });
   afterAll(async () => {
-    await db.execute(sql`truncate order_items, orders, inventory_holds, carts cascade`);
-    await db.execute(sql`delete from customers where email like '%@test.invalid'`);
-    await closeDb();
-    await pool?.end();
+    await clearTestData(db, ["order_items", "orders", "inventory_holds", "carts"]);
+    await closeTestDb(pool);
   });
 
   it("refuses a drop that isn't open, unless the demo flag says so", async () => {

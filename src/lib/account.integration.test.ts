@@ -1,23 +1,17 @@
 // @vitest-environment node
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { Pool } from "pg";
-import { drizzle } from "drizzle-orm/node-postgres";
-import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { eq, sql } from "drizzle-orm";
 import * as schema from "@/db/schema";
-import { closeDb } from "@/db";
 import { seed } from "@/db/seed";
 import { cancelOrder, changeTimeSlot, loadOrder, loadOrders, setMarketingOptIn, updateProfile } from "@/lib/account";
 import { mergeQuantities } from "@/lib/cart";
 import { placeOrder, startCheckout } from "@/lib/checkout";
-import { setEmailTransport, type OutgoingEmail } from "@/lib/email";
+import { captureEmail, clearTestData, closeTestDb, resetDatabase, testDb, TEST_DATABASE_URL } from "@/test/db";
 
 /** The account area against a real Postgres (TEST_DATABASE_URL), with the email transport captured. */
-const URL = process.env.TEST_DATABASE_URL;
-if (URL) process.env.DATABASE_URL = URL;
-const pool = URL ? new Pool({ connectionString: URL, max: 2 }) : null;
-const db = pool ? drizzle(pool, { schema, casing: "snake_case" }) : null!;
-const sent: OutgoingEmail[] = [];
+const { pool, db } = testDb();
+const mail = captureEmail();
+const sent = mail.sent;
 const DROP = "drop-03";
 
 async function customer(email: string, over: Partial<typeof schema.customers.$inferInsert> = {}): Promise<string> {
@@ -43,25 +37,18 @@ async function sold(slug: string) {
 }
 const setDrop = (state: "open" | "closed" | "baking" | "shipped", closeAt?: Date) => db.update(schema.drops).set({ state, ...(closeAt ? { closeAt } : {}) }).where(eq(schema.drops.slug, DROP));
 
-describe.skipIf(!URL)("account", () => {
+describe.skipIf(!TEST_DATABASE_URL)("account", () => {
   beforeAll(async () => {
-    await db.execute(sql`drop schema if exists public cascade; create schema public; drop schema if exists drizzle cascade`);
-    await migrate(db, { migrationsFolder: "drizzle" });
-    await seed(db);
-    setEmailTransport(async (email) => { sent.push(email); return { ok: true, providerMessageId: `msg_${sent.length}` }; });
+    await resetDatabase(db);
   });
   beforeEach(async () => {
-    sent.length = 0;
-    await db.execute(sql`truncate refunds, order_items, orders, inventory_holds, carts, auth_tokens, sessions, notification_log cascade`);
-    await db.execute(sql`delete from customers where email like '%@test.invalid'`);
+    mail.reset();
+    await clearTestData(db, ["refunds", "order_items", "orders", "inventory_holds", "carts", "auth_tokens", "sessions", "notification_log"]);
     await seed(db);
   });
   afterAll(async () => {
-    setEmailTransport(null);
-    await db.execute(sql`truncate refunds, order_items, orders, inventory_holds, carts cascade`);
-    await db.execute(sql`delete from customers where email like '%@test.invalid'`);
-    await closeDb();
-    await pool?.end();
+    await clearTestData(db, ["refunds", "order_items", "orders", "inventory_holds", "carts"]);
+    await closeTestDb(pool);
   });
 
   it("sends the confirmation email when an order is placed, with the terms and links (PRD 3.6)", async () => {
