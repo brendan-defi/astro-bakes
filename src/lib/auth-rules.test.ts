@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { codeMatches, flowMatches, generateCode, generateToken, hashCode, hashFlow, hashSession, hashToken, isSameOriginRequest, maskEmail, normaliseEmail, safeNext, signInDestination } from "./auth-rules";
+import { adminNext, codeMatches, flowMatches, generateCode, generateToken, hashCode, hashFlow, hashSession, hashToken, isSameOriginRequest, maskEmail, normaliseEmail, safeNext, signInDestination } from "./auth-rules";
 
 describe("auth rules", () => {
   it("generates six-digit codes with leading zeros and distinct URL-safe tokens", () => {
@@ -96,5 +96,12 @@ describe("auth rules", () => {
     expect(isSameOriginRequest({ origin: "https://evil.example", host: "astrobakes.xyz" })).toBe(false);
     expect(isSameOriginRequest({ origin: "null", host: "astrobakes.xyz" })).toBe(false);
     expect(isSameOriginRequest({})).toBe(false);
+  });
+  it("keeps an admin sign-in's return path inside /admin", () => {
+    expect(adminNext("/admin/orders?state=paid")).toBe("/admin/orders?state=paid");
+    expect(adminNext("/admin")).toBe("/admin");
+    for (const bad of [null, "", "/en/account", "/administrator", "/admin-evil", "//admin.astrobakes.xyz/admin", "https://evil.test/admin", "/admin/../en"]) {
+      expect(adminNext(bad)).toBe("/admin");
+    }
   });
 });

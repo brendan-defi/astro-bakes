@@ -51,6 +51,19 @@ ${codeLine}
   return { subject, html: layout("en", subject, body), text };
 }
 
+/** The admin portal's sign-in (PRD 4, 5.4): English only, like the rest of the admin. */
+export function adminSignInEmail(opts: { link: string; code: string; minutes: number }): Email {
+  const { link, code, minutes } = opts;
+  const subject = `Astro Bakes admin sign-in code: ${code}`;
+  const body = `<p style="margin:0 0 16px">Use this code to sign in to the Astro Bakes admin, or open the link in the browser where you asked for it.</p>
+<p style="margin:0 0 20px;font-size:30px;font-weight:900;letter-spacing:0.3em">${esc(code)}</p>
+<p style="margin:0 0 20px"><a href="${esc(link)}" style="display:inline-block;padding:14px 22px;background:#FF9CCB;color:#2A1B5E;border:2px solid #2A1B5E;border-radius:999px;font-weight:700;text-decoration:none">Sign in to admin</a></p>
+<p style="margin:0 0 8px;font-size:14px">The link and code expire in ${minutes} minutes and work once.</p>
+<p style="margin:0;font-size:13px;color:#5B3FC4">Didn't ask for this? Someone typed your address on the admin sign-in page. You can ignore this email.</p>`;
+  const text = `Sign in to the Astro Bakes admin\n\nYour code: ${code}\n\nOr open this link in the browser where you asked for it:\n${link}\n\nThe link and code expire in ${minutes} minutes and work once. Didn't ask for this? Ignore this email.`;
+  return { subject, html: layout("en", subject, body), text };
+}
+
 const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? "https://astrobakes.xyz";
 const yen = (n: number) => "¥" + n.toLocaleString("en-US");
 

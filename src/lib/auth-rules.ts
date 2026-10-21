@@ -80,6 +80,12 @@ export function safeNext(next: string | null | undefined, fallback: string): str
   }
 }
 
+/** An admin sign-in's return target: a same-site path inside the admin portal, or its dashboard. */
+export function adminNext(next: string | null | undefined): string {
+  const out = safeNext(next, "/admin");
+  return /^\/admin(?:[/?#]|$)/.test(out) ? out : "/admin";
+}
+
 /** Where the sign-in page sends an already-signed-in visitor (or lands them after the code): the requested path, or their account. */
 export function signInDestination(nextParam: string | null | undefined, locale: string): string {
   return safeNext(nextParam, `/${locale}/account`);

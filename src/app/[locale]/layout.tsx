@@ -1,14 +1,10 @@
 import type { Metadata, Viewport } from "next";
-import { Titan_One, Pacifico, Zen_Maru_Gothic } from "next/font/google";
 import { notFound } from "next/navigation";
 import { isLocale } from "@/lib/i18n";
 import { openGraphBase, SITE_URL, stringsFor } from "@/lib/metadata";
 import { SelectionColors } from "@/components/SelectionColors";
+import { fontVariables } from "../fonts";
 import "../globals.css";
-
-const display = Titan_One({ weight: "400", subsets: ["latin"], variable: "--font-display", display: "swap" });
-const logo = Pacifico({ weight: "400", subsets: ["latin"], variable: "--font-logo", display: "swap" });
-const body = Zen_Maru_Gothic({ weight: ["500", "700", "900"], subsets: ["latin"], variable: "--font-body", display: "swap" });
 
 /**
  * Site-wide metadata. Most visitors arrive from Instagram and LINE links, so the
@@ -44,7 +40,7 @@ export default async function LocaleLayout({
   const { locale } = await params;
   if (!isLocale(locale)) notFound();
   return (
-    <html lang={locale} className={`${display.variable} ${logo.variable} ${body.variable}`}>
+    <html lang={locale} className={fontVariables}>
       <body>
         {children}
         <SelectionColors />

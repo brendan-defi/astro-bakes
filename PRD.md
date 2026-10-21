@@ -475,7 +475,7 @@ All email goes out through Resend (D23). Marketing emails carry sender identity 
 
 ### [~] 5.4 Auth & roles
 
-Magic link for everyone (2.1). `Customer.role = admin` for the owner; admin routes require it. Stripe webhooks verified by signature. Magic-link requests rate-limited per email and per IP. Admin sessions can be the same 90-day cookie — it's one person on one laptop.
+Magic link for everyone (2.1). `Customer.role = admin` for the owner; admin routes require it. Stripe webhooks verified by signature. Magic-link requests rate-limited per email and per IP. Admin sessions last the same 90 days — it's one person on one laptop — but live in their own cookie on the admin host (see changelog 2026-10-21).
 
 ### [~] 5.5 Analytics
 
@@ -525,6 +525,7 @@ Not decisions — things to verify when the relevant piece is built.
 
 ## Changelog
 
+- **2026-10-21** — The admin (§4) lives at `admin.astrobakes.xyz/admin`, in the same app. It is English only (customer-facing content is still entered in both languages). It signs in through the same magic link and code, but its tokens and sessions are a separate audience, and its session sits in a host-only cookie scoped to `/admin`. Neither side accepts the other's, so the owner's shop account and admin session stay independent.
 - **2026-10-21** — D21's delivery time slot is built: chosen at checkout (Japan Post ゆうパック's six slots plus 希望なし; the 20–21 slot was withdrawn in 2024), shown on the final confirmation screen, the done step, the confirmation email and the order page, and changeable from the order page in the same window as free cancellation (until the drop closes), so a label export made after close can't go stale. Stored as `orders.delivery_time_slot`, default `none`.
 - **2026-10-20** — Three owner decisions overrode v1. D19: shipping is included in the box price, no separate fee; the cart bar, hero, chips, checkout, emails and order pages say "shipping included" and hide the fee line when the setting is 0 (the key stays so a fee could return). D21: the carrier is Japan Post, not Yamato, and customers choose a delivery time slot at checkout while the date stays the drop's ship date; the checkout field and the Japan Post label export are still to be built. Gift messages are handwritten, not printed. The legal pages and FAQ (1.7, 1.8) already say all of this.
 - **2026-10-19** — D23 changed from Amazon SES to Resend, provisioned through the Vercel Marketplace: one-command setup with the API key injected into the project, versus an AWS account, IAM credentials and a sandbox-exit request for SES. The sending domain still needs DKIM/SPF at GoDaddy and the carrier-address deliverability test before the first drop; the email transport sits behind one interface so SES stays available as a fallback if volume or cost ever warrant it.

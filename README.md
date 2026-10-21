@@ -55,6 +55,15 @@ Magic link + 6-digit code (D13, PRD 2.1), in `src/lib/auth.ts` with the pure rul
 - **Checkout** places orders for the signed-in customer only; the confirmed delivery details become their saved profile and address (PRD 2.3). The magic link lands back on the checkout at the delivery step with the cart intact: its return path names this browser's reservation (`?r=<checkoutId>:<revision>`), which a fresh tab adopts only if it still matches the server exactly. The pending email and resend timer live per tab so a refresh of the code screen keeps working.
 - **Email** goes through Resend (D23, Vercel Marketplace resource `resend-email-coquelicot-diamond`, Tokyo region) via `src/lib/email.ts`; every send is recorded in `notification_log`. The sending domain needs Resend's DKIM and SPF records at GoDaddy before `hello@astrobakes.xyz` can send; until then set `EMAIL_FROM="Astro Bakes <onboarding@resend.dev>"` for testing to your own address.
 
+## Admin
+
+The owner's portal (PRD §4) lives at **https://admin.astrobakes.xyz/admin**, served by this same app from `src/app/admin/` (its own root layout beside `[locale]`). English only, desktop only.
+
+- **Hosts.** In production `/admin` answers only on `admin.astrobakes.xyz` (`src/proxy.ts` 404s it elsewhere), and that host serves nothing but the portal: `next.config.ts` sends its `/` to `/admin` and any shop path to `astrobakes.xyz`. Its `robots.txt` disallows everything and every admin page is noindex. On Vercel previews and locally there's no admin host, so open `/admin` on the deployment's own URL (`http://localhost:3000/admin`). Previews use the production database, so an admin on a preview edits real data.
+- **Sign-in.** The shop's magic link + code with audience `admin` (`auth_tokens.audience`, `sessions.audience`): mail goes only to customers with `role = 'admin'` (everyone gets the same "check your email"), the link points at `/admin/auth/verify`, and the session lives in its own `ab-admin` cookie scoped to `/admin`. Admin and shop tokens and sessions are never accepted by the other side. A link opened in a browser other than the one that asked says to type the code instead; there's no confirmation page.
+- **Who's an admin.** `pnpm admin:grant owner@example.com` (creates the account if needed; `--revoke` takes it away and ends their admin sessions). It prints which database it touched, since `.env.local` points at production.
+- **The rule.** Every admin page, route handler method and server action calls `await requireAdmin()` from `src/lib/admin.ts` in its own body (layouts and the proxy aren't boundaries). `src/app/admin/guard.test.ts` reads each file's syntax tree and fails when an entry point doesn't. That test is a safety net for parallel branches, not the boundary itself. The signed-out sign-in pieces call `assertAdminHost()` instead. New sections add themselves to `ADMIN_SECTIONS` in `src/components/admin/AdminNav.tsx`, and share the table and form styles in `src/app/admin/admin.module.css`.
+
 ## Account
 
 `/account` (PRD 2.3–2.6, `src/lib/account.ts`): order history with the customer-facing status (Confirmed → Baking → Shipped → Delivered, Baking derived from the drop state), each order's page with items, address, dates and the delivery time slot (changeable until the drop closes), gift message, payment method and tracking, **cancel while the drop is open** (D22: order cancelled, stock returned, a `refunds` row recorded as owed until Stripe issues it, cancellation email), **order again** when the open drop carries the same boxes, the notification toggle (PRD 2.4), and name/phone/address/language editing with the same postal rules as the checkout. The order confirmation email (PRD 3.6) is sent after an order is placed. Email change and account deletion (PRD 2.6) are not built yet.
@@ -102,4 +111,4 @@ Magic link + 6-digit code (D13, PRD 2.1), in `src/lib/auth.ts` with the pure rul
 
 ## Not built yet (per handoff, build from the PRD)
 
-FAQ, legal pages, account pages, admin, payment failure, PayPay "confirming…" page, Japanese copy, real photography, Stripe, any backend.
+FAQ, legal pages, account pages, the admin sections (§4.1–4.10; the portal's sign-in and shell exist), payment failure, PayPay "confirming…" page, Japanese copy, real photography, Stripe, any backend.
