@@ -21,11 +21,19 @@ const mail = {
   sent: [] as OutgoingEmail[],
   failing: null as string | null,
   hold: null as Promise<void> | null,
-  reset() { this.sent.length = 0; this.failing = null; this.hold = null; },
+  /** Calls whose request was aborted by the send deadline. */
+  aborted: 0,
+  reset() { this.sent.length = 0; this.failing = null; this.hold = null; this.aborted = 0; },
 };
-setEmailTransport(async (email) => {
+setEmailTransport(async (email, _from, signal) => {
   mail.sent.push(email);
-  if (mail.hold) await mail.hold;
+  if (mail.hold) {
+    const abort = new Promise<"aborted">((r) => signal?.addEventListener("abort", () => r("aborted"), { once: true }));
+    if ((await Promise.race([mail.hold.then(() => "released" as const), abort])) === "aborted") {
+      mail.aborted++;
+      return { ok: false, error: "aborted" };
+    }
+  }
   return mail.failing ? { ok: false, error: mail.failing } : { ok: true, providerMessageId: `msg_${mail.sent.length}` };
 });
 const welcomes = () => mail.sent.filter((m) => m.type === "welcome");
@@ -424,6 +432,7 @@ describe.skipIf(!TEST_DATABASE_URL)("subscribe", () => {
       expect(await row("hang@test.invalid")).toMatchObject({ welcomeSentAt: null, welcomeAttempts: 1 });
       const [log] = await db.select().from(schema.notificationLog).where(eq(schema.notificationLog.to, "hang@test.invalid"));
       expect(log.error).toMatch(/timed out/);
+      expect(mail.aborted).toBe(1); // the hung request itself was aborted, not left running
     } finally {
       release();
       mail.hold = null;

@@ -31,16 +31,17 @@ export interface OutgoingEmail extends Email {
 }
 
 export type SendOutcome = { ok: true; providerMessageId: string | null } | { ok: false; error: string };
-export type EmailTransport = (email: OutgoingEmail, from: string) => Promise<SendOutcome>;
+/** `signal` is aborted when the send deadline passes; a transport should stop its request then. */
+export type EmailTransport = (email: OutgoingEmail, from: string, signal?: AbortSignal) => Promise<SendOutcome>;
 
-const resendTransport: EmailTransport = async (email, from) => {
+const resendTransport: EmailTransport = async (email, from, signal) => {
   const key = process.env.RESEND_API_KEY;
   if (!key) return { ok: false, error: "RESEND_API_KEY is not set" };
   const resend = new Resend(key);
   // The SDK reports API errors in the result, not by throwing.
   const { data, error } = await resend.emails.send(
     { from, to: [email.to], subject: email.subject, html: email.html, text: email.text, ...(email.replyTo ? { replyTo: email.replyTo } : {}), ...(email.headers && Object.keys(email.headers).length ? { headers: email.headers } : {}) },
-    { idempotencyKey: email.idempotencyKey },
+    { idempotencyKey: email.idempotencyKey, signal },
   );
   if (error) return { ok: false, error: `${error.name}: ${error.message}` };
   return { ok: true, providerMessageId: data?.id ?? null };
@@ -61,13 +62,27 @@ export function setEmailSendTimeout(ms: number | null) {
   sendTimeoutMs = ms ?? DEFAULT_SEND_TIMEOUT_MS;
 }
 
-function withDeadline(send: Promise<SendOutcome>, ms: number): Promise<SendOutcome> {
+/**
+ * Run a send with a deadline. When it passes, the request is aborted (not just abandoned), so a hung provider
+ * doesn't leave requests piling up, and the send counts as failed. Aborting can't recall an email the provider
+ * already accepted, hence the wording and the retries' stable idempotency key.
+ */
+async function withDeadline(start: (signal: AbortSignal) => Promise<SendOutcome>, ms: number): Promise<SendOutcome> {
+  const controller = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
   const late = new Promise<SendOutcome>((resolve) => {
-    timer = setTimeout(() => resolve({ ok: false, error: `timed out after ${ms} ms (the provider may still deliver it)` }), ms);
+    timer = setTimeout(() => {
+      controller.abort(new Error(`send deadline of ${ms} ms passed`));
+      resolve({ ok: false, error: `timed out after ${ms} ms and aborted (the provider may still deliver it)` });
+    }, ms);
   });
-  send.catch(() => {}); // a send that settles after the deadline mustn't surface as an unhandled rejection
-  return Promise.race([send, late]).finally(() => clearTimeout(timer));
+  try {
+    const send = start(controller.signal);
+    send.catch(() => {}); // the aborted request rejects after the deadline; that mustn't surface as an unhandled rejection
+    return await Promise.race([send, late]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /** Tests swap the transport to capture what would have been sent. */
@@ -89,7 +104,7 @@ export async function sendEmail(email: OutgoingEmail, opts: { conn?: LogConn } =
   let outcome: SendOutcome;
   try {
     const replyTo = email.replyTo ?? (email.type === "internal" ? undefined : await contactEmail().catch(() => undefined));
-    outcome = await withDeadline(transport({ ...email, ...(replyTo ? { replyTo } : {}) }, fromAddress()), sendTimeoutMs);
+    outcome = await withDeadline((signal) => transport({ ...email, ...(replyTo ? { replyTo } : {}) }, fromAddress(), signal), sendTimeoutMs);
   } catch (e) {
     outcome = { ok: false, error: e instanceof Error ? e.message : String(e) };
   }
