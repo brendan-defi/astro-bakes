@@ -5,6 +5,9 @@ import { normalisePhone } from "./phone";
  * shows them. One list drives the form, the server-side validation and the
  * defaults, so a key can't be editable but unvalidated. Client-safe.
  *
+ * A "readonly" field is shown but never validated or saved: the form can't
+ * change it, whatever it sends.
+ *
  * Values live in the `settings` table as jsonb under these keys. Payment
  * toggles arrive with Stripe, the LINE QR with photo uploads, the per-item
  * bake buffer with the item editor, and allowed wards when the shop needs
@@ -25,7 +28,8 @@ export type SettingField =
   | (Base & { kind: "email" | "url"; default: string; required?: boolean; placeholder?: string })
   | (Base & { kind: "phone" | "postal"; default: string })
   | (Base & { kind: "int"; default: number; min: number; max: number; unit?: string })
-  | (Base & { kind: "bool"; default: boolean });
+  | (Base & { kind: "bool"; default: boolean })
+  | (Base & { kind: "readonly"; default: number; display: (value: SettingValue) => string });
 
 export interface SettingsSection {
   id: string;
@@ -68,7 +72,14 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
     title: "Shipping and labels",
     intro: "The sender details are printed on Japan Post labels and never shown on the site.",
     fields: [
-      { key: "shipping_fee", kind: "int", label: "Shipping fee (税込)", default: 0, min: 0, max: 5000, unit: "¥", help: "0 means shipping is included in the box price and no fee line is shown (D19). Anything else is added to every order. Change it between drops: it's locked while a drop is open or anyone is checking out." },
+      {
+        key: "shipping_fee",
+        kind: "readonly",
+        label: "Shipping fee (税込)",
+        default: 0,
+        display: (v) => (v === 0 ? "¥0, included in the box price (D19)" : `¥${Number(v).toLocaleString("en-US")} per order`),
+        help: "Not editable yet. Placing an order reads the fee afresh, so a change while customers are checking out could charge them a total they never saw. It becomes editable once checkout quotes shipping and re-checks it before payment (with the Stripe work).",
+      },
       { key: "arrival_offset_days", kind: "int", label: "Expected arrival", default: 1, min: 1, max: 7, unit: "days after the ship date", help: "Japan Post delivers next day within Tokyo. Shown on the drop page, at checkout, in emails and on order pages." },
       { key: "jp_sender_name", kind: "text", label: "Sender name", default: "", max: 25, private: true },
       { key: "jp_sender_postal", kind: "postal", label: "Sender postal code", default: "", private: true },
@@ -115,7 +126,7 @@ export function httpsLink(text: string): string | null {
  */
 export function settingValue(field: SettingField, stored: unknown): SettingValue {
   if (field.kind === "bool") return typeof stored === "boolean" ? stored : field.default;
-  if (field.kind === "int") return typeof stored === "number" && Number.isInteger(stored) ? stored : field.default;
+  if (field.kind === "int" || field.kind === "readonly") return typeof stored === "number" && Number.isInteger(stored) ? stored : field.default;
   if (field.kind === "url") return (typeof stored === "string" && httpsLink(stored)) || field.default;
   return typeof stored === "string" ? stored : field.default;
 }
@@ -131,6 +142,7 @@ export function validateSettings(input: Record<string, unknown>): SettingsValida
   const values: Record<string, SettingValue> = {};
   const errors: Record<string, string> = {};
   for (const f of SETTING_FIELDS) {
+    if (f.kind === "readonly") continue;
     const raw = input[f.key];
     if (f.kind === "bool") {
       if (typeof raw !== "boolean") errors[f.key] = "Choose on or off.";

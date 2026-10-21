@@ -20,22 +20,25 @@ describe("SettingsForm", () => {
     expect((screen.getByLabelText("販売業者 (seller)") as HTMLInputElement).value).toBe("並川洋美");
     expect((screen.getByLabelText("Email me on each new order") as HTMLInputElement).checked).toBe(true);
     expect(save().disabled).toBe(true);
+    // The shipping fee is shown, not editable.
+    expect(screen.getByText("¥0, included in the box price (D19)")).toBeTruthy();
+    expect(screen.queryByLabelText("Shipping fee (税込)")).toBeNull();
     fireEvent.change(screen.getByLabelText("Owner email"), { target: { value: "owner@example.com" } });
     expect(save().disabled).toBe(false);
     expect(status()).toBe("Unsaved changes");
   });
 
   it("sends the whole form, then shows the saved (normalised) values", async () => {
-    actions.saveSettingsAction.mockImplementation(async () => ({ ok: true, values: { ...initial, owner_email: "owner@example.com", shipping_fee: 300 } }));
+    actions.saveSettingsAction.mockImplementation(async () => ({ ok: true, values: { ...initial, owner_email: "owner@example.com", arrival_offset_days: 3 } }));
     render(<SettingsForm initial={initial} />);
     fireEvent.change(screen.getByLabelText("Owner email"), { target: { value: " Owner@Example.com " } });
-    fireEvent.change(screen.getByLabelText("Shipping fee (税込)"), { target: { value: "300" } });
+    fireEvent.change(screen.getByLabelText("Expected arrival"), { target: { value: "3" } });
     fireEvent.click(screen.getByLabelText("Mark as fragile (こわれもの)"));
     fireEvent.click(save());
     await waitFor(() => expect(status()).toMatch(/^Saved/));
     const sent = actions.saveSettingsAction.mock.calls[0][0];
     // Browsers trim an email field's value themselves; the server lower-cases it.
-    expect(sent).toMatchObject({ owner_email: "Owner@Example.com", shipping_fee: "300", jp_fragile: false, legal_seller_name: "並川洋美" });
+    expect(sent).toMatchObject({ owner_email: "Owner@Example.com", arrival_offset_days: "3", jp_fragile: false, legal_seller_name: "並川洋美" });
     expect((screen.getByLabelText("Owner email") as HTMLInputElement).value).toBe("owner@example.com");
   });
 

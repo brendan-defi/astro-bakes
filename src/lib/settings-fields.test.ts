@@ -14,7 +14,19 @@ describe("settings fields", () => {
     expect(new Set(SETTING_FIELDS.map((f) => f.key)).size).toBe(SETTING_FIELDS.length);
     const r = validateSettings(form());
     expect(r.ok).toBe(true);
-    if (r.ok) expect(r.values).toEqual(SETTING_DEFAULTS);
+    const editable = Object.fromEntries(SETTING_FIELDS.filter((f) => f.kind !== "readonly").map((f) => [f.key, f.default]));
+    if (r.ok) expect(r.values).toEqual(editable);
+  });
+
+  it("shows the shipping fee but never takes a new one from the form", () => {
+    const fee = settingField("shipping_fee")!;
+    expect(fee.kind).toBe("readonly");
+    const r = validateSettings(form({ shipping_fee: 500 }));
+    expect(r.ok && "shipping_fee" in r.values).toBe(false);
+    if (fee.kind === "readonly") {
+      expect(fee.display(0)).toBe("¥0, included in the box price (D19)");
+      expect(fee.display(800)).toBe("¥800 per order");
+    }
   });
 
   it("keeps the owner's private details off the public side", () => {
@@ -25,10 +37,10 @@ describe("settings fields", () => {
   });
 
   it("trims and normalises: lower-case emails, half-width digits, the owner's phone hyphens, 123-4567 postal codes", () => {
-    const r = validateSettings(form({ contact_email: "  Hello@AstroBakes.xyz ", shipping_fee: "５００", legal_phone: "０３ー１２３４ー５６７８", jp_sender_postal: "１５３００６１", legal_seller_name: "  並川洋美  " }));
+    const r = validateSettings(form({ contact_email: "  Hello@AstroBakes.xyz ", arrival_offset_days: "２", legal_phone: "０３ー１２３４ー５６７８", jp_sender_postal: "１５３００６１", legal_seller_name: "  並川洋美  " }));
     expect(r.ok).toBe(true);
     if (!r.ok) return;
-    expect(r.values).toMatchObject({ contact_email: "hello@astrobakes.xyz", shipping_fee: 500, legal_phone: "03-1234-5678", jp_sender_postal: "153-0061", legal_seller_name: "並川洋美" });
+    expect(r.values).toMatchObject({ contact_email: "hello@astrobakes.xyz", arrival_offset_days: 2, legal_phone: "03-1234-5678", jp_sender_postal: "153-0061", legal_seller_name: "並川洋美" });
   });
 
   it("explains what's wrong with each bad field, and saves nothing", () => {
@@ -39,13 +51,12 @@ describe("settings fields", () => {
       line_url: "lin.ee/abc",
       legal_phone: "12345",
       jp_sender_postal: "15300",
-      shipping_fee: "-1",
       arrival_offset_days: "1.5",
       jp_sender_name: "x".repeat(26),
       jp_item_name: " ",
       notify_new_order: "yes",
     });
-    expect(Object.keys(errors).sort()).toEqual(["arrival_offset_days", "contact_email", "instagram_url", "jp_item_name", "jp_sender_name", "jp_sender_postal", "legal_phone", "line_url", "notify_new_order", "owner_email", "shipping_fee"].sort());
+    expect(Object.keys(errors).sort()).toEqual(["arrival_offset_days", "contact_email", "instagram_url", "jp_item_name", "jp_sender_name", "jp_sender_postal", "legal_phone", "line_url", "notify_new_order", "owner_email"].sort());
     expect(errors.contact_email).toBe("Required.");
     expect(errors.instagram_url).toMatch(/https/);
     expect(errors.jp_sender_name).toBe("At most 25 characters (this is 26).");

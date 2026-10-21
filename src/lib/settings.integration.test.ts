@@ -1,14 +1,19 @@
 // @vitest-environment node
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq, inArray } from "drizzle-orm";
 import * as schema from "@/db/schema";
 import { seed } from "@/db/seed";
 import { placeOrder, startCheckout } from "@/lib/checkout";
 import { ownerInbox } from "@/lib/custom-orders";
 import { loadDrops, loadSettings } from "@/lib/drops";
-import { lockedChanges, ownerNotifications, saveSettings, settingsForForm, SHIPPING_FEE_LOCKED } from "@/lib/settings";
+import { saveSettingsAction } from "@/app/admin/(app)/settings/actions";
+import { ownerNotifications, saveSettings, settingsForForm } from "@/lib/settings";
 import { validateSettings, type SettingValue } from "@/lib/settings-fields";
 import { captureEmail, clearTestData, closeTestDb, resetDatabase, testDb, TEST_DATABASE_URL } from "@/test/db";
+
+// The real save action, with only the admin check and Next's cache stubbed.
+vi.mock("@/lib/admin", () => ({ requireAdmin: async () => ({ id: "admin", email: "owner@test.invalid", name: null }) }));
+vi.mock("next/cache", () => ({ revalidatePath: () => {} }));
 
 /** The owner's settings (PRD 4.9) against a real Postgres: saving, what the site then reads, and the paid-order emails. */
 const { pool, db } = testDb();
@@ -54,11 +59,21 @@ describe.skipIf(!TEST_DATABASE_URL)("settings", () => {
   });
 
   it("saves what the form sends, and the site reads it back", async () => {
-    await save({ legal_seller_name: "並川洋美", shipping_fee: 300, line_url: "https://lin.ee/abc123", arrival_offset_days: 2 });
+    await save({ legal_seller_name: "並川洋美", line_url: "https://lin.ee/abc123", arrival_offset_days: 2 });
     const s = await loadSettings();
-    expect(s).toMatchObject({ legalSellerName: "並川洋美", shippingFee: 300, lineUrl: "https://lin.ee/abc123", arrivalOffsetDays: 2 });
-    const rows = await db.select().from(schema.settings).where(inArray(schema.settings.key, ["shipping_fee", "notify_new_order"]));
-    expect(Object.fromEntries(rows.map((r) => [r.key, r.value]))).toEqual({ shipping_fee: 300, notify_new_order: true });
+    expect(s).toMatchObject({ legalSellerName: "並川洋美", lineUrl: "https://lin.ee/abc123", arrivalOffsetDays: 2 });
+    const rows = await db.select().from(schema.settings).where(inArray(schema.settings.key, ["arrival_offset_days", "notify_new_order"]));
+    expect(Object.fromEntries(rows.map((r) => [r.key, r.value]))).toEqual({ arrival_offset_days: 2, notify_new_order: true });
+  });
+
+  it("never changes the shipping fee, even when the save action is sent one, and saves the rest", async () => {
+    const r = await saveSettingsAction({ ...(await settingsForForm()), shipping_fee: 500, legal_seller_name: "並川洋美" });
+    expect(r.ok).toBe(true);
+    const s = await loadSettings();
+    expect(s.shippingFee).toBe(0);
+    expect(s.legalSellerName).toBe("並川洋美");
+    const [fee] = await db.select().from(schema.settings).where(eq(schema.settings.key, "shipping_fee"));
+    expect(fee.value).toBe(0);
   });
 
   it("keeps a saved link through reopening the form and saving something else", async () => {
@@ -124,20 +139,6 @@ describe.skipIf(!TEST_DATABASE_URL)("settings", () => {
     expect(mail.sent.find((m) => m.type === "internal")!.replyTo).toBeUndefined();
   });
 
-  it("locks the shipping fee while a checkout holds stock or a drop is open, and only then", async () => {
-    expect(await lockedChanges({ shipping_fee: 500 })).toEqual({});
-    // A checkout in progress: the demo flag opens the (clock-closed) seeded drop for this reservation.
-    const r = await startCheckout({ dropId: DROP, items: { "cookie-box": 1 }, flags: { state: "open" } }, null);
-    expect(r.ok).toBe(true);
-    expect(await lockedChanges({ shipping_fee: 500 })).toEqual({ shipping_fee: SHIPPING_FEE_LOCKED });
-    // Saving the form with the fee unchanged is fine.
-    expect(await lockedChanges({ shipping_fee: 0, legal_seller_name: "並川洋美" })).toEqual({});
-    // An open drop locks it even before anyone checks out.
-    await db.delete(schema.inventoryHolds);
-    expect(await lockedChanges({ shipping_fee: 500 })).toEqual({});
-    await db.update(schema.drops).set({ state: "open", openAt: new Date(Date.now() - DAY), closeAt: new Date(Date.now() + DAY) }).where(eq(schema.drops.slug, "drop-04"));
-    expect(await lockedChanges({ shipping_fee: 500 })).toEqual({ shipping_fee: SHIPPING_FEE_LOCKED });
-  });
 
   it("sends party requests to the custom-order override, else the owner email, else the contact email", async () => {
     expect(await ownerInbox()).toBe("hello@astrobakes.xyz");

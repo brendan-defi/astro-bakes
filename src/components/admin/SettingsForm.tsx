@@ -97,6 +97,17 @@ function Field({ field: f, value, error, onChange }: { field: SettingField; valu
       {error && <p id={`${id}-err`} className={s.fieldError}>{error}</p>}
     </>
   );
+  if (f.kind === "readonly") {
+    return (
+      <div className={s.fieldRow}>
+        <span className="label">{f.label}</span>
+        <div>
+          <p id={id} className={s.fixedValue} aria-describedby={described}>{f.display(typeof value === "string" && /^\d+$/.test(value) ? Number(value) : (value ?? f.default))}</p>
+          {notes}
+        </div>
+      </div>
+    );
+  }
   if (f.kind === "bool") {
     return (
       <div className={s.fieldRow}>

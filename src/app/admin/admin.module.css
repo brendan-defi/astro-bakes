@@ -73,6 +73,8 @@
 .checkRow { display: inline-flex; align-items: center; gap: 10px; font-weight: 700; cursor: pointer; padding-top: 4px; }
 .checkRow input { width: 20px; height: 20px; accent-color: var(--ink); }
 .withUnit { display: flex; align-items: center; gap: 10px; font-weight: 700; }
+.fixedValue { padding-top: 10px; font-weight: 700; }
+.fieldRow > .label { padding-top: 12px; }
 .numInput { width: 120px; }
 .saveBar {
   position: sticky; bottom: 0; z-index: 1;
