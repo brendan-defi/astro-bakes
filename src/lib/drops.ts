@@ -3,6 +3,7 @@ import { getDb } from "@/db";
 import { boxes as boxesTable, dropBoxes as dropBoxesTable, drops as dropsTable, inventoryHolds, orderItems, orders, settings as settingsTable, type BoxRow, type DropBoxRow } from "@/db/schema";
 import { arrivalDate, settings as defaultSettings, type Box, type Drop, type Locale, type Settings } from "./data";
 import { arrivalOffsetDays } from "./settings";
+import { settingField, settingValue } from "./settings-fields";
 import { isUuid } from "./uuid";
 
 /**
@@ -94,25 +95,29 @@ export async function loadViewerOrder(customerId: string, dropSlug: string): Pro
   return row ? { number: row.number, dropId: dropSlug, boxCount: row.boxCount } : null;
 }
 
-/** Admin settings (PRD 4.9) over the code defaults, so a missing key never breaks a page. */
+/**
+ * The public subset of the admin settings (PRD 4.9), an explicit whitelist: private ones (owner email, label sender)
+ * never come through here. Owner-edited keys are read by their fields in settings-fields.ts, the same way the admin
+ * form reads them, so a missing or malformed value falls back to its default and never breaks a page.
+ */
 export async function loadSettings(): Promise<Settings> {
   const rows = await getDb().select().from(settingsTable);
   const kv = Object.fromEntries(rows.map((r) => [r.key, r.value])) as Record<string, unknown>;
-  const num = (k: string, d: number | null) => (typeof kv[k] === "number" ? (kv[k] as number) : d);
-  const str = (k: string, d: string) => (typeof kv[k] === "string" ? (kv[k] as string) : d);
-  // Links left empty in the admin fall back to the defaults (instagram.com, the notify-me form).
-  const link = (k: string, d: string) => (typeof kv[k] === "string" && kv[k] ? (kv[k] as string) : d);
+  const field = (k: string) => settingValue(settingField(k)!, kv[k]);
+  const text = (k: string) => field(k) as string;
+  const num = (k: string) => field(k) as number;
   return {
-    shippingFee: num("shipping_fee", defaultSettings.shippingFee),
-    shippingArea: str("shipping_area", defaultSettings.shippingArea),
-    instagramUrl: link("instagram_url", defaultSettings.instagramUrl),
-    lineUrl: link("line_url", defaultSettings.lineUrl),
-    contactEmail: str("contact_email", defaultSettings.contactEmail),
-    holdMinutes: num("hold_minutes", defaultSettings.holdMinutes) ?? defaultSettings.holdMinutes,
-    legalSellerName: str("legal_seller_name", defaultSettings.legalSellerName),
-    legalOperator: str("legal_operator", defaultSettings.legalOperator),
-    legalAddress: str("legal_address", defaultSettings.legalAddress),
-    legalPhone: str("legal_phone", defaultSettings.legalPhone),
-    arrivalOffsetDays: num("arrival_offset_days", defaultSettings.arrivalOffsetDays) ?? defaultSettings.arrivalOffsetDays,
+    shippingFee: num("shipping_fee"),
+    shippingArea: typeof kv.shipping_area === "string" ? kv.shipping_area : defaultSettings.shippingArea,
+    // A link left empty (or not a usable https address) falls back: instagram.com, the notify-me form.
+    instagramUrl: text("instagram_url") || defaultSettings.instagramUrl,
+    lineUrl: text("line_url") || defaultSettings.lineUrl,
+    contactEmail: text("contact_email"),
+    holdMinutes: typeof kv.hold_minutes === "number" ? kv.hold_minutes : defaultSettings.holdMinutes,
+    legalSellerName: text("legal_seller_name"),
+    legalOperator: text("legal_operator"),
+    legalAddress: text("legal_address"),
+    legalPhone: text("legal_phone"),
+    arrivalOffsetDays: num("arrival_offset_days"),
   };
 }

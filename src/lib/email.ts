@@ -3,6 +3,7 @@ import { Resend } from "resend";
 import { getDb } from "@/db";
 import { notificationLog } from "@/db/schema";
 import type { Email } from "./email-templates";
+import { contactEmail } from "./settings";
 
 /**
  * The one way email leaves the app (D23: Resend). Every send is recorded in
@@ -17,7 +18,11 @@ export interface OutgoingEmail extends Email {
   type: string;
   /** `<event>/<entity>`; Resend dedupes retries with it for 24 hours. */
   idempotencyKey: string;
-  /** Where a reply goes, when that isn't us (the customer, on a custom-order request to the owner). */
+  /**
+   * Where a reply goes. Defaults to the store's contact email (Settings → Store), so a customer answering a
+   * confirmation reaches the inbox the owner chose rather than the sending address; set it to override (the
+   * customer, on a custom-order request to the owner). Internal emails to the owner get none.
+   */
   replyTo?: string;
   customerId?: string | null;
   orderId?: string | null;
@@ -56,7 +61,8 @@ export function fromAddress(): string {
 export async function sendEmail(email: OutgoingEmail): Promise<SendOutcome> {
   let outcome: SendOutcome;
   try {
-    outcome = await transport(email, fromAddress());
+    const replyTo = email.replyTo ?? (email.type === "internal" ? undefined : await contactEmail().catch(() => undefined));
+    outcome = await transport({ ...email, ...(replyTo ? { replyTo } : {}) }, fromAddress());
   } catch (e) {
     outcome = { ok: false, error: e instanceof Error ? e.message : String(e) };
   }

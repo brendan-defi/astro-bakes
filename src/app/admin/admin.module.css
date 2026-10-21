@@ -59,6 +59,8 @@
 
 /* ---------- Settings form ---------- */
 .settingsForm { display: flex; flex-direction: column; gap: 20px; max-width: 880px; }
+.settingsFields { display: flex; flex-direction: column; gap: 20px; min-width: 0; margin: 0; padding: 0; border: 0; }
+.settingsFields:disabled { opacity: 0.7; }
 .settingsSection { padding: 22px 26px 24px; }
 .sectionTitle { font-size: 20px; font-weight: 900; }
 .sectionIntro { margin-top: 4px; font-size: 14px; color: var(--link-hover); }

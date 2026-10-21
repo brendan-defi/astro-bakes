@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { saveSettingsAction } from "@/app/admin/(app)/settings/actions";
 import { SETTING_FIELDS, SETTINGS_SECTIONS, type SettingField, type SettingValue } from "@/lib/settings-fields";
 import s from "@/app/admin/admin.module.css";
@@ -13,7 +13,10 @@ const toDraft = (values: Record<string, SettingValue>): Draft =>
 
 const sameDraft = (a: Draft, b: Draft) => SETTING_FIELDS.every((f) => a[f.key] === b[f.key]);
 
-/** The settings page's form (PRD 4.9): every section saves together; the server re-validates each field. */
+/**
+ * The settings page's form (PRD 4.9): every section saves together; the server re-validates each field. The fields
+ * are locked while a save is in flight, so nothing typed meanwhile is overwritten by that save's answer.
+ */
 export function SettingsForm({ initial }: { initial: Record<string, SettingValue> }) {
   const [saved, setSaved] = useState<Draft>(() => toDraft(initial));
   const [draft, setDraft] = useState<Draft>(saved);
@@ -21,6 +24,13 @@ export function SettingsForm({ initial }: { initial: Record<string, SettingValue
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<{ kind: "saved" | "error"; text: string } | null>(null);
   const dirty = !sameDraft(draft, saved);
+  // The first field a failed save turned down; focused once the fields are enabled again (a disabled one can't take focus).
+  const focusNext = useRef<string | null>(null);
+  useEffect(() => {
+    if (busy || !focusNext.current) return;
+    document.getElementById(`set-${focusNext.current}`)?.focus();
+    focusNext.current = null;
+  }, [busy, errors]);
 
   const set = (key: string, value: string | boolean) => {
     setDraft((d) => ({ ...d, [key]: value }));
@@ -38,8 +48,7 @@ export function SettingsForm({ initial }: { initial: Record<string, SettingValue
       if (!r.ok) {
         setErrors(r.errors);
         setStatus({ kind: "error", text: "Some fields need fixing; they're marked below." });
-        const first = SETTING_FIELDS.find((f) => r.errors[f.key]);
-        if (first) document.getElementById(`set-${first.key}`)?.focus();
+        focusNext.current = SETTING_FIELDS.find((f) => r.errors[f.key])?.key ?? null;
         return;
       }
       const next = toDraft(r.values);
@@ -55,18 +64,20 @@ export function SettingsForm({ initial }: { initial: Record<string, SettingValue
   }
 
   return (
-    <form onSubmit={submit} noValidate className={s.settingsForm}>
-      {SETTINGS_SECTIONS.map((section) => (
-        <section key={section.id} aria-labelledby={`sec-${section.id}`} className={`panel ${s.settingsSection}`}>
-          <h2 id={`sec-${section.id}`} className={s.sectionTitle}>{section.title}</h2>
-          {section.intro && <p className={s.sectionIntro}>{section.intro}</p>}
-          <div className={s.fields}>
-            {section.fields.map((f) => (
-              <Field key={f.key} field={f} value={draft[f.key]} error={errors[f.key]} onChange={(v) => set(f.key, v)} />
-            ))}
-          </div>
-        </section>
-      ))}
+    <form onSubmit={submit} noValidate className={s.settingsForm} aria-busy={busy}>
+      <fieldset disabled={busy} className={s.settingsFields}>
+        {SETTINGS_SECTIONS.map((section) => (
+          <section key={section.id} aria-labelledby={`sec-${section.id}`} className={`panel ${s.settingsSection}`}>
+            <h2 id={`sec-${section.id}`} className={s.sectionTitle}>{section.title}</h2>
+            {section.intro && <p className={s.sectionIntro}>{section.intro}</p>}
+            <div className={s.fields}>
+              {section.fields.map((f) => (
+                <Field key={f.key} field={f} value={draft[f.key]} error={errors[f.key]} onChange={(v) => set(f.key, v)} />
+              ))}
+            </div>
+          </section>
+        ))}
+      </fieldset>
       <div className={s.saveBar}>
         <button type="submit" className={`btn btn-primary ${s.btnSm}`} disabled={busy || !dirty}>{busy ? "Saving…" : "Save settings"}</button>
         <span role="status" aria-live="polite" className={!status ? s.muted : status.kind === "error" ? s.statusError : s.statusOk}>

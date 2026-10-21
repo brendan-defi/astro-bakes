@@ -39,7 +39,7 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
     id: "store",
     title: "Store",
     fields: [
-      { key: "contact_email", kind: "email", label: "Contact email", default: "hello@astrobakes.xyz", required: true, help: "Shown on the site, the FAQ and the 特商法 page; replies to customer emails go here." },
+      { key: "contact_email", kind: "email", label: "Contact email", default: "hello@astrobakes.xyz", required: true, help: "Shown on the site, the FAQ and the 特商法 page. When customers reply to our emails, the replies go here." },
       { key: "instagram_url", kind: "url", label: "Instagram", default: "", placeholder: "https://www.instagram.com/astrobakes", help: "Linked from the footer and the story section. Empty: the link goes to instagram.com." },
       { key: "line_url", kind: "url", label: "LINE Official Account", default: "", placeholder: "https://lin.ee/…", help: "The add-friend link. Empty: “Add us on LINE” points at the notify-me form instead." },
     ],
@@ -68,7 +68,7 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
     title: "Shipping and labels",
     intro: "The sender details are printed on Japan Post labels and never shown on the site.",
     fields: [
-      { key: "shipping_fee", kind: "int", label: "Shipping fee (税込)", default: 0, min: 0, max: 5000, unit: "¥", help: "0 means shipping is included in the box price and no fee line is shown (D19). Anything else is added to every order." },
+      { key: "shipping_fee", kind: "int", label: "Shipping fee (税込)", default: 0, min: 0, max: 5000, unit: "¥", help: "0 means shipping is included in the box price and no fee line is shown (D19). Anything else is added to every order. Change it between drops: it's locked while a drop is open or anyone is checking out." },
       { key: "arrival_offset_days", kind: "int", label: "Expected arrival", default: 1, min: 1, max: 7, unit: "days after the ship date", help: "Japan Post delivers next day within Tokyo. Shown on the drop page, at checkout, in emails and on order pages." },
       { key: "jp_sender_name", kind: "text", label: "Sender name", default: "", max: 25, private: true },
       { key: "jp_sender_postal", kind: "postal", label: "Sender postal code", default: "", private: true },
@@ -94,13 +94,29 @@ const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const POSTAL = /^\d{3}-?\d{4}$/;
 
 /**
- * A stored value of the right type for its field, or the field's default. A link that isn't https (the seed's "#notify"
- * placeholder) reads as unset, which the site already treats as "use the fallback".
+ * A link as it should be stored and used as an href: the URL parser's own canonical form of an https address with a
+ * real host and no credentials, or null. Saving and reading both go through this, so "HTTPS://…" or "https:lin.ee/…"
+ * is stored as "https://…" and reads back as it was saved, rather than one check accepting what the other drops.
+ */
+export function httpsLink(text: string): string | null {
+  try {
+    const u = new URL(text.trim());
+    if (u.protocol !== "https:" || !u.hostname.includes(".") || u.username || u.password) return null;
+    return u.href;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * A stored value of the right type for its field, or the field's default. A link reads through httpsLink, so anything
+ * that isn't a usable https address (the seed's "#notify" placeholder) reads as unset, which the site treats as "use
+ * the fallback".
  */
 export function settingValue(field: SettingField, stored: unknown): SettingValue {
   if (field.kind === "bool") return typeof stored === "boolean" ? stored : field.default;
   if (field.kind === "int") return typeof stored === "number" && Number.isInteger(stored) ? stored : field.default;
-  if (field.kind === "url") return typeof stored === "string" && stored.startsWith("https://") ? stored : field.default;
+  if (field.kind === "url") return (typeof stored === "string" && httpsLink(stored)) || field.default;
   return typeof stored === "string" ? stored : field.default;
 }
 
@@ -136,12 +152,9 @@ export function validateSettings(input: Record<string, unknown>): SettingsValida
       if (!EMAIL.test(text)) errors[f.key] = "That doesn't look like an email address.";
       else values[f.key] = text.toLowerCase();
     } else if (f.kind === "url") {
-      let ok = false;
-      try {
-        ok = new URL(text).protocol === "https:";
-      } catch {}
-      if (!ok) errors[f.key] = "A full https:// link.";
-      else values[f.key] = text;
+      const link = httpsLink(text);
+      if (!link) errors[f.key] = "A full https:// link, like https://lin.ee/abc123.";
+      else values[f.key] = link;
     } else if (f.kind === "phone") {
       const phone = normalisePhone(text);
       if (!phone) errors[f.key] = "A Japanese phone number, like 03-1234-5678.";

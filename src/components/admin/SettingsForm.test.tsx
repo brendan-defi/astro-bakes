@@ -54,6 +54,21 @@ describe("SettingsForm", () => {
     expect(screen.queryByText("Required.")).toBeNull();
   });
 
+  it("locks the fields while a save is in flight, so a later edit can't be lost to its answer", async () => {
+    let finish!: (v: unknown) => void;
+    actions.saveSettingsAction.mockReturnValue(new Promise((resolve) => { finish = resolve; }));
+    render(<SettingsForm initial={initial} />);
+    const owner = screen.getByLabelText("Owner email") as HTMLInputElement;
+    fireEvent.change(owner, { target: { value: "first@example.com" } });
+    fireEvent.click(save());
+    await waitFor(() => expect(owner.matches(":disabled")).toBe(true));
+    expect((screen.getByLabelText("販売業者 (seller)") as HTMLInputElement).matches(":disabled")).toBe(true);
+    finish({ ok: true, values: { ...initial, owner_email: "first@example.com" } });
+    await waitFor(() => expect(status()).toMatch(/^Saved/));
+    expect(owner.matches(":disabled")).toBe(false);
+    expect(owner.value).toBe("first@example.com");
+  });
+
   it("says so when saving fails outright, and keeps the edits", async () => {
     actions.saveSettingsAction.mockRejectedValue(new Error("Failed to fetch"));
     render(<SettingsForm initial={initial} />);

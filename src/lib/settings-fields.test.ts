@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { SETTING_DEFAULTS, SETTING_FIELDS, settingField, settingValue, validateSettings } from "./settings-fields";
+import { settings as publicDefaults } from "./data";
+import { httpsLink, SETTING_DEFAULTS, SETTING_FIELDS, settingField, settingValue, validateSettings } from "./settings-fields";
 
 /** The form as it arrives untouched: every default, numbers as text. */
 const form = (over: Record<string, unknown> = {}) => ({ ...Object.fromEntries(Object.entries(SETTING_DEFAULTS).map(([k, v]) => [k, typeof v === "number" ? String(v) : v])), ...over });
@@ -63,9 +64,40 @@ describe("settings fields", () => {
     expect(validateSettings(missing)).toMatchObject({ ok: false, errors: { contact_email: "Missing." } });
   });
 
+  it("stores links in the parser's canonical form, which resolves to the same place from a shop page", () => {
+    const r = validateSettings(form({ instagram_url: "HTTPS://www.instagram.com/astrobakes", line_url: "https:lin.ee/abc123" }));
+    expect(r.ok && r.values).toMatchObject({ instagram_url: "https://www.instagram.com/astrobakes", line_url: "https://lin.ee/abc123" });
+    if (!r.ok) return;
+    for (const k of ["instagram_url", "line_url"]) {
+      const stored = r.values[k] as string;
+      expect(new URL(stored, "https://astrobakes.xyz/en/").href).toBe(stored);
+      // And the form reads back exactly what was saved.
+      expect(settingValue(settingField(k)!, stored)).toBe(stored);
+    }
+  });
+
+  it("turns down links with credentials or no real host", () => {
+    for (const bad of ["https://user:pw@lin.ee/x", "https://localhost/x", "https://", "lin.ee/abc", "javascript:alert(1)"]) expect(httpsLink(bad)).toBeNull();
+    expect(errorsFor({ line_url: "https://user:pw@lin.ee/x" }).line_url).toMatch(/https/);
+  });
+
+  it("keeps the public defaults in step with the field list", () => {
+    expect(publicDefaults).toMatchObject({
+      contactEmail: SETTING_DEFAULTS.contact_email,
+      shippingFee: SETTING_DEFAULTS.shipping_fee,
+      arrivalOffsetDays: SETTING_DEFAULTS.arrival_offset_days,
+      legalSellerName: SETTING_DEFAULTS.legal_seller_name,
+      legalOperator: SETTING_DEFAULTS.legal_operator,
+      legalAddress: SETTING_DEFAULTS.legal_address,
+      legalPhone: SETTING_DEFAULTS.legal_phone,
+    });
+  });
+
   it("reads stored values by type, and the seed's '#notify' placeholder as an unset link", () => {
     expect(settingValue(settingField("line_url")!, "#notify")).toBe("");
     expect(settingValue(settingField("instagram_url")!, "https://instagram.com/astrobakes")).toBe("https://instagram.com/astrobakes");
+    // A link stored before canonicalisation still reads (canonically) rather than as empty.
+    expect(settingValue(settingField("instagram_url")!, "HTTPS://www.instagram.com/astrobakes")).toBe("https://www.instagram.com/astrobakes");
     expect(settingValue(settingField("shipping_fee")!, "800")).toBe(0);
     expect(settingValue(settingField("notify_new_order")!, undefined)).toBe(true);
     expect(settingValue(settingField("legal_seller_name")!, "並川洋美")).toBe("並川洋美");

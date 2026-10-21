@@ -1,12 +1,12 @@
 // @vitest-environment node
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { inArray } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import * as schema from "@/db/schema";
 import { seed } from "@/db/seed";
 import { placeOrder, startCheckout } from "@/lib/checkout";
 import { ownerInbox } from "@/lib/custom-orders";
 import { loadDrops, loadSettings } from "@/lib/drops";
-import { ownerNotifications, saveSettings, settingsForForm } from "@/lib/settings";
+import { lockedChanges, ownerNotifications, saveSettings, settingsForForm, SHIPPING_FEE_LOCKED } from "@/lib/settings";
 import { validateSettings, type SettingValue } from "@/lib/settings-fields";
 import { captureEmail, clearTestData, closeTestDb, resetDatabase, testDb, TEST_DATABASE_URL } from "@/test/db";
 
@@ -16,7 +16,7 @@ const mail = captureEmail();
 const DROP = "drop-03";
 const DAY = 86_400_000;
 /** Keys these tests write; cleared before each so every test starts from the seed's settings. */
-const WRITTEN = ["owner_email", "notify_new_order", "arrival_offset_days", "legal_seller_name", "line_url", "instagram_url", "shipping_fee", "custom_order_email", "contact_email"];
+const WRITTEN = ["owner_email", "notify_new_order", "arrival_offset_days", "legal_seller_name", "line_url", "instagram_url", "shipping_fee", "custom_order_email", "contact_email", "jp_sender_name"];
 
 /** Save through the same validation the form uses, starting from what's stored now. */
 async function save(over: Record<string, SettingValue>) {
@@ -61,6 +61,22 @@ describe.skipIf(!TEST_DATABASE_URL)("settings", () => {
     expect(Object.fromEntries(rows.map((r) => [r.key, r.value]))).toEqual({ shipping_fee: 300, notify_new_order: true });
   });
 
+  it("keeps a saved link through reopening the form and saving something else", async () => {
+    await save({ instagram_url: "HTTPS://www.instagram.com/astrobakes", line_url: "https:lin.ee/abc123" });
+    expect(await settingsForForm()).toMatchObject({ instagram_url: "https://www.instagram.com/astrobakes", line_url: "https://lin.ee/abc123" });
+    await save({ jp_sender_name: "Astro Bakes" });
+    const s = await loadSettings();
+    expect(s.instagramUrl).toBe("https://www.instagram.com/astrobakes");
+    expect(s.lineUrl).toBe("https://lin.ee/abc123");
+  });
+
+  it("reads a link stored in a looser form (before canonicalisation) and keeps it on an unrelated save", async () => {
+    await db.insert(schema.settings).values({ key: "instagram_url", value: "HTTPS://www.instagram.com/astrobakes" }).onConflictDoUpdate({ target: schema.settings.key, set: { value: "HTTPS://www.instagram.com/astrobakes" } });
+    expect((await settingsForForm()).instagram_url).toBe("https://www.instagram.com/astrobakes");
+    await save({ jp_sender_name: "Astro Bakes" });
+    expect((await loadSettings()).instagramUrl).toBe("https://www.instagram.com/astrobakes");
+  });
+
   it("falls back to the default links when the owner leaves them empty", async () => {
     await save({ line_url: "", instagram_url: "" });
     const s = await loadSettings();
@@ -99,6 +115,28 @@ describe.skipIf(!TEST_DATABASE_URL)("settings", () => {
     await placePaidOrder();
     expect(mail.sent.filter((m) => m.type === "internal")).toHaveLength(0);
     expect(mail.sent.filter((m) => m.type === "order_confirmation")).toHaveLength(1);
+  });
+
+  it("points customers' replies at the contact email, and gives the owner's own emails none", async () => {
+    await save({ contact_email: "support@test.invalid", owner_email: "owner@test.invalid" });
+    await placePaidOrder();
+    expect(mail.sent.find((m) => m.type === "order_confirmation")!.replyTo).toBe("support@test.invalid");
+    expect(mail.sent.find((m) => m.type === "internal")!.replyTo).toBeUndefined();
+  });
+
+  it("locks the shipping fee while a checkout holds stock or a drop is open, and only then", async () => {
+    expect(await lockedChanges({ shipping_fee: 500 })).toEqual({});
+    // A checkout in progress: the demo flag opens the (clock-closed) seeded drop for this reservation.
+    const r = await startCheckout({ dropId: DROP, items: { "cookie-box": 1 }, flags: { state: "open" } }, null);
+    expect(r.ok).toBe(true);
+    expect(await lockedChanges({ shipping_fee: 500 })).toEqual({ shipping_fee: SHIPPING_FEE_LOCKED });
+    // Saving the form with the fee unchanged is fine.
+    expect(await lockedChanges({ shipping_fee: 0, legal_seller_name: "並川洋美" })).toEqual({});
+    // An open drop locks it even before anyone checks out.
+    await db.delete(schema.inventoryHolds);
+    expect(await lockedChanges({ shipping_fee: 500 })).toEqual({});
+    await db.update(schema.drops).set({ state: "open", openAt: new Date(Date.now() - DAY), closeAt: new Date(Date.now() + DAY) }).where(eq(schema.drops.slug, "drop-04"));
+    expect(await lockedChanges({ shipping_fee: 500 })).toEqual({ shipping_fee: SHIPPING_FEE_LOCKED });
   });
 
   it("sends party requests to the custom-order override, else the owner email, else the contact email", async () => {
