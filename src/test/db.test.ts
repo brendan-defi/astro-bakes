@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { withVerifyFull } from "@/db/url";
 import { assertLocal } from "./db";
 
 describe("assertLocal", () => {
@@ -8,8 +9,12 @@ describe("assertLocal", () => {
     }
   });
 
-  it("accepts a Unix socket on this machine", () => {
-    expect(() => assertLocal("postgres://u:p@/x?host=/var/run/postgresql", false)).not.toThrow();
+  it("accepts a Unix socket on this machine, in the form the app's own client can read too", () => {
+    const socket = "postgres:///x?host=/var/run/postgresql";
+    expect(() => assertLocal(socket, false)).not.toThrow();
+    expect(() => withVerifyFull(socket)).not.toThrow();
+    // node-postgres reads this one, but the app's client (withVerifyFull → new URL) can't, so it's refused up front.
+    expect(() => assertLocal("postgres://u:p@/x?host=/var/run/postgresql", false)).toThrow(/isn't a URL the app's database client can read/);
   });
 
   it("checks the host the driver will use, not just the URL's hostname", () => {

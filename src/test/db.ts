@@ -6,6 +6,7 @@ import { sql } from "drizzle-orm";
 import * as schema from "@/db/schema";
 import { closeDb } from "@/db";
 import { seed } from "@/db/seed";
+import { withVerifyFull } from "@/db/url";
 import { setEmailTransport, type OutgoingEmail } from "@/lib/email";
 
 /**
@@ -32,8 +33,16 @@ if (TEST_DATABASE_URL) {
  * checked is the one node-postgres will actually use: it parses the string with pg-connection-string, where a
  * `?host=` parameter overrides the URL's hostname, and an empty host falls back to PGHOST, so that's refused too.
  * A local port can still be a tunnel to somewhere else; this catches the pasted-URL mistake, not that.
+ *
+ * The app's own client (getDb) gets the same string through withVerifyFull, which needs a WHATWG URL, so a form only
+ * node-postgres understands (a socket URI with credentials but no host) is refused up front rather than failing later.
  */
 export function assertLocal(url: string, allowRemote = process.env.TEST_DATABASE_ALLOW_REMOTE === "1") {
+  try {
+    withVerifyFull(url);
+  } catch {
+    throw new Error("TEST_DATABASE_URL isn't a URL the app's database client can read. For a Unix socket, write postgres:///<db>?host=/path/to/socket.");
+  }
   if (allowRemote) return;
   const host = parse(url).host ?? "";
   // A Unix socket path is on this machine by definition.
