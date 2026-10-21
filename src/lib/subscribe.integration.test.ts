@@ -8,8 +8,41 @@ import { subscribe } from "@/lib/subscribe";
 import { clearTestData, closeTestDb, resetDatabase, testDb, TEST_DATABASE_URL } from "@/test/db";
 
 /** Notify-me signups (PRD 1.5) against a real Postgres (TEST_DATABASE_URL). */
-const { pool, db } = testDb();
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+// Room for a held transaction, a second one, and the lock-queue polling below at the same time.
+const { pool, db } = testDb(4);
+
+/**
+ * The race tests arrange their ordering by what Postgres reports, not by timers: they wait until a backend is
+ * actually queued on a lock (pg_locks, not granted), or until a promise has settled, so the steps don't depend
+ * on how fast CI happens to be.
+ */
+async function until(ready: () => Promise<boolean> | boolean, what: string, ms = 5_000) {
+  const deadline = Date.now() + ms;
+  while (!(await ready())) {
+    if (Date.now() > deadline) throw new Error(`timed out waiting for ${what}`);
+    await new Promise((r) => setTimeout(r, 20));
+  }
+}
+/** How many backends are queued on an advisory lock, on the subscribers table, or on any lock (row and transaction waits have no database in pg_locks). */
+async function waiting(on: "advisory" | "subscribers" | "any"): Promise<number> {
+  const where = on === "advisory" ? sql`locktype = 'advisory'` : on === "subscribers" ? sql`locktype = 'relation' and relation = 'subscribers'::regclass` : sql`true`;
+  const r = await db.execute(sql`select count(*)::int as n from pg_locks where not granted and (database is null or database = (select oid from pg_database where datname = current_database())) and ${where}`);
+  return Number((r.rows[0] as { n: number }).n);
+}
+/** A promise plus whether it has settled yet. */
+function track<T>(p: Promise<T>) {
+  const s = { done: false, promise: p };
+  p.finally(() => { s.done = true; }).catch(() => {});
+  return s;
+}
+/** A transaction that runs `hold`, reports when it has, then stays open until released. */
+function holdOpen(hold: (tx: Parameters<Parameters<typeof db.transaction>[0]>[0]) => Promise<unknown>) {
+  let held!: () => void, release!: () => void;
+  const ready = new Promise<void>((r) => { held = r; });
+  const gate = new Promise<void>((r) => { release = r; });
+  const done = db.transaction(async (tx) => { await hold(tx); held(); await gate; });
+  return { ready, release, done };
+}
 /** Both records for an address, to check they agree about consent. */
 async function records(email: string) {
   const [customer] = await db.select().from(schema.customers).where(eq(schema.customers.email, email));
@@ -73,15 +106,15 @@ describe.skipIf(!TEST_DATABASE_URL)("subscribe", () => {
     const email = "race-a@test.invalid";
     await subscribe({ email, locale: "en" });
     await db.update(schema.subscribers).set({ unsubscribedAt: new Date() }).where(eq(schema.subscribers.email, email));
-    let signup!: Promise<unknown>;
-    let settled = false;
+    let signup!: ReturnType<typeof track<Awaited<ReturnType<typeof subscribe>>>>;
     await db.transaction(async (tx) => {
       await signIn(tx as never, email, "en"); // has read the unsubscribed row; the customer isn't committed yet
-      signup = subscribe({ email, locale: "en" }).finally(() => { settled = true; });
-      await sleep(300);
-      expect(settled).toBe(false); // held on the same lock until the sign-in commits
+      signup = track(subscribe({ email, locale: "en" }));
+      // With the email lock it queues there; any lock wait (or finishing) is enough to move on, and the final state decides.
+      await until(async () => signup.done || (await waiting("any")) > 0, "the signup to queue or finish");
+      expect(signup.done).toBe(false); // it can't finish until the sign-in commits
     });
-    expect(await signup).toEqual({ ok: true });
+    expect(await signup.promise).toEqual({ ok: true });
     const r = await records(email);
     expectConsistent(r);
     expect(r.customer.marketingOptIn).toBe(false); // the account's own preference governs from here
@@ -89,33 +122,40 @@ describe.skipIf(!TEST_DATABASE_URL)("subscribe", () => {
 
   it("doesn't let a signup that found no account land beside one created a moment later", async () => {
     const email = "race-b@test.invalid";
-    let release!: () => void;
-    const gate = new Promise<void>((r) => { release = r; });
     // A SHARE lock on subscribers lets reads through but holds the signup's INSERT, pausing it after its customer check.
-    const holder = db.transaction(async (tx) => { await tx.execute(sql`lock table subscribers in share mode`); await gate; });
-    await sleep(100);
-    const signup = subscribe({ email, locale: "ja" });
-    await sleep(150);
-    const signin = db.transaction((tx) => signIn(tx as never, email, "ja")); // without the shared lock this commits first
-    await sleep(300);
-    release();
-    await holder;
-    await Promise.all([signup, signin]);
+    const holder = holdOpen((tx) => tx.execute(sql`lock table subscribers in share mode`));
+    await holder.ready;
+    const signup = track(subscribe({ email, locale: "ja" }));
+    let signin!: ReturnType<typeof track<string>>;
+    try {
+      await until(async () => (await waiting("subscribers")) > 0, "the signup's insert to be held");
+      // Without the shared email lock this sign-in would commit now, before the signup's insert.
+      signin = track(db.transaction((tx) => signIn(tx as never, email, "ja")));
+      await until(async () => signin.done || (await waiting("advisory")) > 0, "the sign-in to queue on the lock or finish");
+    } finally {
+      holder.release(); // even when a step above fails, so the suite's cleanup isn't left waiting
+      await holder.done;
+    }
+    await Promise.all([signup.promise, signin.promise]);
     expectConsistent(await records(email));
   });
 
   it("serialises a signup and a first sign-in for a new address whichever reaches the lock first", async () => {
     const email = "race-c@test.invalid";
-    let release!: () => void;
-    const gate = new Promise<void>((r) => { release = r; });
-    const holder = db.transaction(async (tx) => { await lockEmail(tx as never, email); await gate; });
-    await sleep(100);
-    const signup = subscribe({ email, locale: "ja" });
-    const signin = db.transaction((tx) => signIn(tx as never, email, "ja"));
-    await sleep(200);
-    release();
-    await holder;
-    await Promise.all([signup, signin]);
+    const holder = holdOpen((tx) => lockEmail(tx as never, email));
+    await holder.ready;
+    const signup = track(subscribe({ email, locale: "ja" }));
+    const signin = track(db.transaction((tx) => signIn(tx as never, email, "ja")));
+    let bothQueued = false;
+    try {
+      await until(async () => (signup.done && signin.done) || (await waiting("advisory")) >= 2, "both to queue on the lock or finish");
+      bothQueued = !signup.done && !signin.done;
+    } finally {
+      holder.release();
+      await holder.done;
+    }
+    await Promise.all([signup.promise, signin.promise]);
+    expect(bothQueued).toBe(true); // both waited behind the holder
     expectConsistent(await records(email));
   });
 });
