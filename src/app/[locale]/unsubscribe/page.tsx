@@ -1,11 +1,13 @@
 import type { Metadata } from "next";
-import { notFound, redirect } from "next/navigation";
+import Link from "next/link";
+import { notFound } from "next/navigation";
 import { maskEmail } from "@/lib/auth-rules";
 import { settings as defaultSettings } from "@/lib/data";
 import { loadSettings } from "@/lib/drops";
 import { getStrings, isLocale } from "@/lib/i18n";
 import { privatePage, stringsFor } from "@/lib/metadata";
-import { unsubscribe, verifyUnsubscribe } from "@/lib/unsubscribe";
+import { verifyUnsubscribe } from "@/lib/unsubscribe";
+import { confirmUnsubscribeAction } from "./actions";
 import { DocShell } from "@/components/DocShell";
 import s from "@/components/checkout.module.css";
 import l from "@/components/legal.module.css";
@@ -33,14 +35,6 @@ export default async function UnsubscribePage({ params, searchParams }: Props) {
   const token = one("t");
   const email = done ? null : verifyUnsubscribe(e, token);
 
-  async function confirm(form: FormData) {
-    "use server";
-    const address = verifyUnsubscribe(form.get("e"), form.get("t"));
-    if (!address) redirect(`/${locale}/unsubscribe`);
-    await unsubscribe(address);
-    redirect(`/${locale}/unsubscribe?done=1`);
-  }
-
   const sameView = (to: string) =>
     done ? `/${to}/unsubscribe?done=1` : e && token ? `/${to}/unsubscribe?e=${encodeURIComponent(e)}&t=${encodeURIComponent(token)}` : `/${to}/unsubscribe`;
 
@@ -50,12 +44,17 @@ export default async function UnsubscribePage({ params, searchParams }: Props) {
         <>
           <h1 className={`display ${s.h1sm}`}>{t.unsubscribeDoneTitle}</h1>
           <p className={l.lead}>{t.unsubscribeDoneBody}</p>
+          {/* Both ways back, without saying which applies: the page mustn't reveal whether the address has an account,
+              and the anonymous form can't switch an account holder's own preference back on. */}
+          <p className={l.lead}>{t.rejoinAccountBefore}<Link href={`/${locale}/account#notify-h`} className="w9">{t.emailSettings}</Link>{t.rejoinAccountAfter}</p>
+          <p className={l.lead}>{t.rejoinNoAccountBefore}<Link href={`/${locale}#notify`} className="w9">{t.rejoinHomepage}</Link>{t.rejoinNoAccountAfter}</p>
         </>
       ) : email ? (
         <>
           <h1 className={`display ${s.h1sm}`}>{t.unsubscribeTitle}</h1>
           <p className={l.lead}>{t.unsubscribeConfirm(maskEmail(email))}</p>
-          <form action={confirm}>
+          <form action={confirmUnsubscribeAction}>
+            <input type="hidden" name="locale" value={locale} />
             <input type="hidden" name="e" value={e} />
             <input type="hidden" name="t" value={token} />
             <button type="submit" className="btn btn-primary">{t.unsubscribeButton}</button>

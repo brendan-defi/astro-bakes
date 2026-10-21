@@ -5,15 +5,17 @@ import * as schema from "@/db/schema";
 import { signIn } from "@/lib/auth";
 import { lockEmail } from "@/lib/email-lock";
 import { hashIp } from "@/lib/auth-rules";
-import { SIGNUPS_PER_IP_PER_HOUR, subscribe } from "@/lib/subscribe";
+import { deliverWelcome, retryPendingWelcomes, SIGNUPS_PER_IP_PER_HOUR, subscribe, WELCOME_MAX_ATTEMPTS } from "@/lib/subscribe";
 import { unsubscribe, verifyUnsubscribe } from "@/lib/unsubscribe";
 import { captureEmail, clearTestData, closeTestDb, resetDatabase, testDb, TEST_DATABASE_URL } from "@/test/db";
 
 /** Notify-me signups (PRD 1.5) against a real Postgres (TEST_DATABASE_URL). */
 // Room for a held transaction, a second one, and the lock-queue polling below at the same time.
 const { pool, db } = testDb(4);
-const mail = captureEmail();
+// Failed sends are captured too, so a test can see each attempt and its idempotency key.
+const mail = captureEmail({ recordFailures: true });
 const welcomes = () => mail.sent.filter((m) => m.type === "welcome");
+const MIN = 60_000;
 
 /**
  * The race tests arrange their ordering by what Postgres reports, not by timers: they wait until a backend is
@@ -68,7 +70,7 @@ describe.skipIf(!TEST_DATABASE_URL)("subscribe", () => {
   });
   beforeEach(async () => {
     mail.reset();
-    await clearTestData(db, ["subscribers", "notification_log"]);
+    await clearTestData(db, ["subscribers", "signup_attempts", "notification_log"]);
   });
   afterAll(async () => {
     await clearTestData(db, ["subscribers"]);
@@ -203,7 +205,9 @@ describe.skipIf(!TEST_DATABASE_URL)("subscribe", () => {
     try {
       expect(await subscribe({ email: "nosecret@test.invalid", locale: "en" })).toEqual({ ok: true });
       expect(mail.sent).toHaveLength(0);
-      expect(await row("nosecret@test.invalid")).toBeDefined();
+      // Still owed, and no attempt used up, so the retry can send it once the secret is set.
+      expect(await row("nosecret@test.invalid")).toMatchObject({ welcomeSentAt: null, welcomeAttempts: 0 });
+      expect((await row("nosecret@test.invalid")).welcomeRequestedAt).not.toBeNull();
     } finally {
       if (saved.secret === undefined) delete process.env.UNSUBSCRIBE_SECRET; else process.env.UNSUBSCRIBE_SECRET = saved.secret;
       if (saved.vercel === undefined) delete process.env.VERCEL_ENV; else process.env.VERCEL_ENV = saved.vercel;
@@ -239,5 +243,91 @@ describe.skipIf(!TEST_DATABASE_URL)("subscribe", () => {
     expect((await row("sub@test.invalid")).unsubscribedAt).not.toBeNull();
     const [c] = await db.select().from(schema.customers).where(eq(schema.customers.email, "cust@test.invalid"));
     expect(c.marketingOptIn).toBe(false);
+  });
+
+  it("costs the visitor's allowance the same whether the address belongs to a customer or not", async () => {
+    await db.insert(schema.customers).values({ email: "known@test.invalid", marketingOptIn: true });
+    const run = async (ip: string, target: string) => {
+      const t0 = new Date("2026-10-21T12:00:00Z");
+      for (let i = 0; i < SIGNUPS_PER_IP_PER_HOUR - 1; i++) await subscribe({ email: `${ip}-${i}@test.invalid`, locale: "en" }, { ip, now: t0 });
+      const forTarget = await subscribe({ email: target, locale: "en" }, { ip, now: t0 });
+      const next = await subscribe({ email: `${ip}-next@test.invalid`, locale: "en" }, { ip, now: t0 });
+      return [forTarget, next];
+    };
+    const customerCase = await run("192.0.2.1", "known@test.invalid");
+    const newCase = await run("192.0.2.2", "unknown@test.invalid");
+    expect(customerCase).toEqual(newCase);
+    expect(customerCase).toEqual([{ ok: true }, { ok: false, error: "rate_limited" }]);
+  });
+
+  it("lets exactly the allowance through when one visitor's sign-ups arrive all at once", async () => {
+    const results = await Promise.all(Array.from({ length: 20 }, (_, i) => subscribe({ email: `burst${i}@test.invalid`, locale: "en" }, { ip: "192.0.2.50" })));
+    expect(results.filter((r) => r.ok)).toHaveLength(SIGNUPS_PER_IP_PER_HOUR);
+    expect(results.filter((r) => !r.ok)).toHaveLength(20 - SIGNUPS_PER_IP_PER_HOUR);
+  });
+
+  it("sends a welcome that failed when the person signs up again, once, under the same key", async () => {
+    mail.failing = "provider down";
+    expect(await subscribe({ email: "flaky@test.invalid", locale: "en" })).toEqual({ ok: true });
+    expect(await row("flaky@test.invalid")).toMatchObject({ welcomeSentAt: null, welcomeAttempts: 1 });
+    mail.failing = null;
+    await subscribe({ email: "flaky@test.invalid", locale: "en" });
+    expect(welcomes()).toHaveLength(2); // the failed try and the delivered one
+    expect(welcomes()[0].idempotencyKey).toBe(welcomes()[1].idempotencyKey);
+    expect((await row("flaky@test.invalid")).welcomeSentAt).not.toBeNull();
+    await subscribe({ email: "flaky@test.invalid", locale: "en" });
+    expect(await retryPendingWelcomes({ now: new Date(Date.now() + 2 * MIN) })).toEqual([]);
+    expect(welcomes()).toHaveLength(2); // delivered once, never again
+  });
+
+  it("retries a failed welcome after a later sign-up, and sends a waiting one once the secret is set", async () => {
+    mail.failing = "provider down";
+    await subscribe({ email: "retry@test.invalid", locale: "en" });
+    mail.failing = null;
+    expect(await retryPendingWelcomes({ now: new Date(Date.now() + 2 * MIN) })).toEqual(["sent"]);
+
+    const saved = { secret: process.env.UNSUBSCRIBE_SECRET, vercel: process.env.VERCEL_ENV };
+    delete process.env.UNSUBSCRIBE_SECRET;
+    process.env.VERCEL_ENV = "preview";
+    try {
+      await subscribe({ email: "waiting@test.invalid", locale: "ja" });
+      expect(await retryPendingWelcomes({ now: new Date(Date.now() + 2 * MIN) })).toEqual(["no_secret"]);
+      process.env.UNSUBSCRIBE_SECRET = "z".repeat(40); // the configuration is fixed
+      expect(await retryPendingWelcomes({ now: new Date(Date.now() + 2 * MIN) })).toEqual(["sent"]);
+    } finally {
+      if (saved.secret === undefined) delete process.env.UNSUBSCRIBE_SECRET; else process.env.UNSUBSCRIBE_SECRET = saved.secret;
+      if (saved.vercel === undefined) delete process.env.VERCEL_ENV; else process.env.VERCEL_ENV = saved.vercel;
+    }
+    expect(welcomes().map((m) => m.to)).toEqual(["retry@test.invalid", "retry@test.invalid", "waiting@test.invalid"]);
+  });
+
+  it("doesn't send a pending welcome to someone who unsubscribed meanwhile, and gives up after the cap", async () => {
+    mail.failing = "provider down";
+    await subscribe({ email: "left@test.invalid", locale: "en" });
+    await unsubscribe("left@test.invalid");
+    mail.failing = null;
+    expect(await retryPendingWelcomes({ now: new Date(Date.now() + 2 * MIN) })).toEqual([]);
+    expect(await deliverWelcome((await row("left@test.invalid")).id)).toBe("not_owed");
+    expect(welcomes().filter((m) => m.to === "left@test.invalid")).toHaveLength(1); // only the original failed try
+
+    mail.failing = "still down";
+    await subscribe({ email: "never@test.invalid", locale: "en" });
+    for (let i = 1; i < WELCOME_MAX_ATTEMPTS; i++) await retryPendingWelcomes({ now: new Date(Date.now() + 2 * MIN) });
+    expect(await row("never@test.invalid")).toMatchObject({ welcomeAttempts: WELCOME_MAX_ATTEMPTS, welcomeSentAt: null });
+    mail.failing = null;
+    expect(await retryPendingWelcomes({ now: new Date(Date.now() + 2 * MIN) })).toEqual([]);
+    expect(await deliverWelcome((await row("never@test.invalid")).id)).toBe("gave_up");
+  });
+
+  it("keeps both records opted out and linked when unsubscribing races a first sign-in", async () => {
+    const emails = Array.from({ length: 10 }, (_, i) => `racer${i}@test.invalid`);
+    for (const email of emails) await subscribe({ email, locale: "en" });
+    await Promise.all(emails.flatMap((email) => [unsubscribe(email), db.transaction((tx) => signIn(tx as never, email, "en"))]));
+    for (const email of emails) {
+      const r = await records(email);
+      expectConsistent(r);
+      expect(r.customer.marketingOptIn).toBe(false);
+      expect(r.subscriber.unsubscribedAt).not.toBeNull();
+    }
   });
 });

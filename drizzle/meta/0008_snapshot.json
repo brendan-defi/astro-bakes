@@ -1,5 +1,5 @@
 {
-  "id": "014a04ee-8024-4bcc-a342-5b4f21368e06",
+  "id": "3442a5a9-a945-4956-86fc-5466f1970fd5",
   "prevId": "09f3c09f-3e57-4a0c-b87a-5032c9c2af44",
   "version": "7",
   "dialect": "postgresql",
@@ -2043,6 +2043,76 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.signup_attempts": {
+      "name": "signup_attempts",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "ip_hash": {
+          "name": "ip_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "signup_attempts_ip_idx": {
+          "name": "signup_attempts_ip_idx",
+          "columns": [
+            {
+              "expression": "ip_hash",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "signup_attempts_created_idx": {
+          "name": "signup_attempts_created_idx",
+          "columns": [
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.subscribers": {
       "name": "subscribers",
       "schema": "",
@@ -2100,6 +2170,25 @@
           "primaryKey": false,
           "notNull": false
         },
+        "welcome_requested_at": {
+          "name": "welcome_requested_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "welcome_sent_at": {
+          "name": "welcome_sent_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "welcome_attempts": {
+          "name": "welcome_attempts",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -2115,29 +2204,7 @@
           "default": "now()"
         }
       },
-      "indexes": {
-        "subscribers_consent_ip_idx": {
-          "name": "subscribers_consent_ip_idx",
-          "columns": [
-            {
-              "expression": "consent_ip_hash",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "consented_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
+      "indexes": {},
       "foreignKeys": {
         "subscribers_converted_customer_id_customers_id_fk": {
           "name": "subscribers_converted_customer_id_customers_id_fk",

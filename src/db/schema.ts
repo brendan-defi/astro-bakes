@@ -106,13 +106,36 @@ export const subscribers = pgTable("subscribers", {
   /** Where the signup came from: homepage, checkout, account, admin. */
   source: text().notNull().default("homepage"),
   consentedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
-  /** Hash of the IP the latest consent came from (hashIp), never the address itself: the per-visitor sign-up limit counts these, and it's part of the consent record. */
+  /** Hash of the IP the latest consent came from (hashIp), never the address itself: part of the consent record. */
   consentIpHash: text(),
   unsubscribedAt: timestamp({ withTimezone: true }),
   /** Set when the subscriber later creates an account (PRD 2.7). */
   convertedCustomerId: uuid().references(() => customers.id, { onDelete: "set null" }),
+  /**
+   * The welcome email owed for the current activation (PRD 1.5): set when the address becomes active, cleared
+   * into welcomeSentAt once delivered. Failed sends count up to a cap and are retried; the activation time is
+   * part of the idempotency key, so retries of one activation can't send twice.
+   */
+  welcomeRequestedAt: timestamp({ withTimezone: true }),
+  welcomeSentAt: timestamp({ withTimezone: true }),
+  welcomeAttempts: integer().notNull().default(0),
   ...timestamps,
-}, (t) => [index("subscribers_consent_ip_idx").on(t.consentIpHash, t.consentedAt)]);
+});
+
+/**
+ * Every valid notify-me sign-up attempt, by hashed IP (PRD 1.5). The per-visitor limit counts these rather than
+ * subscriber rows, so an address that belongs to a customer (which writes no row) uses the allowance exactly
+ * like a new one and the limit can't be used to tell them apart. Pruned as it goes.
+ */
+export const signupAttempts = pgTable(
+  "signup_attempts",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    ipHash: text().notNull(),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("signup_attempts_ip_idx").on(t.ipHash, t.createdAt), index("signup_attempts_created_idx").on(t.createdAt)],
+);
 
 /** Magic link + 6-digit code with a 15-minute expiry (D13, PRD 2.1). Only hashes are stored. */
 export const authTokens = pgTable(
