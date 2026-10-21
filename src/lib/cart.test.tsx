@@ -49,7 +49,15 @@ describe("mergeQuantities", () => {
     expect(mergeQuantities({ "banana-bread": 1 }, { "cookie-box": 2 }, boxes)).toEqual({ "banana-bread": 1, "cookie-box": 2 });
     expect(mergeQuantities({ "cookie-box": 4 }, { "cookie-box": 4 }, boxes)).toEqual({ "cookie-box": 5 }); // per-customer limit
     expect(mergeQuantities({ "banana-bread": 2 }, { "banana-bread": 2 }, boxes)).toEqual({ "banana-bread": 3 }); // stock
-    expect(mergeQuantities({ ghost: 3 }, { "sampler-box": 1 }, boxes)).toEqual({}); // unknown and sold out drop out
+    expect(mergeQuantities({ ghost: 3 }, { "sampler-box": 1 }, boxes)).toEqual({ ghost: 3 }); // sold out isn't added; a box these boxes don't know stays
+  });
+
+  it("only changes the boxes being added, and never lowers what's there (review of #24)", () => {
+    const olderView = [box({ id: "cookie-box", left: 1 }), loaf];
+    expect(mergeQuantities({ "cookie-box": 3 }, { "banana-bread": 1 }, olderView)).toEqual({ "cookie-box": 3, "banana-bread": 1 });
+    expect(mergeQuantities({ "cookie-box": 3 }, { "cookie-box": 1 }, olderView)).toEqual({ "cookie-box": 3 });
+    expect(mergeQuantities({ "new-box": 2 }, { "banana-bread": 1 }, olderView)).toEqual({ "new-box": 2, "banana-bread": 1 });
+    expect(mergeQuantities({ "banana-bread": "junk" as unknown as number }, { "banana-bread": 1 }, olderView)).toEqual({ "banana-bread": 1 });
   });
 });
 

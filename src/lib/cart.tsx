@@ -58,11 +58,21 @@ export function sanitize(qty: Quantities, boxes: Box[]): Quantities {
   return out;
 }
 
-/** Add quantities to a saved cart ("Order again", PRD 2.5), clamped to what can still be bought; nothing already there is lost. */
+/**
+ * Add quantities to a saved cart ("Order again", PRD 2.5). Only the boxes being added change, each clamped to what
+ * these boxes say can be bought, and adding never lowers what's there. Everything else saved stays as it is: the
+ * page doing the adding may know about less stock, or fewer boxes, than the one that saved it.
+ */
 export function mergeQuantities(existing: Quantities, add: Quantities, boxes: Box[]): Quantities {
-  const merged: Quantities = { ...sanitize(existing, boxes) };
-  for (const [id, n] of Object.entries(add)) merged[id] = (merged[id] ?? 0) + n;
-  return sanitize(merged, boxes);
+  const merged = wholeQuantities(existing);
+  for (const [id, n] of Object.entries(add)) {
+    const box = boxes.find((b) => b.id === id);
+    if (!box) continue;
+    const current = merged[id] ?? 0;
+    const next = Math.max(current, Math.min(maxFor(box), current + Math.floor(Number(n))));
+    if (next > 0) merged[id] = next;
+  }
+  return merged;
 }
 
 /** A saved cart as stored; anything unreadable counts as empty. */

@@ -53,4 +53,23 @@ describe("ReorderButton", () => {
     expect(JSON.parse(window.localStorage.getItem("ab-cart:drop-03")!)).toEqual({ "cookie-box": 2, "banana-bread": 3 }); // 1 + 9, clamped to the 3 left
     expect(router.push).toHaveBeenCalledWith("/en/checkout");
   });
+
+  describe("from an account page loaded before stock or boxes changed (review of #24)", () => {
+    const olderBoxes = boxes.map((b) => (b.id === "cookie-box" ? { ...b, left: 1 } : b));
+    const reorderLoaf = () => {
+      render(<ReorderButton locale="en" dropId="drop-03" items={{ "banana-bread": 1 }} boxes={olderBoxes} />);
+      fireEvent.click(screen.getByText("Order again"));
+      return JSON.parse(window.localStorage.getItem("ab-cart:drop-03")!);
+    };
+
+    it("keeps a bigger quantity a newer page saved for a box it isn't adding", () => {
+      window.localStorage.setItem("ab-cart:drop-03", JSON.stringify({ "cookie-box": 3 }));
+      expect(reorderLoaf()).toEqual({ "cookie-box": 3, "banana-bread": 1 });
+    });
+
+    it("keeps a box this page doesn't know about", () => {
+      window.localStorage.setItem("ab-cart:drop-03", JSON.stringify({ "new-box": 2 }));
+      expect(reorderLoaf()).toEqual({ "new-box": 2, "banana-bread": 1 });
+    });
+  });
 });
