@@ -79,7 +79,6 @@ function isRealDay(s: string): boolean {
   const d = new Date(`${s}T00:00:00Z`);
   return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s;
 }
-// eslint-disable-next-line no-control-regex
 const CONTROL = /[\u0000-\u0008\u000b-\u001f\u007f]/g;
 
 export function validateCustomOrder(input: CustomOrderInput, now = new Date()): { ok: true; request: CustomOrderRequest } | { ok: false; fields: CustomOrderField[] } {

@@ -138,6 +138,7 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
     } else if (status === "stale") {
       // Another tab took or replaced the browser's reservation: this tab must review the cart (PRD 3.3).
       clearHold();
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- the hold is in localStorage, which only exists after mount
       setHold(null);
       setNotice(t.cartChanged);
       go("cart");
@@ -215,15 +216,14 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
   const [hit, setHit] = useState<PostalHit | null>(() => (customer?.postal ? lookupPostal(customer.postal) : null));
   const [postalTried, setPostalTried] = useState(!!customer?.postal);
   const [prefilledFor, setPrefilledFor] = useState<string | null>(customer?.email ?? null);
-  useEffect(() => {
-    // The session arrives after the code step: prefill once from the saved details, without clobbering edits.
-    if (customer && customer.email !== prefilledFor) {
-      setAddr(prefill(customer));
-      setHit(customer.postal ? lookupPostal(customer.postal) : null);
-      setPostalTried(!!customer.postal);
-      setPrefilledFor(customer.email);
-    }
-  }, [customer, prefilledFor]);
+  // The session arrives after the code step: prefill once from the saved details, without clobbering edits.
+  // Adjusted while rendering rather than in an effect, so the empty form never paints in between.
+  if (customer && customer.email !== prefilledFor) {
+    setAddr(prefill(customer));
+    setHit(customer.postal ? lookupPostal(customer.postal) : null);
+    setPostalTried(!!customer.postal);
+    setPrefilledFor(customer.email);
+  }
   const [gift, setGift] = useState(false);
   const [giftMsg, setGiftMsg] = useState("");
   // A blank message means no card; the example text is only a placeholder.
@@ -253,6 +253,7 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
   const [placed, setPlaced] = useState<PlacedOrder | null>(null);
   useEffect(() => {
     if (step !== "done" || placed) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- restored from sessionStorage, which only exists after mount
     try { const raw = window.sessionStorage.getItem(ORDER_KEY); if (raw) setPlaced(JSON.parse(raw)); } catch {}
   }, [step, placed]);
   // Celebrate once, when this tab places the order: not when a reload restores it from sessionStorage.
@@ -329,7 +330,7 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
   const doneAddr = placed ? `${placed.hit.prefecture}${placed.hit.city}${placed.hit.town}${placed.address.line1}` : shortAddress;
 
   const dotClass = (n: number) => `${s.dot} ${n < idx ? s.dotDone : n === idx ? s.dotCurrent : ""}`;
-  const StepList = ({ cls }: { cls: string }) => (
+  const stepList = (cls: string) => (
     <ol aria-label={t.checkoutSteps} className={cls}>
       <li className={s.stepItem}><span className={dotClass(1)}>1</span>{t.stepSignIn}</li>
       <li aria-hidden className={s.dash} />
@@ -372,7 +373,7 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
           {inCheckout && <button type="button" aria-label={t.back} onClick={back} className={s.iconBtn}><ArrowLeftIcon /></button>}
           {step === "done" && <span className={s.spacer} />}
           <Logo href={home} label={t.home} size="sm" />
-          {inCheckout && <StepList cls={s.stepsTop} />}
+          {inCheckout && stepList(s.stepsTop)}
           {holdChip}
           {!inCheckout && <span className={s.spacer} />}
           {isCart && <Link href={home} className={s.headerLink}><ArrowLeftIcon size={18} />{t.keepShopping}</Link>}
@@ -380,7 +381,7 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
         </div>
       </header>
 
-      {inCheckout && <StepList cls={s.steps} />}
+      {inCheckout && stepList(s.steps)}
 
       {(step === "signin" || step === "code" || step === "delivery") && (
         <div className={s.pinned}>

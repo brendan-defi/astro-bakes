@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useEffectEvent, useMemo, useState, type ReactNode } from "react";
 import type { Box } from "./data";
 import { demoEnabled } from "./demo";
 
@@ -83,8 +83,8 @@ interface CartState {
 
 export function CartProvider({ children, dropId, boxes, shippingFee, initial }: ProviderProps) {
   const [state, setState] = useState<CartState>({ dropId, qty: initial ?? {}, hydrated: false });
-  const boxesRef = useRef(boxes);
-  boxesRef.current = boxes;
+  // The current boxes, without making a change to them a reason to reload the cart.
+  const sanitizeForBoxes = useEffectEvent((qty: Quantities) => sanitize(qty, boxes));
 
   // Load this drop's cart on mount and again whenever the drop changes (client-side until sign-in, PRD 3.3).
   useEffect(() => {
@@ -97,7 +97,8 @@ export function CartProvider({ children, dropId, boxes, shippingFee, initial }: 
         if (raw) qty = JSON.parse(raw) as Quantities;
       }
     } catch {}
-    setState({ dropId, qty: sanitize(qty, boxesRef.current), hydrated: true });
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- the cart is in localStorage, which only exists after mount
+    setState({ dropId, qty: sanitizeForBoxes(qty), hydrated: true });
     // `initial` only seeds the first load.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dropId]);

@@ -1,6 +1,6 @@
 import "server-only";
 import { and, desc, eq, sql } from "drizzle-orm";
-import { getDb, type Db } from "@/db";
+import { getDb } from "@/db";
 import { addresses, customers, dropBoxes, drops, inventoryHolds, orders, refunds } from "@/db/schema";
 import { effectiveState, type Box, type Locale } from "./data";
 import { validateDelivery, type DeliveryInput } from "./checkout-rules";
@@ -18,7 +18,6 @@ import { loadDrops } from "./drops";
  * signed-in customer's id.
  */
 
-type Conn = Db | Parameters<Parameters<Db["transaction"]>[0]>[0];
 const DAY = 86_400_000;
 const liveState = (d: { state: Drops["state"]; openAt: Date; closeAt: Date; shipAt: Date }, now = new Date()) =>
   effectiveState({ ...d, arriveAt: new Date(d.shipAt.getTime() + DAY) }, now);

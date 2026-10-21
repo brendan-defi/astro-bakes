@@ -26,23 +26,19 @@ export function Ticker({ locale, home }: { locale: Locale; home: HomeData }) {
     }
     status = t.tickerSentence(items);
   }
-  const Group = () => (
-    <>
-      {[0, 1].map((rep) =>
-        items.map((it, i) => (
-          <span key={`${rep}-${i}`} className={styles.item}>
-            <span>{it}</span>
-            <span className={i % 2 === 0 ? styles.pink : styles.aqua} aria-hidden>★</span>
-          </span>
-        )),
-      )}
-    </>
+  const group = [0, 1].map((rep) =>
+    items.map((it, i) => (
+      <span key={`${rep}-${i}`} className={styles.item}>
+        <span>{it}</span>
+        <span className={i % 2 === 0 ? styles.pink : styles.aqua} aria-hidden>★</span>
+      </span>
+    )),
   );
   return (
     <div role="status" aria-label={status} className={styles.ticker}>
       <div aria-hidden className={styles.track}>
-        <div className={styles.group}><Group /></div>
-        <div className={styles.group}><Group /></div>
+        <div className={styles.group}>{group}</div>
+        <div className={styles.group}>{group}</div>
       </div>
     </div>
   );

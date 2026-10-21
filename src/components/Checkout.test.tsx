@@ -177,6 +177,16 @@ describe("Checkout sign-in", () => {
       replace.mockRestore();
     }
   });
+
+  it("fills the delivery form from the saved details when the session arrives, then keeps the customer's edits", () => {
+    const { goTo } = mountOnCodeStep();
+    goTo("delivery", customer); // the code check's re-render brings the session
+    const field = (id: string) => document.getElementById(id) as HTMLInputElement;
+    expect([field("co-name").value, field("co-phone").value, field("co-postal").value, field("co-line1").value]).toEqual([customer.name, customer.phone, customer.postal, customer.line1]);
+    fireEvent.change(field("co-phone"), { target: { value: "03-1234-5678" } });
+    goTo("delivery", { ...customer }); // a later render, same session
+    expect(field("co-phone").value).toBe("03-1234-5678");
+  });
 });
 
 describe("Checkout sign-in: leaving during the \"you're in\" moment", () => {

@@ -62,6 +62,7 @@ export function AdminSignIn({ next, error }: { next: string; error: string | nul
   useEffect(() => {
     const pending = readPending();
     if (pending) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- restored from sessionStorage, which only exists after mount
       setEmail(pending.email);
       setResendAt(pending.resendAt);
       setSent(true);
@@ -116,7 +117,8 @@ export function AdminSignIn({ next, error }: { next: string; error: string | nul
     }
   }
 
-  const submit = (fn: () => Promise<void>) => (e: FormEvent) => {
+  // Called from the handler, not while rendering, so the compiler can see request/verify only run on submit.
+  const submit = (e: FormEvent, fn: () => Promise<void>) => {
     e.preventDefault();
     void fn();
   };
@@ -132,9 +134,9 @@ export function AdminSignIn({ next, error }: { next: string; error: string | nul
         {!sent ? (
           <>
             <h1 className={`display ${s.signInTitle}`}>Sign in</h1>
-            <p>We'll email you a code. Only the shop's admin account gets one.</p>
+            <p>{"We'll email you a code. Only the shop's admin account gets one."}</p>
             {notice && <div role="alert" className="note">{notice}</div>}
-            <form className={s.form} onSubmit={submit(request)}>
+            <form className={s.form} onSubmit={(e) => submit(e, request)}>
               <label htmlFor="admin-email" className="label">Email address</label>
               <input id="admin-email" type="email" required autoComplete="email" className="input" value={email} onChange={(e) => setEmail(e.target.value)} />
               <button type="submit" className={`btn btn-primary ${s.btnSm}`} style={{ marginTop: 6, alignSelf: "flex-start" }} disabled={busy}>Email me a code</button>
@@ -145,7 +147,7 @@ export function AdminSignIn({ next, error }: { next: string; error: string | nul
             <h1 className={`display ${s.signInTitle}`}>Check your email</h1>
             <p>If {email.trim()} is the admin account, a code is on its way. It works for 15 minutes.</p>
             {notice && <div role="alert" className="note">{notice}</div>}
-            <form className={s.form} onSubmit={submit(verify)}>
+            <form className={s.form} onSubmit={(e) => submit(e, verify)}>
               <label htmlFor="admin-code" className="label">6-digit code</label>
               <div className={s.codeRow}>
                 <CodeInput id="admin-code" value={code} onChange={setCode} doneLabel="Signed in" checking={busy} done={done} misses={misses} />
