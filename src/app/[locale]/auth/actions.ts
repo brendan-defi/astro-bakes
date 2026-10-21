@@ -1,33 +1,19 @@
 "use server";
 
-import { cookies, headers } from "next/headers";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { endSession, redeemLink, requestSignIn, verifyCode, type RequestResult } from "@/lib/auth";
-import { generateToken, isSameOriginRequest } from "@/lib/auth-rules";
+import { generateToken } from "@/lib/auth-rules";
 import type { Locale } from "@/lib/data";
+import { requestIp, requestOrigin, sameOrigin } from "@/lib/request";
 import { AUTH_FLOW_COOKIE, flowCookieOptions, readFlowSecret, readSessionToken, SESSION_COOKIE, sessionCookieOptions } from "@/lib/session-cookie";
 
-/** Where the magic link should point: this request's own host, so previews link to themselves. */
-async function requestOrigin(): Promise<string> {
-  const h = await headers();
-  const proto = h.get("x-forwarded-proto") ?? "https";
-  const host = h.get("x-forwarded-host") ?? h.get("host") ?? "astrobakes.xyz";
-  return `${proto}://${host}`;
-}
-
-async function sameOrigin(): Promise<boolean> {
-  const h = await headers();
-  return isSameOriginRequest({ secFetchSite: h.get("sec-fetch-site"), origin: h.get("origin"), host: h.get("host"), forwardedHost: h.get("x-forwarded-host") });
-}
-
 export async function requestSignInAction(input: { email: string; locale: Locale; next?: string | null }): Promise<RequestResult> {
-  const h = await headers();
   const jar = await cookies();
   // The browser's flow secret: reused across resends in this browser, refreshed to the token lifetime.
   const flowSecret = (await readFlowSecret()) ?? generateToken();
   jar.set(AUTH_FLOW_COOKIE, flowSecret, flowCookieOptions());
-  const ip = h.get("x-forwarded-for")?.split(",")[0]?.trim() || h.get("x-real-ip") || null;
-  return requestSignIn({ ...input, ip, origin: await requestOrigin(), flowSecret });
+  return requestSignIn({ ...input, ip: await requestIp(), origin: await requestOrigin(), flowSecret });
 }
 
 export async function verifyCodeAction(input: { email: string; code: string }): Promise<{ ok: true; next: string } | { ok: false; error: "invalid" | "expired" | "locked" }> {

@@ -26,6 +26,8 @@ import {
 
 export const localeEnum = pgEnum("locale", ["en", "ja"]);
 export const customerRoleEnum = pgEnum("customer_role", ["customer", "admin"]);
+/** Which side a sign-in token or session belongs to: the shop, or the admin portal (PRD 5.4). Neither is accepted by the other. */
+export const authAudienceEnum = pgEnum("auth_audience", ["customer", "admin"]);
 /** Drop lifecycle (PRD 5.2a). */
 export const dropStateEnum = pgEnum("drop_state", [
   "draft",
@@ -127,6 +129,8 @@ export const authTokens = pgTable(
     ipHash: text(),
     /** Hash of the browser's flow cookie: only that browser may redeem silently; others must confirm. */
     flowHash: text().notNull(),
+    /** Admin tokens are only issued to role=admin customers and only open admin sessions. */
+    audience: authAudienceEnum().notNull().default("customer"),
     expiresAt: timestamp({ withTimezone: true }).notNull(),
     usedAt: timestamp({ withTimezone: true }),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
@@ -143,6 +147,8 @@ export const sessions = pgTable(
       .notNull()
       .references(() => customers.id, { onDelete: "cascade" }),
     tokenHash: text().notNull().unique(),
+    /** An admin session lives in its own cookie on the admin host and is never accepted by the shop, nor the reverse. */
+    audience: authAudienceEnum().notNull().default("customer"),
     expiresAt: timestamp({ withTimezone: true }).notNull(),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
     lastSeenAt: timestamp({ withTimezone: true }).notNull().defaultNow(),

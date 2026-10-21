@@ -1,0 +1,58 @@
+/* Admin portal (PRD 4): desktop-only, plain forms and tables in the shop's tokens, calmer than the storefront. */
+
+/* ---------- Shell ---------- */
+.shell { display: grid; grid-template-columns: 232px minmax(0, 1fr); min-height: 100vh; min-width: 1024px; }
+.side {
+  position: sticky; top: 0; height: 100vh;
+  display: flex; flex-direction: column; gap: 24px;
+  padding: 24px 18px;
+  background: var(--lilac-soft);
+  border-right: var(--border);
+}
+.brand { display: flex; align-items: baseline; gap: 8px; text-decoration: none; }
+.brand .logo { font-size: 26px; line-height: 1; }
+.brand .tag { font-size: 12px; font-weight: 900; letter-spacing: 0.08em; text-transform: uppercase; }
+.nav { display: flex; flex-direction: column; gap: 4px; }
+.navLink {
+  display: block; padding: 8px 12px;
+  border: 2px solid transparent; border-radius: var(--radius-input);
+  font-weight: 700; text-decoration: none;
+}
+.navLink:hover { background: var(--white); color: var(--ink); }
+.navLink[aria-current="page"] { background: var(--white); border: var(--border-thin); box-shadow: 2px 2px 0 var(--ink); }
+.sideFoot { margin-top: auto; display: flex; flex-direction: column; gap: 8px; font-size: 14px; }
+.who { overflow-wrap: anywhere; }
+.main { padding: 32px 40px 64px; max-width: 1200px; }
+
+/* ---------- Page furniture ---------- */
+.pageHead { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 24px; }
+.pageTitle { font-size: 34px; line-height: 1.1; }
+.muted { color: var(--link-hover); }
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
+.cardPad { padding: 20px 22px; }
+
+/* Compact controls: the storefront's 60px pills are sized for thumbs. */
+.btnSm { min-height: 40px; padding: 0 16px; font-size: 15px; border-width: 2px; }
+.linkBtn {
+  border: 0; padding: 0; background: none;
+  color: var(--ink); font: inherit; font-weight: 700; text-decoration: underline; text-underline-offset: 3px;
+}
+.linkBtn:hover { color: var(--link-hover); }
+
+/* ---------- Tables ---------- */
+.table { width: 100%; border-collapse: separate; border-spacing: 0; background: var(--white); border: var(--border); border-radius: var(--radius-panel); overflow: hidden; font-size: 15px; }
+.table th, .table td { padding: 10px 14px; text-align: left; vertical-align: top; border-bottom: 1.5px solid var(--lilac-tint); }
+.table th { background: var(--lilac-soft); font-weight: 900; font-size: 13px; letter-spacing: 0.04em; text-transform: uppercase; border-bottom: var(--border-thin); }
+.table tbody tr:last-child td { border-bottom: 0; }
+.table tbody tr:hover td { background: var(--ground); }
+.num { text-align: right !important; font-variant-numeric: tabular-nums; }
+
+/* ---------- Sign-in ---------- */
+.signInPage { min-height: 100vh; display: grid; place-items: center; padding: 40px 20px; }
+.signInCard { width: min(440px, 100%); padding: 32px; display: flex; flex-direction: column; gap: 16px; }
+.signInTitle { font-size: 30px; line-height: 1.1; }
+.form { display: flex; flex-direction: column; gap: 8px; }
+/* The code tiles share out the row's width (CodeInput), so the field gets a full row and the button sits under it. */
+.codeRow { display: flex; flex-direction: column; gap: 16px; }
+.codeRow > button { align-self: flex-start; }
+.row { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 14px; }

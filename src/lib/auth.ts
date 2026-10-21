@@ -5,10 +5,11 @@ import { getDb, type Db } from "@/db";
 import { authTokens, customers, sessions, subscribers } from "@/db/schema";
 import type { Locale } from "./data";
 import { sendEmail } from "./email";
-import { signInEmail } from "./email-templates";
+import { adminSignInEmail, signInEmail } from "./email-templates";
 import { readSessionToken } from "./session-cookie";
 import { CODE_LENGTH } from "./sign-in-code";
 import {
+  adminNext,
   codeMatches,
   EMAIL,
   flowMatches,
@@ -47,10 +48,18 @@ import {
  *                   from the requesting browser only, locked after a few tries.
  *   Both create the customer on first verified sign-in (conflict-safe),
  *   convert a matching subscriber, and open a 90-day session.
+ *
+ * The admin portal (PRD 4, 5.4) signs in through the same machinery with
+ * audience "admin": mail goes only to role=admin customers (the answer is the
+ * same either way), the link points at /admin/auth/verify, nothing is created
+ * or converted, and the session it opens is an admin session. Tokens and
+ * sessions of one audience are never accepted by the other.
  */
 
 type Conn = Db | Parameters<Parameters<Db["transaction"]>[0]>[0];
 const DAY = 86_400_000;
+
+export type Audience = "customer" | "admin";
 
 let codeGenerator: () => string = generateCode;
 /** Tests only: make codes deterministic. */
@@ -70,6 +79,8 @@ export interface RequestInput {
   origin: string;
   /** The browser's flow secret (cookie), so only that browser redeems silently. */
   flowSecret: string;
+  /** "admin" for the admin portal's sign-in; the shop's by default. */
+  audience?: Audience;
 }
 
 export type RequestResult = { ok: true } | { ok: false; error: "invalid_email" | "rate_limited" };
@@ -82,7 +93,8 @@ export async function requestSignIn(input: RequestInput): Promise<RequestResult>
   const id = randomUUID();
   const token = generateToken();
   const code = codeGenerator();
-  const next = safeNext(input.next, `/${input.locale}`);
+  const audience = input.audience ?? "customer";
+  const next = audience === "admin" ? adminNext(input.next) : safeNext(input.next, `/${input.locale}`);
 
   // Check and consume the allowances atomically: lock the email, then the IP (always that order), then count and insert.
   const allowed = await db.transaction(async (tx) => {
@@ -101,6 +113,7 @@ export async function requestSignIn(input: RequestInput): Promise<RequestResult>
       tokenHash: hashToken(token),
       codeHash: hashCode(id, code),
       flowHash: hashFlow(input.flowSecret),
+      audience,
       locale: input.locale,
       next,
       ipHash,
@@ -109,6 +122,20 @@ export async function requestSignIn(input: RequestInput): Promise<RequestResult>
     return true;
   });
   if (!allowed) return { ok: false, error: "rate_limited" };
+
+  if (audience === "admin") {
+    // Every request counts against the limits above, but only an admin gets mail; everyone sees "check your email".
+    const admin = await activeAdmin(db, email);
+    if (!admin) return { ok: true };
+    await sendEmail({
+      ...adminSignInEmail({ link: `${input.origin}/admin/auth/verify?token=${encodeURIComponent(token)}`, code, minutes: TOKEN_MINUTES }),
+      to: email,
+      type: "sign_in",
+      idempotencyKey: `sign-in/${id}`,
+      customerId: admin.id,
+    });
+    return { ok: true };
+  }
 
   const link = `${input.origin}/${input.locale}/auth/verify?token=${encodeURIComponent(token)}`;
   const existing = await db.query.customers.findFirst({ where: eq(customers.email, email), columns: { id: true } });
@@ -130,7 +157,7 @@ export type LinkError = "invalid" | "expired";
 /** What a link is for, without spending it: drives the confirmation page. */
 export async function peekLink(token: string): Promise<{ ok: true; email: string; maskedEmail: string; locale: Locale; next: string } | { ok: false; error: LinkError }> {
   if (!token || token.length > 128) return { ok: false, error: "invalid" };
-  const row = await getDb().query.authTokens.findFirst({ where: eq(authTokens.tokenHash, hashToken(token)) });
+  const row = await getDb().query.authTokens.findFirst({ where: and(eq(authTokens.tokenHash, hashToken(token)), eq(authTokens.audience, "customer")) });
   if (!row) return { ok: false, error: "invalid" };
   if (row.usedAt || row.expiresAt <= new Date()) return { ok: false, error: "expired" };
   return { ok: true, email: row.email, maskedEmail: maskEmail(row.email), locale: row.locale, next: safeNext(row.next, `/${row.locale}`) };
@@ -144,26 +171,33 @@ export type VerifyResult =
 
 /**
  * Spend a link. `flowSecret` is this browser's flow cookie; `confirmed` means the
- * person pressed the button on the confirmation page (same-origin POST).
+ * person pressed the button on the confirmation page (same-origin POST). The
+ * admin portal has no confirmation page: another browser gets "confirm" and
+ * is told to type the code instead.
  */
-export async function redeemLink(token: string, opts: { flowSecret?: string | null; confirmed?: boolean }): Promise<VerifyResult> {
+export async function redeemLink(token: string, opts: { flowSecret?: string | null; confirmed?: boolean; audience?: Audience }): Promise<VerifyResult> {
   if (!token || token.length > 128) return { ok: false, error: "invalid" };
+  const audience = opts.audience ?? "customer";
   return getDb().transaction(async (tx) => {
-    const [row] = await tx.select().from(authTokens).where(eq(authTokens.tokenHash, hashToken(token))).for("update");
+    const [row] = await tx
+      .select()
+      .from(authTokens)
+      .where(and(eq(authTokens.tokenHash, hashToken(token)), eq(authTokens.audience, audience)))
+      .for("update");
     if (!row) return { ok: false as const, error: "invalid" as const };
     if (row.usedAt || row.expiresAt <= new Date()) return { ok: false as const, error: "expired" as const };
     if (!opts.confirmed && !flowMatches(opts.flowSecret, row.flowHash)) {
       return { ok: false as const, error: "confirm" as const, maskedEmail: maskEmail(row.email), locale: row.locale };
     }
     await tx.update(authTokens).set({ usedAt: new Date() }).where(eq(authTokens.id, row.id));
-    return complete(tx, row.email, row.locale, row.next);
+    return complete(tx, row);
   });
 }
 
 // ---------------------------------------------------------------- code
 
-/** The code, typed into the screen that asked for it: newest live token for the address, same browser only. */
-export async function verifyCode(emailIn: string, codeIn: string, flowSecret: string | null | undefined): Promise<VerifyResult> {
+/** The code, typed into the screen that asked for it: newest live token of this audience for the address, same browser only. */
+export async function verifyCode(emailIn: string, codeIn: string, flowSecret: string | null | undefined, audience: Audience = "customer"): Promise<VerifyResult> {
   const email = normaliseEmail(emailIn);
   const code = (codeIn ?? "").replace(/\D/g, "");
   if (!EMAIL.test(email) || code.length !== CODE_LENGTH) return { ok: false, error: "invalid" };
@@ -171,7 +205,7 @@ export async function verifyCode(emailIn: string, codeIn: string, flowSecret: st
     const [row] = await tx
       .select()
       .from(authTokens)
-      .where(and(eq(authTokens.email, email), isNull(authTokens.usedAt), gt(authTokens.expiresAt, new Date())))
+      .where(and(eq(authTokens.email, email), eq(authTokens.audience, audience), isNull(authTokens.usedAt), gt(authTokens.expiresAt, new Date())))
       .orderBy(desc(authTokens.createdAt))
       .limit(1)
       .for("update");
@@ -183,14 +217,29 @@ export async function verifyCode(emailIn: string, codeIn: string, flowSecret: st
       return { ok: false as const, error: attempts >= MAX_CODE_ATTEMPTS ? ("locked" as const) : ("invalid" as const) };
     }
     await tx.update(authTokens).set({ usedAt: new Date() }).where(eq(authTokens.id, row.id));
-    return complete(tx, row.email, row.locale, row.next);
+    return complete(tx, row);
   });
 }
 
-async function complete(tx: Conn, email: string, locale: Locale, next: string | null) {
-  const customerId = await signIn(tx, email, locale);
+async function complete(tx: Conn, row: { email: string; locale: Locale; next: string | null; audience: Audience }): Promise<VerifyResult> {
+  if (row.audience === "admin") {
+    // Re-checked at redemption: the role may have been revoked since the email went out.
+    const admin = await activeAdmin(tx, row.email);
+    if (!admin) return { ok: false, error: "invalid" };
+    const sessionToken = await createSession(tx, admin.id, "admin");
+    return { ok: true, sessionToken, next: adminNext(row.next), locale: row.locale, customerId: admin.id };
+  }
+  const customerId = await signIn(tx, row.email, row.locale);
   const sessionToken = await createSession(tx, customerId);
-  return { ok: true as const, sessionToken, next: safeNext(next, `/${locale}`), locale, customerId };
+  return { ok: true, sessionToken, next: safeNext(row.next, `/${row.locale}`), locale: row.locale, customerId };
+}
+
+/** The live admin account with this email, if any. */
+async function activeAdmin(conn: Conn, email: string) {
+  return conn.query.customers.findFirst({
+    where: and(eq(customers.email, email), eq(customers.role, "admin"), isNull(customers.deletedAt)),
+    columns: { id: true },
+  });
 }
 
 /**
@@ -220,9 +269,9 @@ export async function signIn(tx: Conn, email: string, locale: Locale): Promise<s
   return customerId;
 }
 
-export async function createSession(tx: Conn, customerId: string): Promise<string> {
+export async function createSession(tx: Conn, customerId: string, audience: Audience = "customer"): Promise<string> {
   const token = generateToken();
-  await tx.insert(sessions).values({ customerId, tokenHash: hashSession(token), expiresAt: new Date(Date.now() + SESSION_DAYS * DAY) });
+  await tx.insert(sessions).values({ customerId, audience, tokenHash: hashSession(token), expiresAt: new Date(Date.now() + SESSION_DAYS * DAY) });
   return token;
 }
 
@@ -239,13 +288,13 @@ export interface CurrentCustomer {
   address: { postalCode: string; prefecture: string; city: string; town: string | null; line1: string; line2: string | null } | null;
 }
 
-/** The customer behind a session token, or null. Exposed for the request-scoped wrapper and tests. */
-export async function customerForSession(token: string | null): Promise<CurrentCustomer | null> {
+/** The customer behind a session token of this audience, or null. Exposed for the request-scoped wrappers and tests. */
+export async function customerForSession(token: string | null, audience: Audience = "customer"): Promise<CurrentCustomer | null> {
   if (!token) return null;
   const db = getDb();
   const now = new Date();
   const row = await db.query.sessions.findFirst({
-    where: and(eq(sessions.tokenHash, hashSession(token)), gt(sessions.expiresAt, now)),
+    where: and(eq(sessions.tokenHash, hashSession(token)), eq(sessions.audience, audience), gt(sessions.expiresAt, now)),
     with: { customer: { with: { address: true } } },
   });
   if (!row || row.customer.deletedAt) return null;
