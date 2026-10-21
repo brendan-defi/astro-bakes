@@ -248,7 +248,10 @@
 .storyText { flex: 1 1 320px; min-width: 0; display: flex; flex-direction: column; gap: 14px; }
 .storyEyebrow { display: flex; align-items: center; gap: 10px; color: var(--butter); }
 .storyEyebrow .eyebrow { font-size: 14px; }
-.storyLead { font-weight: 700; }
+.storyTagline { font-weight: 700; }
+/* Zen Maru Gothic has no italic, so this is the browser's slant; Japanese doesn't use italics. */
+.storyLead { font-style: italic; }
+:lang(ja) .storyLead { font-style: normal; }
 .igBtn { align-self: flex-start; min-height: 48px; padding: 0 20px; box-shadow: 0 4px 0 var(--pink); font-weight: 900; font-size: var(--fs-body); }
 .polaroids { flex: 1 1 320px; min-width: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px 14px; color: var(--ink); }
 .polaroid { margin: 0; background: var(--white); padding: 8px 8px 6px; border-radius: 6px; }
@@ -264,7 +267,7 @@
   .storyInner { gap: 64px; }
   .storyText { flex-basis: 400px; gap: 16px; }
   .storyEyebrow .eyebrow { font-size: 16px; }
-  .storyLead { font-size: 19px; }
+  .storyTagline { font-size: 19px; }
   .igBtn { min-height: 52px; padding: 0 24px; margin-top: 6px; box-shadow: 0 5px 0 var(--pink); }
   .polaroids { flex-basis: 400px; gap: 26px 22px; }
   .polaroid { padding: 10px 10px 8px; }
@@ -387,7 +390,7 @@
 }
 
 /* Titan One has no Japanese glyphs, so JA labels set in it use Zen Maru Gothic 900 (handoff p.13). */
-:lang(ja) :is(.bubble, .ticketValue, .ticketSub, .orderMain, .partiesBody, .partiesFine, .partyValue) { word-break: auto-phrase; }
+:lang(ja) :is(.bubble, .ticketValue, .ticketSub, .orderMain, .partiesBody, .partiesFine, .partyValue, .storyTagline) { word-break: auto-phrase; }
 :lang(ja) .eyebrowSticker, :lang(ja) .partyTicketHead, :lang(ja) .partyBurst span, :lang(ja) .partyValue, :lang(ja) .cartLink, :lang(ja) .orderView, :lang(ja) .burstLabel, :lang(ja) .stamp, :lang(ja) .howMany, :lang(ja) .stepTitle, :lang(ja) .lineTitle { font-family: var(--font-body), sans-serif; font-weight: 900; }
 
 /* Keyframes for this module (a module can't use global ones; see globals.css). */

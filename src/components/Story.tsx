@@ -21,13 +21,14 @@ export function Story({ locale, settings }: { locale: Locale; settings: Settings
             <PawIcon />
             <span className="eyebrow">{t.bakedIn}</span>
           </div>
-          <h2 className="display h2">{t.meetAstro}</h2>
-          <p className={s.storyLead}>{t.story1}</p>
+          <h2 className="display h2">{t.ourStory}</h2>
+          <p className={s.storyTagline}>{t.storyTagline}</p>
+          <p className={s.storyLead}>{t.storyLead}</p>
+          <p>{t.story1}</p>
           <p>{t.story2}</p>
-          <p>{t.story3}</p>
           <a href={settings.instagramUrl} className={`btn btn-secondary ${s.igBtn}`} target="_blank" rel="noreferrer">
             <InstagramIcon />
-            {t.moreOnInstagram}
+            {t.followOnInstagram}
           </a>
         </div>
         <div className={s.polaroids}>
