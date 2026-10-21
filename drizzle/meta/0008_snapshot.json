@@ -1,5 +1,5 @@
 {
-  "id": "3442a5a9-a945-4956-86fc-5466f1970fd5",
+  "id": "a2da7809-8dcc-44fa-ac98-2183572edd04",
   "prevId": "09f3c09f-3e57-4a0c-b87a-5032c9c2af44",
   "version": "7",
   "dialect": "postgresql",
@@ -2188,6 +2188,12 @@
           "primaryKey": false,
           "notNull": true,
           "default": 0
+        },
+        "welcome_next_attempt_at": {
+          "name": "welcome_next_attempt_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
         },
         "created_at": {
           "name": "created_at",

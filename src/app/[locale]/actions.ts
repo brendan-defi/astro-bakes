@@ -10,8 +10,9 @@ export async function subscribeAction(input: SubscribeInput): Promise<SubscribeR
     const h = await headers();
     const ip = h.get("x-forwarded-for")?.split(",")[0]?.trim() || h.get("x-real-ip") || null;
     const result = await subscribe(input, { ip });
-    // After the reply: a few welcomes that failed earlier get another go, with no scheduler needed.
-    after(() => retryPendingWelcomes().catch((e) => console.error("welcome retry failed", e)));
+    // After a sign-up that went through (not an invalid or rate-limited one): a few welcomes that failed earlier
+    // get another go, with no scheduler needed.
+    if (result.ok) after(() => retryPendingWelcomes().catch((e) => console.error("welcome retry failed", e)));
     return result;
   } catch (e) {
     console.error("subscribe failed", e);

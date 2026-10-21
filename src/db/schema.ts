@@ -119,6 +119,8 @@ export const subscribers = pgTable("subscribers", {
   welcomeRequestedAt: timestamp({ withTimezone: true }),
   welcomeSentAt: timestamp({ withTimezone: true }),
   welcomeAttempts: integer().notNull().default(0),
+  /** Not before this time after a failure (backing off), so a burst of sign-ups can't spend every try in one outage. */
+  welcomeNextAttemptAt: timestamp({ withTimezone: true }),
   ...timestamps,
 });
 

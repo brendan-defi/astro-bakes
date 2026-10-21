@@ -7,13 +7,27 @@ import { lockEmail } from "@/lib/email-lock";
 import { hashIp } from "@/lib/auth-rules";
 import { deliverWelcome, retryPendingWelcomes, SIGNUPS_PER_IP_PER_HOUR, subscribe, WELCOME_MAX_ATTEMPTS } from "@/lib/subscribe";
 import { unsubscribe, verifyUnsubscribe } from "@/lib/unsubscribe";
-import { captureEmail, clearTestData, closeTestDb, resetDatabase, testDb, TEST_DATABASE_URL } from "@/test/db";
+import { setEmailTransport, type OutgoingEmail } from "@/lib/email";
+import { clearTestData, closeTestDb, resetDatabase, testDb, TEST_DATABASE_URL } from "@/test/db";
 
 /** Notify-me signups (PRD 1.5) against a real Postgres (TEST_DATABASE_URL). */
 // Room for a held transaction, a second one, and the lock-queue polling below at the same time.
 const { pool, db } = testDb(4);
-// Failed sends are captured too, so a test can see each attempt and its idempotency key.
-const mail = captureEmail({ recordFailures: true });
+/**
+ * A transport the tests can steer: every call is recorded as it starts (failed ones too, so each attempt and its
+ * idempotency key are visible), `failing` makes calls fail, and `hold` keeps a call in flight until released.
+ */
+const mail = {
+  sent: [] as OutgoingEmail[],
+  failing: null as string | null,
+  hold: null as Promise<void> | null,
+  reset() { this.sent.length = 0; this.failing = null; this.hold = null; },
+};
+setEmailTransport(async (email) => {
+  mail.sent.push(email);
+  if (mail.hold) await mail.hold;
+  return mail.failing ? { ok: false, error: mail.failing } : { ok: true, providerMessageId: `msg_${mail.sent.length}` };
+});
 const welcomes = () => mail.sent.filter((m) => m.type === "welcome");
 const MIN = 60_000;
 
@@ -272,6 +286,8 @@ describe.skipIf(!TEST_DATABASE_URL)("subscribe", () => {
     expect(await row("flaky@test.invalid")).toMatchObject({ welcomeSentAt: null, welcomeAttempts: 1 });
     mail.failing = null;
     await subscribe({ email: "flaky@test.invalid", locale: "en" });
+    expect(welcomes()).toHaveLength(1); // straight away it's backing off
+    await subscribe({ email: "flaky@test.invalid", locale: "en" }, { now: new Date(Date.now() + 2 * MIN) });
     expect(welcomes()).toHaveLength(2); // the failed try and the delivered one
     expect(welcomes()[0].idempotencyKey).toBe(welcomes()[1].idempotencyKey);
     expect((await row("flaky@test.invalid")).welcomeSentAt).not.toBeNull();
@@ -312,10 +328,11 @@ describe.skipIf(!TEST_DATABASE_URL)("subscribe", () => {
 
     mail.failing = "still down";
     await subscribe({ email: "never@test.invalid", locale: "en" });
-    for (let i = 1; i < WELCOME_MAX_ATTEMPTS; i++) await retryPendingWelcomes({ now: new Date(Date.now() + 2 * MIN) });
+    const later = (i: number) => new Date(Date.now() + i * 8 * 3_600_000); // past each back-off, inside the 7 days
+    for (let i = 1; i < WELCOME_MAX_ATTEMPTS; i++) await retryPendingWelcomes({ now: later(i) });
     expect(await row("never@test.invalid")).toMatchObject({ welcomeAttempts: WELCOME_MAX_ATTEMPTS, welcomeSentAt: null });
     mail.failing = null;
-    expect(await retryPendingWelcomes({ now: new Date(Date.now() + 2 * MIN) })).toEqual([]);
+    expect(await retryPendingWelcomes({ now: later(WELCOME_MAX_ATTEMPTS) })).toEqual([]);
     expect(await deliverWelcome((await row("never@test.invalid")).id)).toBe("gave_up");
   });
 
@@ -329,5 +346,68 @@ describe.skipIf(!TEST_DATABASE_URL)("subscribe", () => {
       expect(r.customer.marketingOptIn).toBe(false);
       expect(r.subscriber.unsubscribedAt).not.toBeNull();
     }
+  });
+
+  it("makes an unsubscribe that arrives during a welcome wait for it, and stops a retry it gets in ahead of", async () => {
+    // A send already under way finishes before the opt-out is reported done.
+    let release!: () => void;
+    mail.hold = new Promise<void>((r) => { release = r; });
+    const signup = track(subscribe({ email: "mid@test.invalid", locale: "en" }));
+    await until(() => welcomes().length === 1, "the welcome to reach the provider");
+    const optOut = track(unsubscribe("mid@test.invalid"));
+    await until(async () => optOut.done || (await waiting("advisory")) > 0, "the unsubscribe to queue or finish");
+    expect(optOut.done).toBe(false); // it can't report done while the send is in flight
+    release();
+    mail.hold = null;
+    await Promise.all([signup.promise, optOut.promise]);
+    expect(await row("mid@test.invalid")).toMatchObject({ welcomeSentAt: expect.any(Date) });
+    expect((await row("mid@test.invalid")).unsubscribedAt).not.toBeNull();
+
+    // A retry that picked the row before the opt-out committed re-reads it under the lock and sends nothing.
+    mail.failing = "provider down";
+    await subscribe({ email: "late@test.invalid", locale: "en" });
+    mail.failing = null;
+    const before = welcomes().length;
+    const optingOut = holdOpen(async (tx) => {
+      await lockEmail(tx as never, "late@test.invalid");
+      await tx.update(schema.subscribers).set({ unsubscribedAt: new Date() }).where(eq(schema.subscribers.email, "late@test.invalid"));
+    });
+    await optingOut.ready;
+    const retry = track(retryPendingWelcomes({ now: new Date(Date.now() + 2 * MIN) }));
+    try {
+      await until(async () => retry.done || (await waiting("advisory")) > 0, "the retry to queue behind the opt-out");
+    } finally {
+      optingOut.release();
+      await optingOut.done;
+    }
+    expect(await retry.promise).toEqual(["not_owed"]);
+    expect(welcomes().length).toBe(before); // no send began after the opt-out
+  });
+
+  it("lets overlapping retries and a re-signup attempt a due welcome once, backing off, and never past the cap", async () => {
+    const t0 = new Date();
+    const at = (ms: number) => new Date(t0.getTime() + ms);
+    mail.failing = "provider down";
+    await subscribe({ email: "busy@test.invalid", locale: "en" }, { now: t0 });
+    expect(await row("busy@test.invalid")).toMatchObject({ welcomeAttempts: 1 });
+    expect(await retryPendingWelcomes({ now: at(30_000) })).toEqual([]); // inside the first back-off
+
+    const burst = async (now: Date) => Promise.all([
+      ...Array.from({ length: 8 }, () => retryPendingWelcomes({ now })),
+      subscribe({ email: "busy@test.invalid", locale: "en" }, { now }),
+    ]);
+    const callsBefore = welcomes().length;
+    await burst(at(2 * MIN));
+    expect(welcomes().length - callsBefore).toBe(1); // eight workers and a re-signup, one attempt
+    expect(await row("busy@test.invalid")).toMatchObject({ welcomeAttempts: 2 });
+    await burst(at(15 * MIN));
+    expect(await row("busy@test.invalid")).toMatchObject({ welcomeAttempts: 3 });
+
+    mail.failing = null;
+    expect(await retryPendingWelcomes({ now: at(2 * 60 * MIN) })).toEqual(["sent"]);
+    const final = await row("busy@test.invalid");
+    expect(final.welcomeAttempts).toBeLessThanOrEqual(WELCOME_MAX_ATTEMPTS);
+    expect(final.welcomeSentAt).not.toBeNull();
+    expect(welcomes()).toHaveLength(4); // three failures, one delivery
   });
 });

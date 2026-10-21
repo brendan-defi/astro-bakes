@@ -1,5 +1,5 @@
 import "server-only";
-import { and, count, eq, gt, isNull, lt, sql } from "drizzle-orm";
+import { and, count, eq, gt, isNull, lt, lte, or, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { customers, signupAttempts, subscribers } from "@/db/schema";
 import type { Locale } from "./data";
@@ -66,7 +66,7 @@ export async function subscribe(input: SubscribeInput, ctx: { ip?: string | null
     const activating = !before || before.unsubscribedAt !== null;
     const refresh = { locale, consentedAt: now, consentIpHash: ipHash, unsubscribedAt: null, updatedAt: now };
     // A new activation owes a fresh welcome; an address already on the list keeps whatever it's owed.
-    const welcome = activating ? { welcomeRequestedAt: now, welcomeSentAt: null, welcomeAttempts: 0 } : {};
+    const welcome = activating ? { welcomeRequestedAt: now, welcomeSentAt: null, welcomeAttempts: 0, welcomeNextAttemptAt: null } : {};
     const [row] = await tx
       .insert(subscribers)
       .values({ email, locale, source: "homepage", consentedAt: now, consentIpHash: ipHash, welcomeRequestedAt: now })
@@ -81,45 +81,70 @@ export async function subscribe(input: SubscribeInput, ctx: { ip?: string | null
   return { ok: true };
 }
 
-export type WelcomeOutcome = "sent" | "failed" | "not_owed" | "no_secret" | "gave_up";
+export type WelcomeOutcome = "sent" | "failed" | "not_owed" | "not_due" | "no_secret" | "gave_up";
+
+/** How long to wait after each failed try before the next: 1 minute, 10 minutes, 1 hour, 6 hours. */
+const WELCOME_BACKOFF_MS = [60_000, 600_000, 3_600_000, 6 * 3_600_000];
 
 /**
- * Try to deliver the welcome a subscriber is owed. Re-reads the row first, so an address that unsubscribed,
- * became a customer or was already welcomed in the meantime gets nothing. Without UNSUBSCRIBE_SECRET it waits
- * (no attempt used), so fixing the configuration lets the retry send it.
+ * Try to deliver the welcome a subscriber is owed.
+ *
+ * The whole attempt runs under the address's lock (email-lock.ts), from re-reading the row to recording the
+ * result, with the provider call inside it. unsubscribe() and a first sign-in take the same lock, so an
+ * unsubscribe can never be reported done while a welcome is about to go out: either the send finishes first,
+ * or the re-read here sees the opt-out and sends nothing. Two workers on the same address queue on the lock,
+ * and the second sees the first one's result (sent, or backing off), so the attempt cap can't be overshot.
+ *
+ * Without UNSUBSCRIBE_SECRET it waits (no attempt used), so fixing the configuration lets the retry send it.
  */
 export async function deliverWelcome(subscriberId: string, now = new Date()): Promise<WelcomeOutcome> {
   const db = getDb();
-  const s = await db.query.subscribers.findFirst({ where: eq(subscribers.id, subscriberId) });
-  if (!s || s.unsubscribedAt || s.convertedCustomerId || s.welcomeSentAt || !s.welcomeRequestedAt) return "not_owed";
-  if (s.welcomeAttempts >= WELCOME_MAX_ATTEMPTS || now.getTime() - s.welcomeRequestedAt.getTime() > WELCOME_RETRY_WINDOW_MS) return "gave_up";
-  const urls = unsubscribeUrls(s.email, s.locale);
-  if (!urls) {
-    // Never send a drop email without a way out.
-    console.error("welcome email waiting: UNSUBSCRIBE_SECRET is not set");
-    return "no_secret";
-  }
+  const peek = await db.query.subscribers.findFirst({ where: eq(subscribers.id, subscriberId), columns: { email: true } });
+  if (!peek) return "not_owed";
+  // Read outside the lock, to keep it short; the send logs on the same connection (sendEmail's conn), so a few
+  // deliveries at once can't starve the pool.
   const settings = await loadSettings().catch(() => null);
-  const sent = await sendEmail({
-    ...welcomeEmail({ locale: s.locale, unsubscribeUrl: urls.page, senderName: settings?.legalSellerName?.trim() || "Astro Bakes", contactEmail: settings?.contactEmail ?? "hello@astrobakes.xyz" }),
-    to: s.email,
-    type: "welcome",
-    // One key per activation: a retry of the same welcome can't arrive twice.
-    idempotencyKey: `welcome/${s.id}/${s.welcomeRequestedAt.getTime()}`,
-    headers: unsubscribeHeaders(s.email, s.locale),
+  const contactEmail = settings?.contactEmail ?? "hello@astrobakes.xyz";
+  const senderName = settings?.legalSellerName?.trim() || "Astro Bakes";
+  return db.transaction(async (tx) => {
+    await lockEmail(tx, peek.email);
+    const [s] = await tx.select().from(subscribers).where(eq(subscribers.id, subscriberId)).for("update");
+    if (!s || s.unsubscribedAt || s.convertedCustomerId || s.welcomeSentAt || !s.welcomeRequestedAt) return "not_owed";
+    if (s.welcomeAttempts >= WELCOME_MAX_ATTEMPTS || now.getTime() - s.welcomeRequestedAt.getTime() > WELCOME_RETRY_WINDOW_MS) return "gave_up";
+    if (s.welcomeNextAttemptAt && s.welcomeNextAttemptAt > now) return "not_due";
+    const urls = unsubscribeUrls(s.email, s.locale);
+    if (!urls) {
+      // Never send a drop email without a way out.
+      console.error("welcome email waiting: UNSUBSCRIBE_SECRET is not set");
+      return "no_secret";
+    }
+    const sent = await sendEmail(
+      {
+        ...welcomeEmail({ locale: s.locale, unsubscribeUrl: urls.page, senderName, contactEmail }),
+        to: s.email,
+        type: "welcome",
+        replyTo: contactEmail,
+        // One key per activation, as a second line of defence against a duplicate.
+        idempotencyKey: `welcome/${s.id}/${s.welcomeRequestedAt.getTime()}`,
+        headers: unsubscribeHeaders(s.email, s.locale),
+      },
+      { conn: tx },
+    );
+    const attempts = s.welcomeAttempts + 1;
+    if (sent.ok) {
+      await tx.update(subscribers).set({ welcomeSentAt: now, welcomeAttempts: attempts, welcomeNextAttemptAt: null }).where(eq(subscribers.id, s.id));
+      return "sent";
+    }
+    const wait = WELCOME_BACKOFF_MS[Math.min(attempts, WELCOME_BACKOFF_MS.length) - 1];
+    await tx.update(subscribers).set({ welcomeAttempts: attempts, welcomeNextAttemptAt: new Date(now.getTime() + wait) }).where(eq(subscribers.id, s.id));
+    return "failed";
   });
-  const same = and(eq(subscribers.id, s.id), eq(subscribers.welcomeRequestedAt, s.welcomeRequestedAt), isNull(subscribers.welcomeSentAt));
-  if (sent.ok) {
-    await db.update(subscribers).set({ welcomeSentAt: now }).where(same);
-    return "sent";
-  }
-  await db.update(subscribers).set({ welcomeAttempts: sql`${subscribers.welcomeAttempts} + 1` }).where(same);
-  return "failed";
 }
 
 /**
- * Retry a few welcomes that didn't go out: run after sign-ups, so it needs no scheduler. Skips the last minute's
- * sign-ups (their own request is still sending) and anything past the cap or the window.
+ * Retry a few welcomes that didn't go out: run after successful sign-ups, so it needs no scheduler. Only rows
+ * that are due (past their back-off), under the cap and inside the window; deliverWelcome re-checks all of it
+ * under the lock, so overlapping passes are harmless.
  */
 export async function retryPendingWelcomes(opts: { limit?: number; now?: Date } = {}): Promise<WelcomeOutcome[]> {
   const now = opts.now ?? new Date();
@@ -132,7 +157,7 @@ export async function retryPendingWelcomes(opts: { limit?: number; now?: Date } 
       isNull(subscribers.convertedCustomerId),
       lt(subscribers.welcomeAttempts, WELCOME_MAX_ATTEMPTS),
       gt(subscribers.welcomeRequestedAt, new Date(now.getTime() - WELCOME_RETRY_WINDOW_MS)),
-      lt(subscribers.welcomeRequestedAt, new Date(now.getTime() - 60_000)),
+      or(isNull(subscribers.welcomeNextAttemptAt), lte(subscribers.welcomeNextAttemptAt, now)),
     ))
     .orderBy(subscribers.welcomeRequestedAt)
     .limit(opts.limit ?? 5);

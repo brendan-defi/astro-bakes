@@ -1,6 +1,6 @@
 import "server-only";
 import { Resend } from "resend";
-import { getDb } from "@/db";
+import { getDb, type Db } from "@/db";
 import { notificationLog } from "@/db/schema";
 import type { Email } from "./email-templates";
 import { contactEmail } from "./settings";
@@ -60,7 +60,10 @@ export function fromAddress(): string {
   return `Astro Bakes <hello@${domain}>`;
 }
 
-export async function sendEmail(email: OutgoingEmail): Promise<SendOutcome> {
+/** A transaction to write the log row in: a caller holding a lock across the send (the welcome) stays on one connection. */
+type LogConn = Parameters<Parameters<Db["transaction"]>[0]>[0];
+
+export async function sendEmail(email: OutgoingEmail, opts: { conn?: LogConn } = {}): Promise<SendOutcome> {
   let outcome: SendOutcome;
   try {
     const replyTo = email.replyTo ?? (email.type === "internal" ? undefined : await contactEmail().catch(() => undefined));
@@ -69,14 +72,17 @@ export async function sendEmail(email: OutgoingEmail): Promise<SendOutcome> {
     outcome = { ok: false, error: e instanceof Error ? e.message : String(e) };
   }
   try {
-    await getDb().insert(notificationLog).values({
+    const row = {
       type: email.type,
       to: email.to,
       customerId: email.customerId ?? null,
       orderId: email.orderId ?? null,
       providerMessageId: outcome.ok ? outcome.providerMessageId : null,
       error: outcome.ok ? null : outcome.error,
-    });
+    };
+    // In the caller's transaction, under a savepoint, so a failed log write can't abort it.
+    if (opts.conn) await opts.conn.transaction((sp) => sp.insert(notificationLog).values(row));
+    else await getDb().insert(notificationLog).values(row);
   } catch (e) {
     console.error("notification_log write failed", e);
   }
