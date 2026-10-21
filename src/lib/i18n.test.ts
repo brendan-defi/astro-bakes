@@ -63,6 +63,7 @@ const SAMPLES: Samples = {
   remindLabel: ["Drop 04"],
   notifyLabelNext: ["Drop 04"],
   onListFor: ["Drop 04"],
+  optInNext: ["Drop 04"],
   bubbleScheduled: ["Sunday", "10"],
   comingIn: ["Drop 04"],
   orderFrom: ["Sun, Nov 8 · 10:00 JST"],
