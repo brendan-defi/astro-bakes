@@ -168,12 +168,13 @@ describe.skipIf(!URL)("checkout write path", () => {
       .returning({ id: schema.customers.id });
     await db.insert(schema.addresses).values({ customerId: c.id, postalCode: "1500001", prefecture: "東京都", city: "渋谷区", town: "神宮前", line1: "9-9-9", wardCode: "13113" });
     const id = await held();
-    const r = await placeOrder(input(id, 1, { delivery: { name: "New Name", phone: "090-9999-9999", postal: "153-0061", line1: "1-2-3", line2: "Room 4" } }), id, c.id);
+    // +81 and full-width: both the profile and the order keep the normalised domestic number.
+    const r = await placeOrder(input(id, 1, { delivery: { name: "New Name", phone: "+81 ９０ー９９９９ー９９９９", postal: "153-0061", line1: "1-2-3", line2: "Room 4" } }), id, c.id);
     expect(r.ok && r.order.email).toBe("existing@test.invalid");
     const me = await db.query.customers.findFirst({ where: eq(schema.customers.id, c.id), with: { address: true } });
     expect(me).toMatchObject({ name: "New Name", phone: "090-9999-9999", address: { postalCode: "1530061", city: "目黒区", line1: "1-2-3", line2: "Room 4", wardCode: "13110" } });
     const [order] = await db.select().from(schema.orders);
-    expect(order).toMatchObject({ customerId: c.id, shipToName: "New Name", city: "目黒区" });
+    expect(order).toMatchObject({ customerId: c.id, shipToName: "New Name", phone: "090-9999-9999", city: "目黒区" });
   });
 
   it("refuses to place an order without a signed-in customer (D12)", async () => {
@@ -205,7 +206,12 @@ describe.skipIf(!URL)("checkout write path", () => {
     expect(await placeOrder(input(id, 1), null, await customer("x@test.invalid"))).toEqual({ ok: false, error: "hold_expired" });
     expect(await placeOrder(input(id, 1), "00000000-0000-4000-8000-000000000000", await customer("x@test.invalid"))).toEqual({ ok: false, error: "changed" });
     expect(await placeOrder(input(id, 1, { delivery: { name: "A", phone: "1", postal: "180-0004", line1: "1", line2: "" } }), id, await customer("x@test.invalid"))).toEqual({ ok: false, error: "invalid" });
+    // A bad phone number alone is enough, with everything else valid.
+    for (const phone of ["dsfasd", "090-1234-567"]) {
+      expect(await placeOrder(input(id, 1, { delivery: { name: "A", phone, postal: "153-0061", line1: "1", line2: "" } }), id, await customer("x@test.invalid"))).toEqual({ ok: false, error: "invalid" });
+    }
     expect(await count("orders")).toBe(0);
+    expect(await heldCheckout(id)).not.toBeNull();
   });
 
   it("never deadlocks startCheckout against placeOrder", async () => {

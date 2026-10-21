@@ -16,9 +16,19 @@ export interface PostalHit {
   deliverable: boolean;
 }
 
-/** What the postal-code field keeps as you type: half-width digits and a hyphen, "153-0061" at most. */
+/**
+ * What the postal-code field keeps as you type: up to 7 half-width digits and one hyphen, "153-0061" at most.
+ * Hyphens after the first are dropped rather than counted, so a doubled one can't push out a digit.
+ */
 export function cleanPostalInput(text: string): string {
-  return text.normalize("NFKC").replace(DASHES, "-").replace(/[^\d-]/g, "").slice(0, 8);
+  let out = "";
+  let digits = 0;
+  for (const c of text.normalize("NFKC").replace(DASHES, "-")) {
+    if (digits === 7) break;
+    if (/\d/.test(c)) { out += c; digits++; }
+    else if (c === "-" && !out.includes("-")) out += c;
+  }
+  return out;
 }
 
 export function normalisePostal(input: string): string {

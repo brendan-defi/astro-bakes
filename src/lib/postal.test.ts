@@ -9,6 +9,14 @@ describe("cleanPostalInput", () => {
     expect(cleanPostalInput("１５３ー００６２")).toBe("153-0062");
     expect(cleanPostalInput("153-00621234")).toBe("153-0062");
   });
+
+  it("keeps all seven digits when there's more than one hyphen", () => {
+    // Review of #20: the doubled hyphen used to take the last digit's place.
+    expect(cleanPostalInput("153--0062")).toBe("153-0062");
+    expect(cleanPostalInput("１５３－－００６２")).toBe("153-0062");
+    expect(cleanPostalInput("1-5-3-0062")).toBe("1-530062");
+    expect(lookupPostal(cleanPostalInput("153--0062"))?.town).toBe("三田");
+  });
 });
 
 describe("lookupPostal", () => {
