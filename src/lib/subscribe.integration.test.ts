@@ -1,34 +1,24 @@
 // @vitest-environment node
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { Pool } from "pg";
-import { drizzle } from "drizzle-orm/node-postgres";
-import { migrate } from "drizzle-orm/node-postgres/migrator";
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import * as schema from "@/db/schema";
-import { closeDb } from "@/db";
 import { subscribe } from "@/lib/subscribe";
+import { clearTestData, closeTestDb, resetDatabase, testDb, TEST_DATABASE_URL } from "@/test/db";
 
 /** Notify-me signups (PRD 1.5) against a real Postgres (TEST_DATABASE_URL). */
-const URL = process.env.TEST_DATABASE_URL;
-if (URL) process.env.DATABASE_URL = URL;
-const pool = URL ? new Pool({ connectionString: URL, max: 2 }) : null;
-const db = pool ? drizzle(pool, { schema, casing: "snake_case" }) : null!;
+const { pool, db } = testDb();
 const row = async (email: string) => (await db.select().from(schema.subscribers).where(eq(schema.subscribers.email, email)))[0];
 
-describe.skipIf(!URL)("subscribe", () => {
+describe.skipIf(!TEST_DATABASE_URL)("subscribe", () => {
   beforeAll(async () => {
-    await db.execute(sql`drop schema if exists public cascade; create schema public; drop schema if exists drizzle cascade`);
-    await migrate(db, { migrationsFolder: "drizzle" });
+    await resetDatabase(db);
   });
   beforeEach(async () => {
-    await db.execute(sql`truncate subscribers cascade`);
-    await db.execute(sql`delete from customers where email like '%@test.invalid'`);
+    await clearTestData(db, ["subscribers"]);
   });
   afterAll(async () => {
-    await db.execute(sql`truncate subscribers cascade`);
-    await db.execute(sql`delete from customers where email like '%@test.invalid'`);
-    await closeDb();
-    await pool?.end();
+    await clearTestData(db, ["subscribers"]);
+    await closeTestDb(pool);
   });
 
   it("stores the signup with its language, source and consent time, normalising the address", async () => {
