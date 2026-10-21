@@ -13,6 +13,7 @@ import { Logo } from "@/components/Logo";
 import { ArrowLeftIcon, TruckIcon } from "@/components/icons";
 import { CancelOrderButton, ReorderButton } from "@/components/account/OrderButtons";
 import { StatusPill } from "@/components/account/StatusPill";
+import { TimeSlotPicker } from "@/components/account/TimeSlotPicker";
 import s from "@/components/checkout.module.css";
 import a from "@/components/account.module.css";
 
@@ -66,12 +67,20 @@ export default async function OrderPage({ params }: { params: Promise<{ locale: 
               <dl className={a.dl}>
                 <dt>{t.deliverTo}</dt><dd>{order.shipToName}<br />{order.addressLine}<br />{order.phone}</dd>
                 {order.giftMessage && <><dt>{t.giftCard}</dt><dd>{order.giftMessage}</dd></>}
+                {live && !order.canChangeSlot && <><dt>{t.slotTitle}</dt><dd>{t.deliverySlots[order.timeSlot]}</dd></>}
                 <dt>{t.payWith}</dt><dd>{order.paymentMethod === "paypay" ? t.paypay : t.card}</dd>
                 {order.trackingNumber && <><dt>{t.tracking}</dt><dd>{order.trackingNumber}</dd></>}
                 {order.refund && <><dt>{t.refund}</dt><dd>{yen(order.refund.amount)} · {order.refund.issued ? t.refundIssued : t.refundPending}</dd></>}
               </dl>
-              {live && <div className={s.shipLine}><TruckIcon size={20} />{t.shipsByPost(fmtDate(order.shipAt, locale), fmtDate(order.arriveAt, locale))}</div>}
+              {live && <div className={s.shipLine}><TruckIcon size={20} />{t.shipsByPostSlot(fmtDate(order.shipAt, locale), fmtDate(order.arriveAt, locale), t.deliverySlots[order.timeSlot])}</div>}
             </section>
+
+            {order.canChangeSlot && (
+              <section className={a.card} aria-label={t.slotTitle}>
+                <TimeSlotPicker locale={locale} number={order.number} initial={order.timeSlot} legend={t.slotLegend(fmtDate(order.arriveAt, locale))} />
+                <span className={a.status}>{t.slotChangeUntil(fmtDateTime(order.closeAt, locale))}</span>
+              </section>
+            )}
 
             {order.canCancel ? (
               <section className={a.block}>

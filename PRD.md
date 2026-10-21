@@ -207,7 +207,7 @@ Three static pages, both languages. Content is the owner's responsibility; the s
 
 ### [~] 2.5 Order history
 
-**What the user sees.** List: drop name, order date, boxes, total, status in plain words (Confirmed → Baking → Shipped → Delivered — mapped from §5.2b). Order page: items, delivery address, ship date and expected arrival, gift message, payment method, Stripe receipt link, Japan Post tracking number once shipped, and a **Cancel order** button while the drop is still open (D22). "Order again" adds the same boxes to the cart if the current drop is open and includes them.
+**What the user sees.** List: drop name, order date, boxes, total, status in plain words (Confirmed → Baking → Shipped → Delivered — mapped from §5.2b). Order page: items, delivery address, ship date and expected arrival with the delivery time slot (changeable until the drop closes, D21), gift message, payment method, Stripe receipt link, Japan Post tracking number once shipped, and a **Cancel order** button while the drop is still open (D22). "Order again" adds the same boxes to the cart if the current drop is open and includes them.
 
 **Data.** Order, OrderItem (with price and name snapshots — box prices can change between drops).
 
@@ -261,12 +261,12 @@ Edit name / phone / address / locale. Change email (magic link sent to the *new*
 
 **Steps.**
 1. **Sign in** (2.1) — skipped if already signed in.
-2. **Delivery** — recipient name (prefilled with account name), phone, address (prefilled; 23-ward validation), gift message (3.2). Ship date and expected arrival are shown, not chosen; the delivery time slot is chosen here (D21; the field is not built yet).
+2. **Delivery** — recipient name (prefilled with account name), phone, address (prefilled; 23-ward validation), gift message (3.2). Ship date and expected arrival are shown, not chosen; the delivery time slot is chosen here (D21): 希望なし, 午前中, 12–14, 14–16, 16–18, 18–20 or 19–21 (Japan Post ゆうパック's slots), and can be changed from the order page until the drop closes.
 3. **Pay** (3.5).
 
-**Final confirmation screen.** Before payment, show everything the 2022 特商法 amendment requires on the 最終確認画面: items and quantities, unit and total prices 税込, shipping fee, payment method, delivery timing (ship date and expected arrival date), and the cancellation terms (D22) — with a "Place order" button whose label makes the commitment clear.
+**Final confirmation screen.** Before payment, show everything the 2022 特商法 amendment requires on the 最終確認画面: items and quantities, unit and total prices 税込, shipping fee, payment method, delivery timing (ship date, expected arrival date and the chosen time slot), and the cancellation terms (D22) — with a "Place order" button whose label makes the commitment clear.
 
-**Data.** Order (drop_id, customer_id, state, ship_to_name, phone, address snapshot, gift_message, subtotal, shipping_fee, total, locale), OrderItem (box_id, name snapshot, qty, unit_price), InventoryHold (drop_box_id, order_id, qty, expires_at).
+**Data.** Order (drop_id, customer_id, state, ship_to_name, phone, address snapshot, gift_message, delivery_time_slot, subtotal, shipping_fee, total, locale), OrderItem (box_id, name snapshot, qty, unit_price), InventoryHold (drop_box_id, order_id, qty, expires_at).
 
 **Hold TTL.** 10 minutes (D8). PayPay's redirect to the app and back is the slowest path; 10 minutes covers it.
 
@@ -433,7 +433,7 @@ Every customer-facing text field is stored in both languages (`name_ja`, `name_e
 | **AuthToken** | email, token_hash, code_hash, expires_at, used_at |
 | **Cart** | customer_id (nullable), drop_id, items JSON, updated_at |
 | **InventoryHold** | drop_box_id, order_id, qty, expires_at |
-| **Order** | number (human-readable, e.g. `AB-003-017` = drop 3, order 17), drop_id, customer_id, state, ship_to_name, phone, address snapshot, gift_message, subtotal, shipping_fee, total, locale, stripe_payment_intent_id, payment_method_type, paid_at, cancelled_at, packed_at, shipped_at, tracking_number, notes |
+| **Order** | number (human-readable, e.g. `AB-003-017` = drop 3, order 17), drop_id, customer_id, state, ship_to_name, phone, address snapshot, gift_message, delivery_time_slot (none, morning, 12_14 … 19_21; default none), subtotal, shipping_fee, total, locale, stripe_payment_intent_id, payment_method_type, paid_at, cancelled_at, packed_at, shipped_at, tracking_number, notes |
 | **OrderItem** | order_id, box_id, name snapshot, qty, unit_price |
 | **Refund** | order_id, amount, stripe_refund_id, reason, created_at |
 | **Announcement / AnnouncementSend** | title, body, audience, send_at, sent_at; per-recipient status |
@@ -525,6 +525,7 @@ Not decisions — things to verify when the relevant piece is built.
 
 ## Changelog
 
+- **2026-10-21** — D21's delivery time slot is built: chosen at checkout (Japan Post ゆうパック's six slots plus 希望なし; the 20–21 slot was withdrawn in 2024), shown on the final confirmation screen, the done step, the confirmation email and the order page, and changeable from the order page in the same window as free cancellation (until the drop closes), so a label export made after close can't go stale. Stored as `orders.delivery_time_slot`, default `none`.
 - **2026-10-20** — Three owner decisions overrode v1. D19: shipping is included in the box price, no separate fee; the cart bar, hero, chips, checkout, emails and order pages say "shipping included" and hide the fee line when the setting is 0 (the key stays so a fee could return). D21: the carrier is Japan Post, not Yamato, and customers choose a delivery time slot at checkout while the date stays the drop's ship date; the checkout field and the Japan Post label export are still to be built. Gift messages are handwritten, not printed. The legal pages and FAQ (1.7, 1.8) already say all of this.
 - **2026-10-19** — D23 changed from Amazon SES to Resend, provisioned through the Vercel Marketplace: one-command setup with the API key injected into the project, versus an AWS account, IAM credentials and a sandbox-exit request for SES. The sending domain still needs DKIM/SPF at GoDaddy and the carrier-address deliverability test before the first drop; the email transport sits behind one interface so SES stays available as a fallback if volume or cost ever warrant it.
 - **2026-10-06** — v0 component sketch written; fleshed out to v1 the same day; all decisions and open questions reviewed and settled (delivery date fixed to one ship date per drop; per-customer limit of 5 replaces a per-order max; exact stock counts; SES for email).

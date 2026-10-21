@@ -32,3 +32,6 @@ export function orderStatus(orderState: OrderState, dropState: DropState): Order
 export function canCancel(orderState: OrderState, dropState: DropState): boolean {
   return (orderState === "paid" || orderState === "pending_payment") && dropState === "open";
 }
+
+/** The delivery time slot can be changed in the same window as free cancellation, so the label export after close never goes stale (D21). */
+export const canChangeSlot = canCancel;

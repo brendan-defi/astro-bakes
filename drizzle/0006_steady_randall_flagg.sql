@@ -1,0 +1,2 @@
+CREATE TYPE "public"."delivery_time_slot" AS ENUM('none', 'morning', '12_14', '14_16', '16_18', '18_20', '19_21');--> statement-breakpoint
+ALTER TABLE "orders" ADD COLUMN "delivery_time_slot" "delivery_time_slot" DEFAULT 'none' NOT NULL;

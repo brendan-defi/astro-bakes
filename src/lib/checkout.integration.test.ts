@@ -109,6 +109,21 @@ describe.skipIf(!URL)("checkout write path", () => {
     expect(avail.get("banana-bread")!.left).toBe(0);
   });
 
+  it("stores the delivery time slot, treats a missing one as no preference, and rejects an unknown one (D21)", async () => {
+    const c = await customer("slot@test.invalid");
+    const a = await held();
+    const r1 = await placeOrder(input(a, 1, { timeSlot: "14_16" }), a, c);
+    expect(r1.ok && r1.order.timeSlot).toBe("14_16");
+    const [row1] = await db.select({ slot: schema.orders.deliveryTimeSlot }).from(schema.orders).where(eq(schema.orders.number, "AB-003-001"));
+    expect(row1.slot).toBe("14_16");
+    const b = await held();
+    const r2 = await placeOrder(input(b, 1), b, c); // no timeSlot at all: a tab from before slots existed
+    expect(r2.ok && r2.order.timeSlot).toBe("none");
+    const d = await held();
+    expect(await placeOrder(input(d, 1, { timeSlot: "20_21" as never }), d, c)).toEqual({ ok: false, error: "invalid" });
+    expect(await count("orders")).toBe(2);
+  });
+
   it("places an order, sells the stock, releases the holds and numbers in sequence", async () => {
     const id = await held();
     const r = await placeOrder(input(id, 1, { gift: "Happy birthday!" }), id, await customer("one@test.invalid"));
