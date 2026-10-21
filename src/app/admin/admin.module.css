@@ -57,11 +57,11 @@
 .codeRow > button { align-self: flex-start; }
 .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 14px; }
 
-/* ---------- Settings form ---------- */
-.settingsForm { display: flex; flex-direction: column; gap: 20px; max-width: 880px; }
-.settingsFields { display: flex; flex-direction: column; gap: 20px; min-width: 0; margin: 0; padding: 0; border: 0; }
-.settingsFields:disabled { opacity: 0.7; }
-.settingsSection { padding: 22px 26px 24px; }
+/* ---------- Forms (settings, boxes, items) ---------- */
+.adminForm { display: flex; flex-direction: column; gap: 20px; max-width: 880px; }
+.formFieldset { display: flex; flex-direction: column; gap: 20px; min-width: 0; margin: 0; padding: 0; border: 0; }
+.formFieldset:disabled { opacity: 0.7; }
+.formSection { padding: 22px 26px 24px; }
 .sectionTitle { font-size: 20px; font-weight: 900; }
 .sectionIntro { margin-top: 4px; font-size: 14px; color: var(--link-hover); }
 .fields { display: flex; flex-direction: column; gap: 14px; margin-top: 16px; }
@@ -71,7 +71,7 @@
 .fieldError { margin-top: 4px; font-size: 13px; font-weight: 700; color: #b0003a; }
 .fieldRow :global(.input)[aria-invalid="true"] { border-color: #b0003a; background: #fff3f6; }
 .checkRow { display: inline-flex; align-items: center; gap: 10px; font-weight: 700; cursor: pointer; padding-top: 4px; }
-.checkRow input { width: 20px; height: 20px; accent-color: var(--ink); }
+.checkRow input { flex: none; width: 20px; height: 20px; accent-color: var(--ink); }
 .withUnit { display: flex; align-items: center; gap: 10px; font-weight: 700; }
 .fixedValue { padding-top: 10px; font-weight: 700; }
 .fieldRow > .label { padding-top: 12px; }
@@ -84,3 +84,26 @@
 }
 .statusOk { font-size: 14px; font-weight: 700; color: var(--ok-green); }
 .statusError { font-size: 14px; font-weight: 700; color: #b0003a; }
+
+/* ---------- Catalogue (boxes & items) ---------- */
+.tabs { display: flex; gap: 8px; margin-bottom: 20px; }
+.tab { padding: 6px 16px; border: var(--border-thin); border-radius: var(--radius-pill); background: var(--white); font-weight: 700; text-decoration: none; }
+.tab[aria-current="page"] { background: var(--ink); color: var(--white); }
+.tab[aria-current="page"]:hover { color: var(--white); }
+.rowLink { font-weight: 700; }
+.sub { display: block; font-size: 13px; color: var(--link-hover); }
+.pill { display: inline-block; padding: 1px 10px; border-radius: var(--radius-pill); border: 1.5px solid var(--ink); font-size: 12px; font-weight: 900; }
+.pillOn { background: var(--ok-green-bg); color: var(--ok-green); border-color: var(--ok-green); }
+.pillOff { background: var(--lilac-soft); color: var(--link-hover); border-color: var(--link-hover); }
+.empty { padding: 28px; text-align: center; }
+.twoCol { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.twoCol > div { display: flex; flex-direction: column; gap: 4px; }
+.lang { font-size: 12px; font-weight: 900; letter-spacing: 0.06em; color: var(--link-hover); }
+.recipe { display: flex; flex-direction: column; gap: 8px; }
+.recipeRow { display: grid; grid-template-columns: minmax(0, 1fr) 96px auto; gap: 8px; align-items: center; }
+.recipeRow :global(.input) { min-height: 44px; }
+.allergenGroup { border: 0; padding: 0; margin: 0 0 12px; }
+.allergenGroup legend { font-size: 13px; font-weight: 900; margin-bottom: 6px; }
+.allergenGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 6px 14px; }
+.allergenGrid .checkRow { font-weight: 500; padding-top: 0; white-space: nowrap; }
+.slugValue { padding-top: 10px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 15px; }

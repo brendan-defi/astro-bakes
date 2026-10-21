@@ -65,10 +65,10 @@ export function SettingsForm({ initial }: { initial: Record<string, SettingValue
   }
 
   return (
-    <form onSubmit={submit} noValidate className={s.settingsForm} aria-busy={busy}>
-      <fieldset disabled={busy} className={s.settingsFields}>
+    <form onSubmit={submit} noValidate className={s.adminForm} aria-busy={busy}>
+      <fieldset disabled={busy} className={s.formFieldset}>
         {SETTINGS_SECTIONS.map((section) => (
-          <section key={section.id} aria-labelledby={`sec-${section.id}`} className={`panel ${s.settingsSection}`}>
+          <section key={section.id} aria-labelledby={`sec-${section.id}`} className={`panel ${s.formSection}`}>
             <h2 id={`sec-${section.id}`} className={s.sectionTitle}>{section.title}</h2>
             {section.intro && <p className={s.sectionIntro}>{section.intro}</p>}
             <div className={s.fields}>

@@ -1,4 +1,5 @@
 import type { Locale } from "./data";
+import { ALLERGENS } from "./allergens";
 import type { DeliverySlot } from "./delivery-slots";
 
 /**
@@ -417,26 +418,8 @@ const en = {
 
 export type Strings = typeof en;
 
-/** Japanese labels for box allergens, keyed by the stored English name: the 8 required items (食品表示法) plus common recommended ones. */
-const ALLERGENS_JA: Record<string, string> = {
-  egg: "卵",
-  milk: "乳",
-  wheat: "小麦",
-  walnut: "くるみ",
-  peanut: "落花生",
-  buckwheat: "そば",
-  shrimp: "えび",
-  crab: "かに",
-  almond: "アーモンド",
-  cashew: "カシューナッツ",
-  macadamia: "マカダミアナッツ",
-  soy: "大豆",
-  sesame: "ごま",
-  banana: "バナナ",
-  orange: "オレンジ",
-  apple: "りんご",
-  gelatin: "ゼラチン",
-};
+/** Japanese labels for box allergens, keyed by the stored English name (lower-cased): the 8 required and 20 recommended (allergens.ts). */
+const ALLERGENS_JA: Record<string, string> = Object.fromEntries(ALLERGENS.map((a) => [a.name.toLowerCase(), a.ja]));
 
 const ja: Strings = {
   // nav
