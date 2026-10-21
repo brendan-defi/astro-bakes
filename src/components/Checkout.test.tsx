@@ -1,6 +1,6 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { CartProvider } from "@/lib/cart";
+import { CartProvider, storageKey } from "@/lib/cart";
 import { boxes } from "@/lib/data";
 import { readHold, startHold } from "@/lib/hold";
 import { getStrings } from "@/lib/i18n";
@@ -304,5 +304,45 @@ describe("Checkout sign-in: leaving during the \"you're in\" moment", () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
     expect(replace).not.toHaveBeenCalled();
     expect(refresh).not.toHaveBeenCalled();
+  });
+});
+
+describe("Checkout's cart step with a box slugged like an Object.prototype name", () => {
+  // The box editor accepts any lower-case slug; "constructor" must behave like any other box here too.
+  const odd = { ...boxes[0], id: "constructor", name: "Constructor Box", left: 5, maxPerCustomer: 5 };
+  const plain = { ...boxes[0], left: 5, maxPerCustomer: 5 };
+  const stored = () => JSON.parse(window.localStorage.getItem(storageKey("drop-03")) ?? "null");
+  function mountCart(box: typeof odd) {
+    window.localStorage.setItem(storageKey("drop-03"), JSON.stringify({ [box.id]: 1 }));
+    nav.params = new URLSearchParams();
+    render(
+      <CartProvider dropId="drop-03" boxes={[box]} shippingFee={0}>
+        <Checkout locale="en" drop={drop} lineUrl="#" held={null} customer={null} />
+      </CartProvider>,
+    );
+  }
+
+  for (const box of [odd, plain]) {
+    for (const which of [0, 1]) {
+      it(`adds one with the ${which === 0 ? "desktop" : "mobile"} stepper before any re-check (${box.id})`, async () => {
+        mountCart(box);
+        await waitFor(() => expect(screen.getAllByRole("button", { name: t.addOne }).length).toBe(2));
+        fireEvent.click(screen.getAllByRole("button", { name: t.addOne })[which]);
+        await waitFor(() => expect(stored()).toEqual({ [box.id]: 2 }));
+        expect(screen.queryByText(t.emptyTitle)).toBeNull();
+      });
+    }
+  }
+
+  it("still honours the server's stock after a re-check, including a zero", async () => {
+    actions.startCheckoutAction.mockReset().mockResolvedValueOnce({ ok: true, left: { constructor: 1 }, changes: [], expiresAt: Date.now() + 600_000, checkoutId: CHECKOUT_ID, revision: 1 });
+    mountCart(odd);
+    await waitFor(() => expect(screen.getAllByRole("button", { name: t.addOne }).length).toBe(2));
+    fireEvent.click(screen.getAllByRole("button", { name: /^Checkout/ })[0]);
+    // One left: the steppers stop at the one already in the cart.
+    await waitFor(() => expect(screen.getAllByRole("button", { name: t.addOne }).every((b) => (b as HTMLButtonElement).disabled)).toBe(true));
+    actions.startCheckoutAction.mockResolvedValueOnce({ ok: true, left: { constructor: 0 }, changes: [{ kind: "gone", box: "constructor", from: 1 }] });
+    fireEvent.click(screen.getAllByRole("button", { name: /^Checkout/ })[0]);
+    await waitFor(() => expect(stored()).toEqual({}));
   });
 });

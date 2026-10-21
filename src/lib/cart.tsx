@@ -159,7 +159,8 @@ export function useCart(): CartValue {
     const saved = wholeQuantities(parseQuantities(readStored("local", key)));
     const shown = Math.min(maxFor(box), qtyOf(saved, id));
     const next = Math.max(0, Math.min(maxFor(box), Math.floor(to(shown))));
-    if (next === shown) return;
+    // A non-number (a bad stock limit upstream) changes nothing, rather than reading as zero and removing the box.
+    if (!Number.isFinite(next) || next === shown) return;
     if (next > 0) saved[id] = next;
     else delete saved[id];
     writeStored("local", key, JSON.stringify(saved));

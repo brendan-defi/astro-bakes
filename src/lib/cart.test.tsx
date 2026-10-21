@@ -263,4 +263,3 @@ describe("boxes slugged like Object.prototype names", () => {
     expect(mergeQuantities({}, { constructor: 2 }, [box({ id: "constructor" })])).toEqual({ constructor: 2 });
   });
 });
-
