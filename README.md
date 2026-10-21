@@ -43,7 +43,7 @@ pnpm db:seed       # load the sample catalogue, Drop 03 / 04, settings, sample c
 pnpm db:studio     # browse the data
 ```
 
-The homepage reads drops, boxes and settings from the database (`src/lib/drops.ts`). The notify-me forms (PRD 1.5) store signups in `subscribers` through `subscribeAction` (`src/lib/subscribe.ts`); signed-in customers get a status line or a one-tap opt-in instead, backed by the same preference as the account page. Tables: customers, addresses, subscribers, auth_tokens, sessions, notification_log, refunds, drops, boxes, items, box_items, drop_boxes, settings, carts, inventory_holds, orders, order_items.
+The homepage reads drops, boxes and settings from the database (`src/lib/drops.ts`). The notify-me forms (PRD 1.5) store signups in `subscribers` through `subscribeAction` (`src/lib/subscribe.ts`); signed-in customers get a status line or a one-tap opt-in instead, backed by the same preference as the account page. A visitor (hashed IP) can sign up 10 addresses an hour; each newly active address gets a welcome email with a one-click unsubscribe. Unsubscribe links (`src/lib/unsubscribe.ts`) are signed with **`UNSUBSCRIBE_SECRET`** (32+ characters, set in Vercel Production and Preview); locally a fixed development secret is used, and on Vercel without it no link is made and no welcome email is sent. `/{locale}/unsubscribe` asks before doing anything, and `POST /api/unsubscribe` is the RFC 8058 one-click endpoint for the `List-Unsubscribe` header; both mark the subscriber unsubscribed and switch a customer's opt-in off. Tables: customers, addresses, subscribers, auth_tokens, sessions, notification_log, refunds, drops, boxes, items, box_items, drop_boxes, settings, carts, inventory_holds, orders, order_items.
 
 ## Sign-in
 

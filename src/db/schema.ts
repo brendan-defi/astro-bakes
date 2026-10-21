@@ -106,11 +106,13 @@ export const subscribers = pgTable("subscribers", {
   /** Where the signup came from: homepage, checkout, account, admin. */
   source: text().notNull().default("homepage"),
   consentedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  /** Hash of the IP the latest consent came from (hashIp), never the address itself: the per-visitor sign-up limit counts these, and it's part of the consent record. */
+  consentIpHash: text(),
   unsubscribedAt: timestamp({ withTimezone: true }),
   /** Set when the subscriber later creates an account (PRD 2.7). */
   convertedCustomerId: uuid().references(() => customers.id, { onDelete: "set null" }),
   ...timestamps,
-});
+}, (t) => [index("subscribers_consent_ip_idx").on(t.consentIpHash, t.consentedAt)]);
 
 /** Magic link + 6-digit code with a 15-minute expiry (D13, PRD 2.1). Only hashes are stored. */
 export const authTokens = pgTable(

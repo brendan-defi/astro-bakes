@@ -50,6 +50,14 @@ describe("NotifyForm", () => {
     expect(screen.queryByRole("status")).toBeNull();
   });
 
+  it("tells a visitor who has hit the sign-up limit to try again later", async () => {
+    actions.subscribeAction.mockResolvedValue({ ok: false, error: "rate_limited" });
+    mount();
+    await submitWith("you@example.com");
+    expect(screen.getByRole("alert").textContent).toBe(t.notifyRateLimited);
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
   it("stays quiet when the email is empty", async () => {
     mount("section");
     await act(async () => { fireEvent.submit(screen.getByRole("button", { name: "Notify me" }).closest("form")!); });

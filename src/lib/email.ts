@@ -24,6 +24,8 @@ export interface OutgoingEmail extends Email {
    * customer, on a custom-order request to the owner). Internal emails to the owner get none.
    */
   replyTo?: string;
+  /** Extra headers, e.g. List-Unsubscribe on drop emails (unsubscribe.ts). */
+  headers?: Record<string, string>;
   customerId?: string | null;
   orderId?: string | null;
 }
@@ -37,7 +39,7 @@ const resendTransport: EmailTransport = async (email, from) => {
   const resend = new Resend(key);
   // The SDK reports API errors in the result, not by throwing.
   const { data, error } = await resend.emails.send(
-    { from, to: [email.to], subject: email.subject, html: email.html, text: email.text, ...(email.replyTo ? { replyTo: email.replyTo } : {}) },
+    { from, to: [email.to], subject: email.subject, html: email.html, text: email.text, ...(email.replyTo ? { replyTo: email.replyTo } : {}), ...(email.headers && Object.keys(email.headers).length ? { headers: email.headers } : {}) },
     { idempotencyKey: email.idempotencyKey },
   );
   if (error) return { ok: false, error: `${error.name}: ${error.message}` };

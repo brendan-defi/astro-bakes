@@ -4,12 +4,16 @@ import { eq, sql } from "drizzle-orm";
 import * as schema from "@/db/schema";
 import { signIn } from "@/lib/auth";
 import { lockEmail } from "@/lib/email-lock";
-import { subscribe } from "@/lib/subscribe";
-import { clearTestData, closeTestDb, resetDatabase, testDb, TEST_DATABASE_URL } from "@/test/db";
+import { hashIp } from "@/lib/auth-rules";
+import { SIGNUPS_PER_IP_PER_HOUR, subscribe } from "@/lib/subscribe";
+import { unsubscribe, verifyUnsubscribe } from "@/lib/unsubscribe";
+import { captureEmail, clearTestData, closeTestDb, resetDatabase, testDb, TEST_DATABASE_URL } from "@/test/db";
 
 /** Notify-me signups (PRD 1.5) against a real Postgres (TEST_DATABASE_URL). */
 // Room for a held transaction, a second one, and the lock-queue polling below at the same time.
 const { pool, db } = testDb(4);
+const mail = captureEmail();
+const welcomes = () => mail.sent.filter((m) => m.type === "welcome");
 
 /**
  * The race tests arrange their ordering by what Postgres reports, not by timers: they wait until a backend is
@@ -63,7 +67,8 @@ describe.skipIf(!TEST_DATABASE_URL)("subscribe", () => {
     await resetDatabase(db);
   });
   beforeEach(async () => {
-    await clearTestData(db, ["subscribers"]);
+    mail.reset();
+    await clearTestData(db, ["subscribers", "notification_log"]);
   });
   afterAll(async () => {
     await clearTestData(db, ["subscribers"]);
@@ -72,15 +77,15 @@ describe.skipIf(!TEST_DATABASE_URL)("subscribe", () => {
 
   it("stores the signup with its language, source and consent time, normalising the address", async () => {
     const at = new Date("2026-10-21T03:00:00Z");
-    expect(await subscribe({ email: "  Hanako@Test.Invalid ", locale: "ja" }, at)).toEqual({ ok: true });
+    expect(await subscribe({ email: "  Hanako@Test.Invalid ", locale: "ja" }, { now: at })).toEqual({ ok: true });
     expect(await row("hanako@test.invalid")).toMatchObject({ locale: "ja", source: "homepage", consentedAt: at, unsubscribedAt: null, convertedCustomerId: null });
   });
 
   it("keeps one row per email, refreshing consent and language, and brings back an address that unsubscribed", async () => {
-    await subscribe({ email: "again@test.invalid", locale: "en" }, new Date("2026-10-01T00:00:00Z"));
+    await subscribe({ email: "again@test.invalid", locale: "en" }, { now: new Date("2026-10-01T00:00:00Z") });
     await db.update(schema.subscribers).set({ unsubscribedAt: new Date("2026-10-05T00:00:00Z") }).where(eq(schema.subscribers.email, "again@test.invalid"));
     const later = new Date("2026-10-21T00:00:00Z");
-    expect(await subscribe({ email: "AGAIN@test.invalid", locale: "ja" }, later)).toEqual({ ok: true });
+    expect(await subscribe({ email: "AGAIN@test.invalid", locale: "ja" }, { now: later })).toEqual({ ok: true });
     const rows = await db.select().from(schema.subscribers);
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ locale: "ja", consentedAt: later, unsubscribedAt: null, source: "homepage" });
@@ -157,5 +162,82 @@ describe.skipIf(!TEST_DATABASE_URL)("subscribe", () => {
     await Promise.all([signup.promise, signin.promise]);
     expect(bothQueued).toBe(true); // both waited behind the holder
     expectConsistent(await records(email));
+  });
+
+  it("welcomes a new address once, in its language, with a one-click way out that works", async () => {
+    expect(await subscribe({ email: "new@test.invalid", locale: "ja" })).toEqual({ ok: true });
+    expect(welcomes()).toHaveLength(1);
+    const m = welcomes()[0];
+    expect(m.to).toBe("new@test.invalid");
+    expect(m.subject).toContain("登録しました");
+    expect(m.headers?.["List-Unsubscribe-Post"]).toBe("List-Unsubscribe=One-Click");
+    const oneClick = new URL(m.headers!["List-Unsubscribe"].slice(1, -1));
+    expect(oneClick.pathname).toBe("/api/unsubscribe");
+    expect(verifyUnsubscribe(oneClick.searchParams.get("e"), oneClick.searchParams.get("t"))).toBe("new@test.invalid");
+    const page = new URL(m.text.match(/https:\/\/\S+\/ja\/unsubscribe\?\S+/)![0]);
+    expect(verifyUnsubscribe(page.searchParams.get("e"), page.searchParams.get("t"))).toBe("new@test.invalid");
+    expect(m.text).toContain("お心当たりがない場合");
+  });
+
+  it("doesn't welcome an address that's already on the list, but does welcome one coming back after unsubscribing", async () => {
+    await subscribe({ email: "twice@test.invalid", locale: "en" });
+    await subscribe({ email: "twice@test.invalid", locale: "en" });
+    expect(welcomes()).toHaveLength(1);
+    await unsubscribe("twice@test.invalid");
+    await subscribe({ email: "Twice@test.invalid", locale: "en" });
+    expect(welcomes()).toHaveLength(2);
+    expect(new Set(welcomes().map((m) => m.idempotencyKey)).size).toBe(2);
+  });
+
+  it("sends nothing for a customer's address or a bot", async () => {
+    await db.insert(schema.customers).values({ email: "acct@test.invalid", marketingOptIn: true });
+    await subscribe({ email: "acct@test.invalid", locale: "en" });
+    await subscribe({ email: "bot2@test.invalid", locale: "en", website: "x" });
+    expect(mail.sent).toHaveLength(0);
+  });
+
+  it("won't send a welcome without a way out: no secret on Vercel means no email, though the sign-up is kept", async () => {
+    const saved = { secret: process.env.UNSUBSCRIBE_SECRET, vercel: process.env.VERCEL_ENV };
+    delete process.env.UNSUBSCRIBE_SECRET;
+    process.env.VERCEL_ENV = "preview";
+    try {
+      expect(await subscribe({ email: "nosecret@test.invalid", locale: "en" })).toEqual({ ok: true });
+      expect(mail.sent).toHaveLength(0);
+      expect(await row("nosecret@test.invalid")).toBeDefined();
+    } finally {
+      if (saved.secret === undefined) delete process.env.UNSUBSCRIBE_SECRET; else process.env.UNSUBSCRIBE_SECRET = saved.secret;
+      if (saved.vercel === undefined) delete process.env.VERCEL_ENV; else process.env.VERCEL_ENV = saved.vercel;
+    }
+  });
+
+  it("limits sign-ups per visitor per hour, counting only that visitor and only the last hour, and stores only a hash", async () => {
+    const t0 = new Date("2026-10-21T10:00:00Z");
+    for (let i = 0; i < SIGNUPS_PER_IP_PER_HOUR; i++) {
+      expect(await subscribe({ email: `n${i}@test.invalid`, locale: "en" }, { ip: "203.0.113.7", now: t0 })).toEqual({ ok: true });
+    }
+    expect(await subscribe({ email: "one-more@test.invalid", locale: "en" }, { ip: "203.0.113.7", now: t0 })).toEqual({ ok: false, error: "rate_limited" });
+    expect(await row("one-more@test.invalid")).toBeUndefined();
+    expect(await subscribe({ email: "elsewhere@test.invalid", locale: "en" }, { ip: "198.51.100.2", now: t0 })).toEqual({ ok: true });
+    expect(await subscribe({ email: "later@test.invalid", locale: "en" }, { ip: "203.0.113.7", now: new Date(t0.getTime() + 61 * 60_000) })).toEqual({ ok: true });
+    const stored = await row("n0@test.invalid");
+    expect(stored.consentIpHash).toBe(hashIp("203.0.113.7"));
+    expect(stored.consentIpHash).not.toContain("203.0.113.7");
+    for (let i = 0; i < SIGNUPS_PER_IP_PER_HOUR + 2; i++) {
+      expect(await subscribe({ email: `local${i}@test.invalid`, locale: "en" }, { now: t0 })).toEqual({ ok: true }); // no IP (local dev): no limit
+    }
+  });
+
+  it("unsubscribes a subscriber, a customer or both, by any spelling of the address, and repeating it is harmless", async () => {
+    await subscribe({ email: "sub@test.invalid", locale: "en" });
+    await db.insert(schema.customers).values([{ email: "cust@test.invalid", marketingOptIn: true }, { email: "both@test.invalid", marketingOptIn: true }]);
+    await db.insert(schema.subscribers).values({ email: "both@test.invalid" });
+    expect(await unsubscribe(" SUB@test.invalid ")).toEqual({ subscriber: true, customer: false });
+    expect(await unsubscribe("cust@test.invalid")).toEqual({ subscriber: false, customer: true });
+    expect(await unsubscribe("both@test.invalid")).toEqual({ subscriber: true, customer: true });
+    expect(await unsubscribe("both@test.invalid")).toEqual({ subscriber: false, customer: false });
+    expect(await unsubscribe("nobody@test.invalid")).toEqual({ subscriber: false, customer: false });
+    expect((await row("sub@test.invalid")).unsubscribedAt).not.toBeNull();
+    const [c] = await db.select().from(schema.customers).where(eq(schema.customers.email, "cust@test.invalid"));
+    expect(c.marketingOptIn).toBe(false);
   });
 });

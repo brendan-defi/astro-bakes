@@ -29,3 +29,6 @@
   .faqItem p { font-size: 16px; }
   .faqQ { font-size: 22px; }
 }
+
+/* Unsubscribe page and other short notices on the reading chrome. */
+.lead { font-size: 16px; font-weight: 500; line-height: 1.7; }

@@ -200,3 +200,30 @@ export function customOrderRequestEmail(opts: { request: CustomOrderRequest; loc
   const text = `New party / custom order request from the website. It isn't an order until you confirm it with them by email.\n\n${rows.map(([k, v]) => `${k}: ${v}`).join("\n")}\n\nWhat they have in mind:\n${r.details}\n\nReply to this email to answer ${r.name} directly. Nothing has been booked or charged.`;
   return { subject, html: layout("en", subject, body), text };
 }
+
+/**
+ * Sent once when an address joins the drop-email list (PRD 1.5). A plain confirmation, not a promotion, with
+ * the way out next to it: anyone added without asking can leave in one click. The footer names the sender,
+ * the contact address and the 特商法 page, as 特定電子メール法 asks of mail like this.
+ */
+export function welcomeEmail(opts: { locale: Locale; unsubscribeUrl: string; senderName: string; contactEmail: string }): Email {
+  const { locale, unsubscribeUrl, senderName, contactEmail } = opts;
+  const legalUrl = `${SITE}/${locale}/legal/tokushoho`;
+  const link = (href: string, label: string) => `<a href="${esc(href)}" style="color:#2A1B5E">${esc(label)}</a>`;
+  if (locale === "ja") {
+    const subject = "Astro Bakes のお知らせメールに登録しました";
+    const body = `<p style="margin:0 0 14px">Astro Bakes のドロップのお知らせに登録しました。次のドロップが決まったときと、受付が始まったときにメールでお知らせします。</p>
+<p style="margin:0 0 14px">お知らせはドロップのことだけです。</p>
+<p style="margin:0 0 20px;font-size:14px">お心当たりがない場合や、配信を停止したい場合は、こちらからワンクリックで停止できます：${link(unsubscribeUrl, "配信を停止する")}</p>
+<p style="margin:0;font-size:12px;color:#5b4f86">送信者：${esc(senderName)}<br>お問い合わせ：${link(`mailto:${contactEmail}`, contactEmail)}<br>${link(legalUrl, "特定商取引法に基づく表記")}</p>`;
+    const text = `Astro Bakes のドロップのお知らせに登録しました。次のドロップが決まったときと、受付が始まったときにメールでお知らせします。\nお知らせはドロップのことだけです。\n\nお心当たりがない場合や、配信を停止したい場合は、こちらからワンクリックで停止できます：\n${unsubscribeUrl}\n\n送信者：${senderName}\nお問い合わせ：${contactEmail}\n特定商取引法に基づく表記：${legalUrl}`;
+    return { subject, html: layout(locale, subject, body), text };
+  }
+  const subject = "You're on the Astro Bakes list";
+  const body = `<p style="margin:0 0 14px">You're on the list for Astro Bakes drop emails. We'll write when the next drop is announced and again when it opens.</p>
+<p style="margin:0 0 14px">That's all we'll email you about: drops.</p>
+<p style="margin:0 0 20px;font-size:14px">Didn't sign up, or changed your mind? Unsubscribe in one click: ${link(unsubscribeUrl, "unsubscribe")}</p>
+<p style="margin:0;font-size:12px;color:#5b4f86">From ${esc(senderName)}<br>Questions: ${link(`mailto:${contactEmail}`, contactEmail)}<br>${link(legalUrl, "特定商取引法に基づく表記 (commercial disclosure)")}</p>`;
+  const text = `You're on the list for Astro Bakes drop emails. We'll write when the next drop is announced and again when it opens.\nThat's all we'll email you about: drops.\n\nDidn't sign up, or changed your mind? Unsubscribe in one click:\n${unsubscribeUrl}\n\nFrom ${senderName}\nQuestions: ${contactEmail}\n特定商取引法に基づく表記: ${legalUrl}`;
+  return { subject, html: layout(locale, subject, body), text };
+}

@@ -64,6 +64,8 @@ const SAMPLES: Samples = {
   notifyLabelNext: ["Drop 04"],
   onListFor: ["Drop 04"],
   optInNext: ["Drop 04"],
+  unsubscribeConfirm: ["y***@example.com"],
+  unsubscribeInvalidBody: ["hello@astrobakes.xyz"],
   bubbleScheduled: ["Sunday", "10"],
   comingIn: ["Drop 04"],
   orderFrom: ["Sun, Nov 8 · 10:00 JST"],
