@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import type { Box, Locale } from "@/lib/data";
 import { placeOrderAction, startCheckoutAction } from "@/app/[locale]/checkout/actions";
 import { useSignInFlow } from "@/lib/use-sign-in";
@@ -12,7 +12,8 @@ import { getStrings, type Strings } from "@/lib/i18n";
 import { useCart, type CartLine } from "@/lib/cart";
 import { cleanPhoneInput, normalisePhone } from "@/lib/phone";
 import { cleanPostalInput, lookupPostal, normalisePostal, outsideWards, type PostalHit } from "@/lib/postal";
-import { clearHold, readHold, startHold, type Hold } from "@/lib/hold";
+import { clearHold, readHold, startHold, useHold } from "@/lib/hold";
+import { useStored, writeStored } from "@/lib/stored";
 import { celebrate } from "@/lib/particles";
 import { formatReservationRef, parseReservationRef, reservationStatus, reservedLines, totals, type Reservation } from "@/lib/reservation";
 import { CleanInput } from "./CleanInput";
@@ -41,7 +42,11 @@ export interface CheckoutDrop { id: string; number: number; name: string; closeA
 /** The signed-in customer's saved details, for prefill (PRD 2.3). */
 export interface CheckoutCustomer { email: string; name: string; phone: string; postal: string; line1: string; line2: string }
 
+/** The order this tab placed, in sessionStorage so the done step survives a reload. */
 const ORDER_KEY = "ab-last-order";
+function parsePlaced(raw: string | null): PlacedOrder | null {
+  try { return raw ? (JSON.parse(raw) as PlacedOrder) : null; } catch { return null; }
+}
 
 /** Render a template string with one bolded argument. */
 function rich(template: (arg: string) => string, arg: string) {
@@ -125,10 +130,24 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
 
   // ---- hold countdown (D8) ----
   const [now, setNow] = useState(() => Date.now());
-  const [hold, setHold] = useState<Hold | null>(null);
+  const hold = useHold();
   // Set when the server rejects the reservation, independent of what the local clock says.
   const [serverExpired, setServerExpired] = useState(false);
-  useEffect(() => {
+  // Another tab took or replaced the browser's reservation: this tab must review the cart (PRD 3.3).
+  const leaveStale = useEffectEvent(() => {
+    clearHold();
+    setNotice(t.cartChanged);
+    go("cart");
+  });
+  // This tab reserved, but the server no longer holds anything: expired or already ordered.
+  const reservationGone = useEffectEvent(() => {
+    clearHold();
+    setServerExpired(true);
+  });
+  // Square this tab's hold with the server's reservation whenever a checkout step or the server's answer arrives, and
+  // before paint, so an out-of-date saved hold never shows. Only then, not on every render: placing an order clears
+  // the hold before the done step arrives, and that mustn't look like another tab taking the reservation.
+  useLayoutEffect(() => {
     if (!inCheckout) return;
     let h = readHold();
     const status = reservationStatus(h, held, parseReservationRef(sp.get("r")));
@@ -136,26 +155,18 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
       // Opened from the sign-in email in a new tab: the link names this browser's own reservation, and it still matches.
       h = startHold({ expires: held.expiresAt, checkoutId: held.checkoutId, revision: held.revision });
     } else if (status === "stale") {
-      // Another tab took or replaced the browser's reservation: this tab must review the cart (PRD 3.3).
-      clearHold();
-      setHold(null);
-      setNotice(t.cartChanged);
-      go("cart");
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- found on arrival (reload, Back, the email link): no handler to do it in
+      leaveStale();
       return;
     }
     if (status === "none" && h?.checkoutId) {
-      // This tab reserved, but the server no longer holds anything: expired or already ordered.
-      clearHold();
-      setHold(null);
-      setServerExpired(true);
+      reservationGone();
       return;
     }
-    if (status === "ok" && held) h = startHold({ ...h, expires: held.expiresAt });
-    else if (!h || h.expires < Date.now()) h = startHold();
-    setHold(h);
+    if (status === "ok" && held) startHold({ ...h, expires: held.expiresAt });
+    else if (!h || h.expires < Date.now()) startHold();
     const id = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inCheckout, held, sp]);
   const holdLeft = hold != null ? hold.expires - now : null;
   const holdExpired = inCheckout && (serverExpired || (holdLeft != null && holdLeft <= 0));
@@ -215,15 +226,14 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
   const [hit, setHit] = useState<PostalHit | null>(() => (customer?.postal ? lookupPostal(customer.postal) : null));
   const [postalTried, setPostalTried] = useState(!!customer?.postal);
   const [prefilledFor, setPrefilledFor] = useState<string | null>(customer?.email ?? null);
-  useEffect(() => {
-    // The session arrives after the code step: prefill once from the saved details, without clobbering edits.
-    if (customer && customer.email !== prefilledFor) {
-      setAddr(prefill(customer));
-      setHit(customer.postal ? lookupPostal(customer.postal) : null);
-      setPostalTried(!!customer.postal);
-      setPrefilledFor(customer.email);
-    }
-  }, [customer, prefilledFor]);
+  // The session arrives after the code step: prefill once from the saved details, without clobbering edits.
+  // Adjusted while rendering rather than in an effect, so the empty form never paints in between.
+  if (customer && customer.email !== prefilledFor) {
+    setAddr(prefill(customer));
+    setHit(customer.postal ? lookupPostal(customer.postal) : null);
+    setPostalTried(!!customer.postal);
+    setPrefilledFor(customer.email);
+  }
   const [gift, setGift] = useState(false);
   const [giftMsg, setGiftMsg] = useState("");
   // A blank message means no card; the example text is only a placeholder.
@@ -250,11 +260,9 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
   }
 
   // ---- place order ----
-  const [placed, setPlaced] = useState<PlacedOrder | null>(null);
-  useEffect(() => {
-    if (step !== "done" || placed) return;
-    try { const raw = window.sessionStorage.getItem(ORDER_KEY); if (raw) setPlaced(JSON.parse(raw)); } catch {}
-  }, [step, placed]);
+  const placedRaw = useStored("session", ORDER_KEY);
+  const lastOrder = useMemo(() => parsePlaced(placedRaw), [placedRaw]);
+  const placed = step === "done" ? lastOrder : null;
   // Celebrate once, when this tab places the order: not when a reload restores it from sessionStorage.
   const celebrateNext = useRef(false);
   const doneAvatarRef = useRef<HTMLDivElement>(null);
@@ -295,9 +303,8 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
         return;
       }
       const order: PlacedOrder = { ...res.order, address: addr, hit, gift: giftText };
-      try { window.sessionStorage.setItem(ORDER_KEY, JSON.stringify(order)); } catch {}
       celebrateNext.current = true;
-      setPlaced(order);
+      writeStored("session", ORDER_KEY, JSON.stringify(order));
       clearHold();
       cart.clear();
       go("done");
@@ -329,7 +336,7 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
   const doneAddr = placed ? `${placed.hit.prefecture}${placed.hit.city}${placed.hit.town}${placed.address.line1}` : shortAddress;
 
   const dotClass = (n: number) => `${s.dot} ${n < idx ? s.dotDone : n === idx ? s.dotCurrent : ""}`;
-  const StepList = ({ cls }: { cls: string }) => (
+  const stepList = (cls: string) => (
     <ol aria-label={t.checkoutSteps} className={cls}>
       <li className={s.stepItem}><span className={dotClass(1)}>1</span>{t.stepSignIn}</li>
       <li aria-hidden className={s.dash} />
@@ -372,7 +379,7 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
           {inCheckout && <button type="button" aria-label={t.back} onClick={back} className={s.iconBtn}><ArrowLeftIcon /></button>}
           {step === "done" && <span className={s.spacer} />}
           <Logo href={home} label={t.home} size="sm" />
-          {inCheckout && <StepList cls={s.stepsTop} />}
+          {inCheckout && stepList(s.stepsTop)}
           {holdChip}
           {!inCheckout && <span className={s.spacer} />}
           {isCart && <Link href={home} className={s.headerLink}><ArrowLeftIcon size={18} />{t.keepShopping}</Link>}
@@ -380,7 +387,7 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
         </div>
       </header>
 
-      {inCheckout && <StepList cls={s.steps} />}
+      {inCheckout && stepList(s.steps)}
 
       {(step === "signin" || step === "code" || step === "delivery") && (
         <div className={s.pinned}>
@@ -405,7 +412,7 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
                 <div className="alert-title"><WarningIcon /><div className={`display`} style={{ fontSize: 18, lineHeight: 1.15 }}>{t.holdExpiredTitle}</div></div>
                 <div className="small w7" style={{ fontSize: 14 }}>{t.holdExpiredBody}</div>
               </div>
-              <button type="button" className="btn btn-primary btn-block" onClick={() => { clearHold(); setHold(null); setServerExpired(false); go("cart"); }}>{t.backToCart}</button>
+              <button type="button" className="btn btn-primary btn-block" onClick={() => { clearHold(); setServerExpired(false); go("cart"); }}>{t.backToCart}</button>
             </>
           ) : (
             <>

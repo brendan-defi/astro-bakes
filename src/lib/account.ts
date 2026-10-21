@@ -1,6 +1,6 @@
 import "server-only";
 import { and, desc, eq, sql } from "drizzle-orm";
-import { getDb, type Db } from "@/db";
+import { getDb } from "@/db";
 import { addresses, customers, dropBoxes, drops, inventoryHolds, orders, refunds } from "@/db/schema";
 import { arrivalDate, effectiveState, type Box, type Locale } from "./data";
 import { validateDelivery, type DeliveryInput } from "./checkout-rules";
@@ -19,7 +19,6 @@ import { arrivalOffsetDays } from "./settings";
  * signed-in customer's id.
  */
 
-type Conn = Db | Parameters<Parameters<Db["transaction"]>[0]>[0];
 // Arrival only decides shipped vs complete (a few days later), which nothing here depends on; the default offset will do.
 const liveState = (d: { state: Drops["state"]; openAt: Date; closeAt: Date; shipAt: Date }, now = new Date()) =>
   effectiveState({ ...d, arriveAt: arrivalDate(d.shipAt) }, now);

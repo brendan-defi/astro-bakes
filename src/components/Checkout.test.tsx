@@ -2,7 +2,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CartProvider } from "@/lib/cart";
 import { boxes } from "@/lib/data";
-import { startHold } from "@/lib/hold";
+import { readHold, startHold } from "@/lib/hold";
 import { getStrings } from "@/lib/i18n";
 import { restoreMotion, stubAnimate, stubMatchMedia } from "@/test/motion";
 import { Checkout, type CheckoutCustomer, type CheckoutDrop } from "./Checkout";
@@ -125,6 +125,56 @@ describe("Checkout phone number", () => {
   });
 });
 
+describe("Checkout reservation", () => {
+  const OTHER_TAB = "9b2d6f1e-1c1a-4f6e-8a55-2d7e7c1f0a11";
+  const server = () => ({ checkoutId: CHECKOUT_ID, revision: 1, expiresAt: Date.now() + 600_000, items: { "cookie-box": 1 } });
+  /** At a checkout step, with what this tab saved and what the server holds for the browser. */
+  function mountWith(step: string, tab: string | null, held: ReturnType<typeof server> | null) {
+    if (tab) startHold({ checkoutId: tab, revision: 1, expires: Date.now() + 600_000 });
+    const tree = () => (
+      <CartProvider dropId="drop-03" boxes={boxes} shippingFee={800}>
+        <Checkout locale="en" drop={drop} lineUrl="#" held={held} customer={customer} />
+      </CartProvider>
+    );
+    nav.params = new URLSearchParams(`step=${step}`);
+    const view = render(tree());
+    return { toCart: () => { nav.params = new URLSearchParams(); view.rerender(tree()); } };
+  }
+  const push = () => vi.spyOn(nav.router, "push");
+  afterEach(() => { vi.restoreAllMocks(); });
+
+  it("counts down this tab's saved hold", () => {
+    mountWith("delivery", CHECKOUT_ID, server());
+    expect(screen.getByRole("timer").textContent).toMatch(/\d+:\d{2}$/);
+  });
+
+  it("sends the tab back to its cart, with a notice, when another tab took the reservation", () => {
+    const pushed = push();
+    const { toCart } = mountWith("delivery", OTHER_TAB, server());
+    expect(pushed).toHaveBeenCalledExactlyOnceWith("/en/checkout");
+    expect(readHold()).toBeNull();
+    toCart();
+    expect(screen.getByText(t.cartChanged)).toBeTruthy();
+  });
+
+  it("says the hold expired when the server no longer has this tab's reservation", () => {
+    mountWith("delivery", CHECKOUT_ID, null);
+    expect(screen.getByText(t.holdExpiredTitle)).toBeTruthy();
+    expect(readHold()).toBeNull();
+  });
+
+  it("goes on to the done step after placing the order, not back to the cart", async () => {
+    // Placing clears the hold while the server still shows the reservation; that mustn't read as another tab taking it.
+    actions.placeOrderAction.mockResolvedValue({ ok: true, order: { number: "AB-003-001", lines: [], subtotal: 1000, shippingFee: 800, total: 1800, email: "you@example.com" } });
+    const pushed = push();
+    mountWith("pay", CHECKOUT_ID, server());
+    placeOrder();
+    await waitFor(() => expect(pushed).toHaveBeenCalled());
+    expect(pushed).toHaveBeenCalledExactlyOnceWith(expect.stringContaining("step=done"));
+    expect(screen.queryByText(t.cartChanged)).toBeNull();
+  });
+});
+
 describe("Checkout celebration", () => {
   const order = { number: "AB-003-001", lines: [{ name: "4 Cookie Box", qty: 1, lineTotal: 1000 }], subtotal: 1000, shippingFee: 800, total: 1800, email: "you@example.com" };
 
@@ -176,6 +226,16 @@ describe("Checkout sign-in", () => {
     } finally {
       replace.mockRestore();
     }
+  });
+
+  it("fills the delivery form from the saved details when the session arrives, then keeps the customer's edits", () => {
+    const { goTo } = mountOnCodeStep();
+    goTo("delivery", customer); // the code check's re-render brings the session
+    const field = (id: string) => document.getElementById(id) as HTMLInputElement;
+    expect([field("co-name").value, field("co-phone").value, field("co-postal").value, field("co-line1").value]).toEqual([customer.name, customer.phone, customer.postal, customer.line1]);
+    fireEvent.change(field("co-phone"), { target: { value: "03-1234-5678" } });
+    goTo("delivery", { ...customer }); // a later render, same session
+    expect(field("co-phone").value).toBe("03-1234-5678");
   });
 });
 

@@ -83,7 +83,6 @@ export default async function Image() {
           <div style={{ display: "flex", padding: 16, background: "#fff", border: `5px solid ${INK}`, borderRadius: 10, boxShadow: `10px 10px 0 ${INK}`, transform: "rotate(-2deg)" }}>
             {/* Cropped in on the cookies so they still read in LINE's thumbnail. */}
             <div style={{ display: "flex", width: PHOTO, height: PHOTO, overflow: "hidden", borderRadius: 4 }}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={`data:image/jpeg;base64,${photo.toString("base64")}`} alt="" width={PHOTO * ZOOM} height={PHOTO * ZOOM} style={{ marginLeft: -PHOTO * (ZOOM - 1) * FOCUS[0], marginTop: -PHOTO * (ZOOM - 1) * FOCUS[1] }} />
             </div>
           </div>

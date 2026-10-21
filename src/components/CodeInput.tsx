@@ -102,6 +102,7 @@ export function CodeInput({ id, value, onChange, doneLabel, checking = false, do
     if (!misses) return;
     ref.current?.focus();
     ref.current?.select();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- goes with the select() above, which the effect has to do
     setWhole(true); // onSelect doesn't reliably fire for a programmatic select()
     if (motionOK()) tilesRef.current?.animate(SHAKE, { duration: 460, easing: "ease-out" });
   }, [misses]);

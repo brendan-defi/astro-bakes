@@ -102,6 +102,7 @@ export function useSignInFlow({ locale, next, onSignedIn }: { locale: Locale; ne
   useEffect(() => {
     const p = readPending();
     if (p) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- restored from sessionStorage, which only exists after mount
       setEmail(p.email);
       setResendAt(p.resendAt);
       setPending(true);
@@ -110,6 +111,7 @@ export function useSignInFlow({ locale, next, onSignedIn }: { locale: Locale; ne
     const id = window.setInterval(() => setNow(Date.now()), 1000);
     return () => {
       window.clearInterval(id);
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- a counter, not a DOM node: moving it on is how leaving drops work in flight
       flow.current++;
     };
   }, []);
