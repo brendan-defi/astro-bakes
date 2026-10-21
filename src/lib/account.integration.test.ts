@@ -137,7 +137,8 @@ describe.skipIf(!URL)("account", () => {
     expect((await loadOrder(c, number, "en"))!).toMatchObject({ timeSlot: "none", canChangeSlot: false });
     await setDrop("open", new Date(Date.now() + 3_600_000));
     expect((await loadOrder(c, number, "en"))!.canChangeSlot).toBe(true);
-    expect(await changeTimeSlot(c, number, "18_20")).toEqual({ ok: true, slot: "18_20" });
+    expect(await changeTimeSlot(c, number, "18_20")).toEqual({ ok: true, slot: "18_20", changed: true });
+    expect(await changeTimeSlot(c, number, "18_20")).toEqual({ ok: true, slot: "18_20", changed: false }); // no-op: nothing to revalidate
     expect((await loadOrder(c, number, "en"))!.timeSlot).toBe("18_20");
     expect(await changeTimeSlot(other, number, "morning")).toEqual({ ok: false, error: "not_found" });
     expect(await changeTimeSlot(c, number, "20_21")).toEqual({ ok: false, error: "invalid" });

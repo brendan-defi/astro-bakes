@@ -162,7 +162,8 @@ export async function cancelOrder(customerId: string, number: string): Promise<C
 
 // ---------------------------------------------------------------- delivery time slot (D21)
 
-export type SlotResult = { ok: true; slot: DeliverySlot } | { ok: false; error: "invalid" | "not_found" | "closed" | "not_changeable" };
+/** `changed` is false when the order already had that slot, so callers can skip revalidating. */
+export type SlotResult = { ok: true; slot: DeliverySlot; changed: boolean } | { ok: false; error: "invalid" | "not_found" | "closed" | "not_changeable" };
 
 /** Change an order's delivery time slot. Same window as free cancellation (until the drop closes), same lock order as cancelOrder. */
 export async function changeTimeSlot(customerId: string, number: string, slot: unknown): Promise<SlotResult> {
@@ -173,8 +174,9 @@ export async function changeTimeSlot(customerId: string, number: string, slot: u
     const [drop] = await tx.select().from(drops).where(eq(drops.id, o.dropId)).for("update");
     const dropState = liveState(drop);
     if (!canChangeSlot(o.state, dropState)) return { ok: false as const, error: dropState === "open" ? ("not_changeable" as const) : ("closed" as const) };
-    if (o.deliveryTimeSlot !== slot) await tx.update(orders).set({ deliveryTimeSlot: slot, updatedAt: new Date() }).where(eq(orders.id, o.id));
-    return { ok: true as const, slot };
+    const changed = o.deliveryTimeSlot !== slot;
+    if (changed) await tx.update(orders).set({ deliveryTimeSlot: slot, updatedAt: new Date() }).where(eq(orders.id, o.id));
+    return { ok: true as const, slot, changed };
   });
 }
 
