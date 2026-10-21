@@ -1,28 +1,19 @@
 // @vitest-environment node
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { Pool } from "pg";
-import { drizzle } from "drizzle-orm/node-postgres";
-import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { eq, sql } from "drizzle-orm";
 import * as schema from "@/db/schema";
-import { closeDb } from "@/db";
-import { seed } from "@/db/seed";
 import { customerForSession, endSession, peekLink, redeemLink, requestSignIn, setCodeGenerator, verifyCode } from "@/lib/auth";
 import { MAX_CODE_ATTEMPTS, RATE_PER_EMAIL, RATE_PER_IP } from "@/lib/auth-rules";
-import { setEmailTransport, type OutgoingEmail } from "@/lib/email";
+import { captureEmail, clearTestData, closeTestDb, resetDatabase, testDb, TEST_DATABASE_URL } from "@/test/db";
 
 /**
  * Magic link + code sign-in against a real Postgres (TEST_DATABASE_URL), with
  * the email transport captured and codes made deterministic: the n-th code
  * issued is n, zero-padded, so "000000" is never valid and consecutive codes differ.
  */
-const URL = process.env.TEST_DATABASE_URL;
-if (URL) process.env.DATABASE_URL = URL;
-const pool = URL ? new Pool({ connectionString: URL, max: 4 }) : null;
-const db = pool ? drizzle(pool, { schema, casing: "snake_case" }) : null!;
-
-const sent: OutgoingEmail[] = [];
-let failSends = false;
+const { pool, db } = testDb(4);
+const mail = captureEmail({ recordFailures: true });
+const sent = mail.sent;
 let issued = 0;
 const ORIGIN = "https://preview.test";
 /** This browser's flow cookie; a different value stands for another browser. */
@@ -40,31 +31,19 @@ function last() {
 const count = async (table: string) => Number((await db.execute(sql.raw(`select count(*)::int as n from ${table}`))).rows[0].n);
 const customersWith = (email: string) => db.select().from(schema.customers).where(eq(schema.customers.email, email));
 
-describe.skipIf(!URL)("sign-in", () => {
+describe.skipIf(!TEST_DATABASE_URL)("sign-in", () => {
   beforeAll(async () => {
-    // A dedicated test database: start from nothing so regenerated migrations never collide with stale state.
-    await db.execute(sql`drop schema if exists public cascade; create schema public; drop schema if exists drizzle cascade`);
-    await migrate(db, { migrationsFolder: "drizzle" });
-    await seed(db);
-    setEmailTransport(async (email) => {
-      sent.push(email);
-      return failSends ? { ok: false, error: "simulated outage" } : { ok: true, providerMessageId: `msg_${sent.length}` };
-    });
+    await resetDatabase(db);
     setCodeGenerator(() => String(++issued).padStart(6, "0"));
   });
   beforeEach(async () => {
-    sent.length = 0;
-    failSends = false;
-    // Orders from the checkout suite reference test customers; clear the write tables before the customers.
-    await db.execute(sql`truncate order_items, orders, inventory_holds, carts, auth_tokens, sessions, notification_log cascade`);
-    await db.execute(sql`delete from customers where email like '%@test.invalid'`);
+    mail.reset();
+    await clearTestData(db, ["order_items", "orders", "inventory_holds", "carts", "auth_tokens", "sessions", "notification_log"]);
     await db.execute(sql`delete from subscribers where email like '%@test.invalid'`);
   });
   afterAll(async () => {
-    setEmailTransport(null);
     setCodeGenerator(null);
-    await closeDb();
-    await pool?.end();
+    await closeTestDb(pool);
   });
 
   it("sends one email with a link and a code, logs it, and answers the same for unknown and known addresses", async () => {
@@ -218,7 +197,7 @@ describe.skipIf(!URL)("sign-in", () => {
   });
 
   it("still answers ok when the email provider fails, and records the failure", async () => {
-    failSends = true;
+    mail.failing = "simulated outage";
     expect(await req("outage@test.invalid")).toEqual({ ok: true });
     const [log] = await db.select().from(schema.notificationLog);
     expect(log).toMatchObject({ type: "sign_in", to: "outage@test.invalid", providerMessageId: null, error: "simulated outage" });
