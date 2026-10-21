@@ -50,4 +50,10 @@ describe("reservedLines / totals", () => {
     expect(totals(lines, null).total).toBeNull();
     expect(totals([], 800)).toEqual({ count: 0, subtotal: 0, total: null });
   });
+
+  it("doesn't read a box slugged like an Object.prototype name as reserved when it isn't", () => {
+    const odd = { ...boxes[0], id: "constructor" };
+    expect(reservedLines({}, [odd])).toEqual([]);
+    expect(reservedLines({ constructor: 2 }, [odd]).map((l) => [l.box.id, l.qty])).toEqual([["constructor", 2]]);
+  });
 });

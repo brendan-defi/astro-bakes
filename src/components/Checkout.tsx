@@ -92,7 +92,9 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const leftFor = (b: Box) => leftOverride[b.id] ?? b.left;
+  // Own properties only: a box slugged like an Object.prototype name ("constructor") mustn't read a function as its stock.
+  // A missing override falls back to the page's count; an override of 0 (sold out on re-check) stands.
+  const leftFor = (b: Box) => (Object.hasOwn(leftOverride, b.id) ? leftOverride[b.id] : b.left);
   const maxFor = (b: Box) => Math.min(leftFor(b), b.maxPerCustomer);
 
   async function onCheckout() {

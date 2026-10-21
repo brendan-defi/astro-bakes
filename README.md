@@ -67,6 +67,14 @@ The owner's portal (PRD §4) lives at **https://admin.astrobakes.xyz/admin**, se
   - **Private fields** are read only on the server, in `src/lib/settings.ts`: the owner email, the new-order toggle, and the Japan Post sender details and label options.
   - **Emails after payment.** `afterOrderPaid()` in `src/lib/order-paid.ts` sends the customer's confirmation and, when switched on, a "new order" email to the owner email (the contact email if that's empty). The Stripe webhook should call it too. Party requests go to `custom_order_email` if set, else the owner email, else the contact email.
   - **Not here yet:** allowed wards, payment toggles (with Stripe), the LINE QR (with photo uploads) and the per-item bake buffer (with the item editor).
+- **Boxes & items** (`/admin/boxes`, `/admin/items`, PRD 4.3).
+  - **Items** are what the kitchen bakes: a name in both languages, what it's baked as (cookie, cake…) and how many go into one (12 slices per cake).
+  - **Boxes** have names, descriptions and card contents in both languages, a recipe of items with quantities (what the production sheet will add up), allergens, a price, a default cap and per-customer limit, a menu order and an active flag.
+  - **Allergens** are checkboxes over `src/lib/allergens.ts`: the 特定原材料 (9, cashew included since the Consumer Affairs Agency's 2026-04-01 notice) and the 推奨表示 (19), stored by English name. The source and date are cited in that file. The shop's Japanese labels come from the same list.
+  - **Slugs** are set when a box or item is created and never change: carts and links use them.
+  - **Defaults only:** a box's price and caps are copied when a drop is set up, so editing a box never reprices an existing drop. Hiding a box takes it off the between-drops menu; a drop that carries it keeps selling it.
+  - **Rules** live in `src/lib/catalogue-rules.ts` (shared with the forms); reads and writes in `src/lib/catalogue.ts`.
+  - **Not here yet:** photo uploads (next PR) and the per-item bake buffer (with the production sheet).
 - **The rule.** Every admin page, route handler method and server action calls `await requireAdmin()` from `src/lib/admin.ts` in its own body (layouts and the proxy aren't boundaries). `src/app/admin/guard.test.ts` reads each file's syntax tree and fails when an entry point doesn't. That test is a safety net for parallel branches, not the boundary itself. The signed-out sign-in pieces call `assertAdminHost()` instead. New sections add themselves to `ADMIN_SECTIONS` in `src/components/admin/AdminNav.tsx`, and share the table and form styles in `src/app/admin/admin.module.css`.
 
 ## Account

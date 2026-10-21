@@ -13,6 +13,7 @@ import { BoxPhoto } from "./BoxPhoto";
 import { ScrollLink } from "./ScrollLink";
 import { Stepper } from "./Stepper";
 import s from "./home.module.css";
+import { qtyOf } from "@/lib/quantities";
 
 /** At or below this many left, the "N left" sticker starts to throb. */
 const LOW_STOCK = 3;
@@ -21,7 +22,7 @@ const LOW_STOCK = 3;
 export function BoxCard({ box, locale }: { box: Box; locale: Locale }) {
   const t = getStrings(locale);
   const cart = useCart();
-  const qty = cart.qty[box.id] ?? 0;
+  const qty = qtyOf(cart.qty, box.id);
   const soldOut = box.left === 0;
   const burstRef = useRef<HTMLDivElement>(null);
   // "+" throws crumbs, sends a cookie to the cart and nudges the "N left" sticker; "−" just drops a few crumbs.
