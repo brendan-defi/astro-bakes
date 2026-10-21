@@ -51,6 +51,40 @@ ${codeLine}
   return { subject, html: layout("en", subject, body), text };
 }
 
+export interface OwnerOrderEmailData {
+  number: string;
+  dropName: string;
+  lines: { name: string; qty: number }[];
+  total: number;
+  paymentMethod: string | null;
+  shipToName: string;
+  /** "目黒区 (Meguro)": where it's going, without the full address. */
+  ward: string;
+  slot: string;
+  giftMessage: string | null;
+}
+
+/** "New order" to the owner (PRD 3.6, 4.9 toggle): English, like the admin; enough to know what was bought without opening anything. */
+export function ownerNewOrderEmail(o: OwnerOrderEmailData, adminUrl: string): Email {
+  const boxes = o.lines.reduce((n, l) => n + l.qty, 0);
+  const subject = `New order ${o.number} · ${boxes} box${boxes === 1 ? "" : "es"} · ${yen(o.total)}`;
+  const rows: [string, string][] = [
+    ["Drop", o.dropName],
+    ["Boxes", o.lines.map((l) => `${l.name} × ${l.qty}`).join(", ")],
+    ["Total", `${yen(o.total)}${o.paymentMethod ? ` (${o.paymentMethod === "paypay" ? "PayPay" : "card"})` : ""}`],
+    ["To", `${o.shipToName}, ${o.ward}`],
+    ["Time slot", o.slot],
+    ["Gift card", o.giftMessage ?? "None"],
+  ];
+  const table = rows.map(([k, v]) => `<tr><td style="padding:4px 12px 4px 0;font-weight:700;white-space:nowrap;vertical-align:top">${k}</td><td style="padding:4px 0">${esc(v)}</td></tr>`).join("");
+  const body = `<p style="margin:0 0 14px">A new order just came in.</p>
+<table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 18px;font-size:15px">${table}</table>
+<p style="margin:0 0 8px"><a href="${esc(adminUrl)}" style="color:#2A1B5E;font-weight:700">Open the admin</a></p>
+<p style="margin:0;font-size:13px;color:#5B3FC4">Turn these off under Settings → Notifications.</p>`;
+  const text = `A new order just came in.\n\n${rows.map(([k, v]) => `${k}: ${v}`).join("\n")}\n\nOpen the admin: ${adminUrl}\nTurn these off under Settings → Notifications.`;
+  return { subject, html: layout("en", subject, body), text };
+}
+
 /** The admin portal's sign-in (PRD 4, 5.4): English only, like the rest of the admin. */
 export function adminSignInEmail(opts: { link: string; code: string; minutes: number }): Email {
   const { link, code, minutes } = opts;

@@ -56,3 +56,31 @@
 .codeRow { display: flex; flex-direction: column; gap: 16px; }
 .codeRow > button { align-self: flex-start; }
 .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 14px; }
+
+/* ---------- Settings form ---------- */
+.settingsForm { display: flex; flex-direction: column; gap: 20px; max-width: 880px; }
+.settingsFields { display: flex; flex-direction: column; gap: 20px; min-width: 0; margin: 0; padding: 0; border: 0; }
+.settingsFields:disabled { opacity: 0.7; }
+.settingsSection { padding: 22px 26px 24px; }
+.sectionTitle { font-size: 20px; font-weight: 900; }
+.sectionIntro { margin-top: 4px; font-size: 14px; color: var(--link-hover); }
+.fields { display: flex; flex-direction: column; gap: 14px; margin-top: 16px; }
+.fieldRow { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 8px 20px; align-items: start; }
+.fieldRow > label { padding-top: 12px; }
+.help { margin-top: 4px; font-size: 13px; color: var(--link-hover); }
+.fieldError { margin-top: 4px; font-size: 13px; font-weight: 700; color: #b0003a; }
+.fieldRow :global(.input)[aria-invalid="true"] { border-color: #b0003a; background: #fff3f6; }
+.checkRow { display: inline-flex; align-items: center; gap: 10px; font-weight: 700; cursor: pointer; padding-top: 4px; }
+.checkRow input { width: 20px; height: 20px; accent-color: var(--ink); }
+.withUnit { display: flex; align-items: center; gap: 10px; font-weight: 700; }
+.fixedValue { padding-top: 10px; font-weight: 700; }
+.fieldRow > .label { padding-top: 12px; }
+.numInput { width: 120px; }
+.saveBar {
+  position: sticky; bottom: 0; z-index: 1;
+  display: flex; align-items: center; gap: 16px;
+  padding: 14px 0; background: var(--ground);
+  border-top: var(--border-thin);
+}
+.statusOk { font-size: 14px; font-weight: 700; color: var(--ok-green); }
+.statusError { font-size: 14px; font-weight: 700; color: #b0003a; }
