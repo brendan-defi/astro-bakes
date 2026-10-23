@@ -75,6 +75,13 @@ The owner's portal (PRD §4) lives at **https://admin.astrobakes.xyz/admin**, se
   - **Defaults only:** a box's price and caps are copied when a drop is set up, so editing a box never reprices an existing drop. Hiding a box takes it off the between-drops menu; a drop that carries it keeps selling it.
   - **Rules** live in `src/lib/catalogue-rules.ts` (shared with the forms); reads and writes in `src/lib/catalogue.ts`.
   - **Not here yet:** photo uploads (next PR) and the per-item bake buffer (with the production sheet).
+- **Drops** (`/admin/drops`, PRD 4.2). The list shows each drop's state as the shop sees it now (the stored state moved on by the clock), its dates, sold against cap, paid orders and revenue.
+  - **New drop:** a draft numbered after the last one (the number names the drop and its order numbers and can't change), with every active box at its defaults (D10). Drafts aren't on the shop.
+  - **Times** are entered and shown in Japan time: open, close and bake as date-times, the ship date as a day.
+  - **What can change depends on the state** (`editable()` in `src/lib/drop-rules.ts`). Before opening, everything. Once open, closed or baking: names, caps and per-customer limits, but not dates, boxes or prices, which customers have seen and may have paid. After that, only names.
+  - **Caps** can never go below what's sold plus what checkouts hold right now, checked inside the save under the checkout's lock order. A box with sales can't be removed.
+  - **Duplicate** makes the next-numbered draft with the same names, boxes, caps, prices and limits, every date a month later, and nothing sold.
+  - **Not here yet:** scheduling, opening and closing, and the rest of the lifecycle (the next PR), and emailing customers when a ship date moves.
 - **The rule.** Every admin page, route handler method and server action calls `await requireAdmin()` from `src/lib/admin.ts` in its own body (layouts and the proxy aren't boundaries). `src/app/admin/guard.test.ts` reads each file's syntax tree and fails when an entry point doesn't. That test is a safety net for parallel branches, not the boundary itself. The signed-out sign-in pieces call `assertAdminHost()` instead. New sections add themselves to `ADMIN_SECTIONS` in `src/components/admin/AdminNav.tsx`, and share the table and form styles in `src/app/admin/admin.module.css`.
 
 ## Account
