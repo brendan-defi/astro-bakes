@@ -63,6 +63,7 @@ const BOXES = [
     contentsJa: "ミニローフ 1本",
     price: 500,
     allergens: ["Egg", "Milk", "Wheat"],
+    photos: ["/images/boxes/banana-bread.jpg"],
     defaultCap: 10,
     sort: 1,
     items: [["banana-bread-mini-loaf", 1]] as const,
@@ -77,6 +78,7 @@ const BOXES = [
     contentsJa: "ネビュラ・バナナブレッド 1切れ · ミッドナイト・チョコレートケーキ 1切れ · チョコチップクッキー 2枚",
     price: 900, // sample price; the owner sets the real one in admin (PRD 4.3)
     allergens: ["Egg", "Milk", "Wheat"],
+    photos: ["/images/boxes/sampler-box.jpg"],
     defaultCap: 10,
     sort: 2,
     items: [["banana-bread-slice", 1], ["midnight-choc-cake-slice", 1], ["cookie-american-choc-chip", 2]] as const,
