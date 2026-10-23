@@ -10,6 +10,7 @@ import s from "@/app/admin/admin.module.css";
  */
 export const ADMIN_SECTIONS: { href: string; label: string; also?: string[] }[] = [
   { href: "/admin", label: "Dashboard" },
+  { href: "/admin/drops", label: "Drops" },
   { href: "/admin/boxes", label: "Boxes & items", also: ["/admin/items"] },
   { href: "/admin/settings", label: "Settings" },
 ];

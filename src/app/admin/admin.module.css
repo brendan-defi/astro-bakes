@@ -107,3 +107,19 @@
 .allergenGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 6px 14px; }
 .allergenGrid .checkRow { font-weight: 500; padding-top: 0; white-space: nowrap; }
 .slugValue { padding-top: 10px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 15px; }
+
+/* ---------- Drops ---------- */
+.headActions { display: flex; align-items: center; gap: 12px; }
+.headActions form { margin: 0; }
+.state_draft { background: var(--white); color: var(--link-hover); border-color: var(--link-hover); }
+.state_scheduled { background: var(--butter-soft); }
+.state_open { background: var(--ok-green-bg); color: var(--ok-green); border-color: var(--ok-green); }
+.state_closed, .state_baking { background: var(--pink-soft); }
+.state_shipped, .state_complete { background: var(--aqua-soft); }
+.state_cancelled { background: var(--lilac-soft); color: var(--link-hover); border-color: var(--link-hover); text-decoration: line-through; }
+.banner { padding: 12px 16px; border: var(--border-thin); border-radius: var(--radius-input); background: var(--white); font-size: 15px; }
+.dropBoxRow { display: grid; grid-template-columns: minmax(0, 1fr) 84px 108px 84px auto; gap: 8px; align-items: center; }
+.dropBoxRow :global(.input) { min-height: 44px; }
+.dropBoxHead { font-size: 12px; font-weight: 900; letter-spacing: 0.04em; text-transform: uppercase; color: var(--link-hover); }
+.dateGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 16px; }
+.dateGrid > div { display: flex; flex-direction: column; gap: 4px; }
