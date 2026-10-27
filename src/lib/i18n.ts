@@ -15,6 +15,7 @@ const en = {
   home: "Astro Bakes home",
   language: "Language",
   cart: "Cart",
+  pauseMotion: "Pause animations",
   signIn: "Sign in",
   // page metadata
   metaTitle: "Astro Bakes · American-style bakes from Sangenjaya",
@@ -80,6 +81,7 @@ const en = {
   story1: "We started Astro Bakes because that nostalgic, comforting feeling of real American home baking is nearly impossible to find in Tokyo. We missed the treats you'd find cooling on an American kitchen counter—thick, hefty cookies with golden edges and soft centers, rich banana loaves, and honest, comforting sweets.",
   story2: "Everything is baked by hand in small batches right here in Sangenjaya. We bake strictly to order, one drop at a time, so nothing ever sits on a shelf waiting for you.",
   followOnInstagram: "Follow our bake days on Instagram",
+  opensNewTab: "(opens in a new tab)",
   capQC: "Head of QC",
   capSoft: "Soft middles",
   capMatcha: "Matcha + white choc",
@@ -190,7 +192,6 @@ const en = {
   totalTitle: "Total",
   // cart
   yourBoxes: "Your boxes",
-  photo: "Photo",
   each: "each",
   limitNote: "Up to 5 of each box per person, per drop.",
   holdNote: "Your boxes are held for 10 minutes once you start checkout.",
@@ -225,6 +226,9 @@ const en = {
   phone: "Phone",
   phoneHint: "Japan Post prints this on the label.",
   phoneInvalid: "Enter a Japanese phone number, like 090-1234-5678.",
+  nameRequired: "Enter the recipient's name.",
+  streetRequired: "Enter the street number.",
+  postalRequired: "Enter a postal code and look it up.",
   postalCode: "Postal code",
   lookUp: "Look up",
   filledFrom: "Filled from your postal code",
@@ -426,6 +430,7 @@ const ja: Strings = {
   home: "Astro Bakes ホーム",
   language: "言語",
   cart: "カート",
+  pauseMotion: "アニメーションを一時停止",
   signIn: "ログイン",
   // page metadata
   metaTitle: "Astro Bakes｜三軒茶屋のアメリカンスタイル焼き菓子",
@@ -489,6 +494,7 @@ const ja: Strings = {
   story1: "Astro Bakesを始めたのは、アメリカの家庭で焼くお菓子の、あの懐かしくてほっとする味が東京ではほとんど見つからなかったから。アメリカの家のキッチンカウンターで冷ましているような、ふちはこんがり、真ん中はやわらかい、ずっしり厚いクッキー。しっとり濃厚なバナナブレッド。飾らない、ほっとする焼き菓子。そんなお菓子が恋しかったんです。",
   story2: "すべて三軒茶屋で、ひとつひとつ手作業で、少量ずつ焼いています。焼くのはご注文いただいた分だけ。ドロップごとに焼き上げるので、作り置きは一切ありません。",
   followOnInstagram: "Instagramで焼き上げの日をフォロー",
+  opensNewTab: "（新しいタブで開きます）",
   capQC: "品質管理担当",
   capSoft: "やわらかな真ん中",
   capMatcha: "抹茶×ホワイトチョコ",
@@ -598,7 +604,6 @@ const ja: Strings = {
   totalTitle: "合計",
   // cart
   yourBoxes: "カート",
-  photo: "写真",
   each: "/ 箱",
   limitNote: "各ボックス、1回のドロップにつきおひとり様5点までです。",
   holdNote: "購入手続きを始めると、ボックスを10分間お取り置きします。",
@@ -632,6 +637,9 @@ const ja: Strings = {
   phone: "電話番号",
   phoneHint: "日本郵便の送り状に印字されます。",
   phoneInvalid: "日本の電話番号を入力してください（例: 090-1234-5678）。",
+  nameRequired: "お名前を入力してください。",
+  streetRequired: "番地を入力してください。",
+  postalRequired: "郵便番号を入力して検索してください。",
   postalCode: "郵便番号",
   lookUp: "住所検索",
   filledFrom: "郵便番号から入力された住所",
@@ -826,6 +834,9 @@ const ja: Strings = {
 export function getStrings(locale: Locale): Strings {
   return locale === "ja" ? ja : en;
 }
+
+/** The lang attribute for a Japanese string that stays Japanese on the English site (税込, the legal pages' names), so it's read as Japanese (WCAG 3.1.2). */
+export const jaLang = (locale: Locale): "ja" | undefined => (locale === "en" ? "ja" : undefined);
 
 export const locales: Locale[] = ["en", "ja"];
 export function isLocale(x: string): x is Locale {

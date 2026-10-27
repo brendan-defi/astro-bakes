@@ -10,6 +10,11 @@
 .holdLow { background: var(--pink); }
 .stepsTop { display: none; }
 .headerLink { display: none; }
+/* A header action that has no icon-button stand-in on phones (the account page's Sign out): a compact pill at every width. */
+/* The account header may wrap on the narrowest phones (ログアウト at 320px), the action dropping under the logo rather than off the edge. */
+.headerRowWrap { flex-wrap: wrap; }
+.headerEnd { margin-left: auto; }
+.headerBtn { flex: none; display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 14px; background: var(--white); border: var(--border); border-radius: var(--radius-pill); font: inherit; font-size: 14px; font-weight: 900; color: var(--ink); text-decoration: none; cursor: pointer; white-space: nowrap; }
 @media (min-width: 900px) {
   .header { padding: 16px var(--gutter); }
   .headerRow { flex-wrap: wrap; gap: 16px 28px; }
@@ -18,6 +23,7 @@
   .holdLabel { display: inline; }
   .stepsTop { display: flex; }
   .headerLink { display: flex; align-items: center; gap: 8px; min-height: 48px; padding: 0 20px; background: var(--white); border: var(--border); border-radius: var(--radius-pill); font-size: 15px; font-weight: 900; text-decoration: none; }
+  .headerBtn { min-height: 48px; padding: 0 20px; font-size: 15px; }
 }
 
 /* ===== Step indicator ===== */
@@ -71,7 +77,9 @@
 /* ===== Cart rows ===== */
 .rows { display: flex; flex-direction: column; gap: 12px; }
 .row { display: flex; gap: 12px; align-items: center; background: var(--white); border: var(--border); border-radius: 20px; box-shadow: 4px 4px 0 var(--ink); padding: 12px; }
-.thumb { flex: none; width: 64px; height: 64px; border-radius: 14px; border: var(--border-thin); display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 900; text-align: center; }
+/* The box's photo (object-fit: cover inside the rounded square), or a camera glyph until it has one. */
+.thumb { flex: none; position: relative; overflow: hidden; width: 64px; height: 64px; border-radius: 14px; border: var(--border-thin); display: flex; align-items: center; justify-content: center; color: var(--ink); }
+.thumb img { object-fit: cover; }
 .rowBody { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
 .rowTop { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
 .rowName { font-family: var(--font-display), sans-serif; font-size: 17px; line-height: 1.15; }
@@ -87,7 +95,7 @@
 @media (min-width: 900px) {
   .rows { gap: 16px; }
   .row { gap: 18px; border-radius: 24px; box-shadow: 5px 5px 0 var(--ink); padding: 16px; }
-  .thumb { width: 104px; height: 104px; border-radius: 18px; font-size: 12px; }
+  .thumb { width: 104px; height: 104px; border-radius: 18px; }
   .rowBody { gap: 4px; }
   .rowTop .rowLine { display: none; }
   .rowName { font-size: 22px; }
@@ -250,7 +258,7 @@
 .slotGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .slotChip { min-height: 48px; border: var(--border); border-radius: 14px; background: var(--white); color: var(--ink); font-weight: 900; font-size: 14px; display: flex; align-items: center; justify-content: center; text-align: center; padding: 6px 8px; cursor: pointer; }
 .slotChip:first-child { grid-column: 1 / -1; }
-.slotChip:focus-within { outline: 3px solid var(--aqua); outline-offset: 2px; }
+.slotChip:focus-within { outline: 3px solid var(--focus); outline-offset: 2px; }
 .slotOn { background: var(--aqua); box-shadow: 3px 3px 0 var(--ink); }
 @media (min-width: 900px) {
   .slotGrid { grid-template-columns: repeat(3, minmax(0, 1fr)); }

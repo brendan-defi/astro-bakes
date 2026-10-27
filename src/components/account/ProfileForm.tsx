@@ -30,11 +30,20 @@ export function ProfileForm({ locale, initial }: { locale: Locale; initial: Prof
   const doLookup = () => { setPostalTried(true); setHit(lookupPostal(v.postal)); };
   const valid = v.name.trim() && normalisePhone(v.phone) && v.line1.trim() && hit?.deliverable;
   const phoneBad = touched && !normalisePhone(v.phone);
+  const nameBad = touched && !v.name.trim();
+  const postalBad = touched && !hit?.deliverable;
+  const line1Bad = touched && !v.line1.trim();
 
   async function submit(e: FormEvent) {
     e.preventDefault();
     setTouched(true);
-    if (!valid || busy) return;
+    if (!valid) {
+      // Each missing field gets its message (not just a red border); focus goes to the first one.
+      const first = !v.name.trim() ? "pf-name" : !normalisePhone(v.phone) ? "pf-phone" : !hit?.deliverable ? "pf-postal" : "pf-line1";
+      document.getElementById(first)?.focus();
+      return;
+    }
+    if (busy) return;
     setBusy(true);
     setStatus(null);
     try {
@@ -56,7 +65,9 @@ export function ProfileForm({ locale, initial }: { locale: Locale; initial: Prof
       <div className={s.fields}>
         <div className="field">
           <label htmlFor="pf-name" className="label">{t.recipientName} {jaHint("お名前")}</label>
-          <input id="pf-name" type="text" autoComplete="name" required className={`input ${touched && !v.name.trim() ? s.inputError : ""}`} value={v.name} onChange={(e) => set({ name: e.target.value })} />
+          <input id="pf-name" type="text" autoComplete="name" required className={`input ${nameBad ? s.inputError : ""}`} value={v.name} onChange={(e) => set({ name: e.target.value })}
+            aria-invalid={nameBad || undefined} aria-describedby={nameBad ? "pf-name-err" : undefined} />
+          {nameBad && <span id="pf-name-err" className={s.err}><WarningIcon size={16} />{t.nameRequired}</span>}
         </div>
         <div className="field">
           <label htmlFor="pf-phone" className="label">{t.phone} {jaHint("電話番号")}</label>
@@ -69,14 +80,16 @@ export function ProfileForm({ locale, initial }: { locale: Locale; initial: Prof
         <div className="field">
           <label htmlFor="pf-postal" className="label">{t.postalCode} {jaHint("郵便番号")}</label>
           <div className={s.postalRow}>
-            <CleanInput id="pf-postal" type="text" inputMode="numeric" autoComplete="postal-code" clean={cleanPostalInput} className="input" value={v.postal}
+            <CleanInput id="pf-postal" type="text" inputMode="numeric" autoComplete="postal-code" required clean={cleanPostalInput} className={`input ${postalBad ? s.inputError : ""}`} value={v.postal}
+              aria-invalid={postalBad || undefined} aria-describedby="pf-postal-status"
               onValueChange={(postal) => { set({ postal }); setPostalTried(false); setHit(null); }}
               onBlur={() => { if (normalisePostal(v.postal).length === 7) doLookup(); }}
               onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); doLookup(); } }} />
             <button type="button" className={s.lookupBtn} onClick={doLookup}>{t.lookUp}</button>
           </div>
         </div>
-        <div className={s.autofill}>
+        {/* The lookup result doubles as the postal field's description, and is announced when it changes. */}
+        <div id="pf-postal-status" className={s.autofill} aria-live="polite">
           <div className={s.k}>{t.filledFrom}</div>
           {hit ? (
             <>
@@ -86,12 +99,20 @@ export function ProfileForm({ locale, initial }: { locale: Locale; initial: Prof
                 : <div className={s.badPill}><WarningIcon size={15} />{t.outsideArea}</div>}
             </>
           ) : (
-            <div className={s.addr} style={{ opacity: postalTried ? 1 : 0.5 }}>{postalTried ? <span className={s.badPill}><WarningIcon size={15} />{outsideWards(v.postal) ? t.outsideArea : t.postalNotFound}</span> : "—"}</div>
+            <div className={s.addr} style={{ opacity: postalTried || postalBad ? 1 : 0.5 }}>
+              {postalTried
+                ? <span className={s.badPill}><WarningIcon size={15} />{outsideWards(v.postal) ? t.outsideArea : t.postalNotFound}</span>
+                : postalBad
+                  ? <span className={s.badPill}><WarningIcon size={15} />{t.postalRequired}</span>
+                  : <span aria-hidden>—</span>}
+            </div>
           )}
         </div>
         <div className="field">
           <label htmlFor="pf-line1" className="label">{t.streetNumber} {jaHint("番地")}</label>
-          <input id="pf-line1" type="text" autoComplete="address-line1" required className={`input ${touched && !v.line1.trim() ? s.inputError : ""}`} value={v.line1} onChange={(e) => set({ line1: e.target.value })} />
+          <input id="pf-line1" type="text" autoComplete="address-line1" required className={`input ${line1Bad ? s.inputError : ""}`} value={v.line1} onChange={(e) => set({ line1: e.target.value })}
+            aria-invalid={line1Bad || undefined} aria-describedby={line1Bad ? "pf-line1-err" : undefined} />
+          {line1Bad && <span id="pf-line1-err" className={s.err}><WarningIcon size={16} />{t.streetRequired}</span>}
         </div>
         <div className="field">
           <label htmlFor="pf-line2" className="label">{t.building} {jaHint("建物名・部屋番号")} <span className="ja">{t.optional}</span></label>

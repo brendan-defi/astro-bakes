@@ -1,4 +1,6 @@
 import { useSyncExternalStore } from "react";
+import { MOTION_ATTR, MOTION_KEY, PAUSED } from "./motion-pause";
+import { readStored, useStored, writeStored } from "./stored";
 
 /**
  * Helpers for motion driven from JS (Web Animations API). The reduced-motion rule in globals.css
@@ -7,10 +9,28 @@ import { useSyncExternalStore } from "react";
 
 const REDUCED = "(prefers-reduced-motion: reduce)";
 
-/** True when we may animate from JS: the browser has el.animate() and the viewer hasn't asked for reduced motion. */
+/**
+ * The viewer's own pause switch (MotionToggle in the ticker; WCAG 2.2.2) is kept in localStorage so it holds
+ * for the next page. While paused, <html data-motion="paused"> turns on the stylesheet's kill switch, and the
+ * helpers here treat it like the OS reduced-motion preference. The constants live in motion-pause.ts.
+ */
+const pausedByViewer = () => readStored("local", MOTION_KEY) === PAUSED;
+
+/** True when we may animate from JS: the browser has el.animate() and the viewer hasn't asked for reduced motion or paused it. */
 export function motionOK(): boolean {
   if (typeof window === "undefined" || typeof Element === "undefined" || typeof Element.prototype.animate !== "function") return false;
-  return !window.matchMedia?.(REDUCED).matches;
+  return !window.matchMedia?.(REDUCED).matches && !pausedByViewer();
+}
+
+/** Flips the pause switch for this tab and, through storage, the others. */
+export function setMotionPaused(paused: boolean): void {
+  writeStored("local", MOTION_KEY, paused ? PAUSED : null);
+}
+
+/** Sets <html data-motion> from the saved switch; the inline script in the layout does the same before React runs. */
+export function applyMotionAttribute(paused: boolean): void {
+  if (paused) document.documentElement.dataset[MOTION_ATTR] = PAUSED;
+  else delete document.documentElement.dataset[MOTION_ATTR];
 }
 
 function subscribe(onChange: () => void) {
@@ -19,9 +39,11 @@ function subscribe(onChange: () => void) {
   return () => mq?.removeEventListener?.("change", onChange);
 }
 
-/** Live reduced-motion preference for components that start long-running animations. False on the server. */
+/** Live reduced-motion preference, or the viewer's pause switch, for components that start long-running animations. False on the server. */
 export function useReducedMotion(): boolean {
-  return useSyncExternalStore(subscribe, () => !!window.matchMedia?.(REDUCED).matches, () => false);
+  const preference = useSyncExternalStore(subscribe, () => !!window.matchMedia?.(REDUCED).matches, () => false);
+  const paused = useStored("local", MOTION_KEY) === PAUSED;
+  return preference || paused;
 }
 
 const FALLBACK_SPRING = "cubic-bezier(0.34, 1.56, 0.64, 1)";

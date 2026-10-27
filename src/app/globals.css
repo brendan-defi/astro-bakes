@@ -1,6 +1,8 @@
 /* ---------- Design tokens (handoff p.2–3) ---------- */
 :root {
   --ink: #2a1b5e;
+  /* Keyboard focus ring: ink on the light surfaces; dark sections (story, footer, ticker) swap in aqua. */
+  --focus: var(--ink);
   --ground: #fff5fa;
   --lilac: #cdb4ff;
   --pink: #ff9ccb;
@@ -12,6 +14,8 @@
   --lilac-soft: #f1e8ff;
   --lilac-tint: #e7ddfb;
   --purple-logo: #b14fe0;
+  /* The logo purple is 4.1:1 on white, fine for the wordmark but not for running text; this is the same hue at 5.7:1. */
+  --purple-text: #9638c8;
   --line-green: #0a7a3b;
   --ok-green: #075c2c;
   --ok-green-bg: #ddf7e8;
@@ -205,8 +209,8 @@ p { margin: 0; }
   color: var(--ink);
 }
 .input:focus-visible, .btn:focus-visible, button:focus-visible, a:focus-visible {
-  outline: 3px solid var(--aqua);
-  outline-offset: 2px;
+  outline: 3px solid var(--focus);
+  outline-offset: 3px;
 }
 /* A section that ScrollLink sends focus to: no ring round the whole section. */
 section[tabindex="-1"]:focus { outline: none; }
@@ -291,6 +295,8 @@ select.input {
  */
 @keyframes ab-sheen { 0% { translate: -110% 0; } 16%, 100% { translate: 110% 0; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+/* The viewer's own pause switch (MotionToggle in the ticker) does the same from an attribute on <html>. */
+:root[data-motion="paused"] *, :root[data-motion="paused"] *::before, :root[data-motion="paused"] *::after { animation: none !important; transition: none !important; }
 
 .sr-only {
   position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;

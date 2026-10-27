@@ -65,3 +65,21 @@ describe("NotifyForm", () => {
     expect(particles.burst).not.toHaveBeenCalled();
   });
 });
+
+describe("NotifyForm focus and error links", () => {
+  it("moves focus to the success message, which replaces the form and its button", async () => {
+    actions.subscribeAction.mockResolvedValue({ ok: true });
+    mount();
+    await submitWith("you@example.com");
+    expect(document.activeElement).toBe(screen.getByRole("status"));
+  });
+
+  it("links the error to the field", async () => {
+    actions.subscribeAction.mockResolvedValue({ ok: false, error: "invalid" });
+    mount();
+    await submitWith("you@example");
+    const input = screen.getByLabelText("Email");
+    expect(input.getAttribute("aria-invalid")).toBe("true");
+    expect(document.getElementById(input.getAttribute("aria-describedby")!)?.textContent).toBe(t.notifyInvalid);
+  });
+});

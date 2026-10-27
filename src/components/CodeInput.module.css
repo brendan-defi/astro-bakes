@@ -6,7 +6,7 @@
 .field { position: relative; max-width: 430px; }
 
 .tiles { display: flex; align-items: center; gap: 8px; perspective: 500px; border-radius: 18px; }
-.field[data-ring] .tiles { outline: 3px solid var(--aqua); outline-offset: 6px; }
+.field[data-ring] .tiles { outline: 3px solid var(--focus); outline-offset: 6px; }
 
 .tile {
   --candy: var(--pink);
@@ -27,7 +27,7 @@
 .tile[data-filled] { background: var(--candy); transform: rotate(-2.5deg); animation: tile-land 420ms var(--ease-spring) backwards; animation-delay: calc(var(--d) * 45ms); }
 .tile[data-filled]:is([data-candy="1"], [data-candy="3"]) { transform: rotate(2.5deg); }
 .tile[data-selected] { background: var(--lilac-soft); }
-.tile[data-active] { background: var(--pink-soft); translate: 0 -3px; box-shadow: 0 7px 0 var(--ink); outline: 3px solid var(--aqua); outline-offset: 2px; }
+.tile[data-active] { background: var(--pink-soft); translate: 0 -3px; box-shadow: 0 7px 0 var(--ink); outline: 3px solid var(--focus); outline-offset: 2px; }
 
 .digit { animation: tile-pop 440ms var(--ease-spring) backwards; animation-delay: calc(var(--d) * 45ms); }
 .caret { width: 3px; height: 0.9em; border-radius: 2px; background: var(--ink); animation: tile-blink 1.06s step-end infinite; }

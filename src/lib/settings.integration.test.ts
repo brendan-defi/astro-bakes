@@ -2,14 +2,13 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq, inArray } from "drizzle-orm";
 import * as schema from "@/db/schema";
-import { seed } from "@/db/seed";
 import { placeOrder, startCheckout } from "@/lib/checkout";
 import { ownerInbox } from "@/lib/custom-orders";
 import { loadDrops, loadSettings } from "@/lib/drops";
 import { saveSettingsAction } from "@/app/admin/(app)/settings/actions";
 import { ownerNotifications, saveSettings, settingsForForm } from "@/lib/settings";
 import { validateSettings, type SettingValue } from "@/lib/settings-fields";
-import { captureEmail, clearTestData, closeTestDb, resetDatabase, testDb, TEST_DATABASE_URL } from "@/test/db";
+import { captureEmail, clearTestData, closeTestDb, resetDatabase, reseed, testDb, TEST_DATABASE_URL } from "@/test/db";
 
 // The real save action, with only the admin check and Next's cache stubbed.
 vi.mock("@/lib/admin", () => ({ requireAdmin: async () => ({ id: "admin", email: "owner@test.invalid", name: null }) }));
@@ -46,7 +45,7 @@ describe.skipIf(!TEST_DATABASE_URL)("settings", () => {
     mail.reset();
     await clearTestData(db, ["order_items", "orders", "inventory_holds", "carts", "notification_log"]);
     await db.delete(schema.settings).where(inArray(schema.settings.key, WRITTEN));
-    await seed(db);
+    await reseed(db);
   });
   afterAll(async () => {
     await clearTestData(db, ["order_items", "orders", "inventory_holds", "carts"]);
@@ -107,8 +106,9 @@ describe.skipIf(!TEST_DATABASE_URL)("settings", () => {
     expect(after.arriveAt.getTime() - after.shipAt.getTime()).toBe(2 * DAY);
     await placePaidOrder();
     const confirmation = mail.sent.find((m) => m.type === "order_confirmation")!;
-    // Drop 03 ships Sun Oct 25 (JST); two days on is Tue Oct 27.
-    expect(confirmation.text).toContain("10月27日");
+    // Two days after the ship date (pinned to the clock by reseed), as the email writes it in Japanese.
+    const arrival = new Intl.DateTimeFormat("ja-JP", { timeZone: "Asia/Tokyo", month: "long", day: "numeric" }).format(after.arriveAt);
+    expect(confirmation.text).toContain(arrival);
   });
 
   it("sends the owner a new-order email at the owner email, with what was bought", async () => {

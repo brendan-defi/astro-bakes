@@ -121,8 +121,7 @@ function HeroNotOpen({ locale, home }: { locale: Locale; home: HomeData }) {
           )}
 
           {order && drop && (
-            // TODO: link to the order page (PRD 2.5) once it exists
-            <a href="#top" className={s.orderCard}>
+            <a href={`/${locale}/account/orders/${encodeURIComponent(order.number)}`} className={s.orderCard}>
               <span className={s.orderIcon}><TruckIcon /></span>
               <span className={s.orderBody}>
                 <span className={s.orderMain}>{t.yourBoxesShip(order.boxCount, fmtDate(drop.shipAt, locale))}</span>

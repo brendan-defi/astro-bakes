@@ -2,11 +2,10 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import * as schema from "@/db/schema";
-import { seed } from "@/db/seed";
 import { cancelOrder, changeTimeSlot, loadOrder, loadOrders, setMarketingOptIn, updateProfile } from "@/lib/account";
 import { mergeQuantities } from "@/lib/cart";
 import { placeOrder, startCheckout } from "@/lib/checkout";
-import { captureEmail, clearTestData, closeTestDb, resetDatabase, testDb, TEST_DATABASE_URL } from "@/test/db";
+import { captureEmail, clearTestData, closeTestDb, resetDatabase, reseed, testDb, TEST_DATABASE_URL } from "@/test/db";
 
 /** The account area against a real Postgres (TEST_DATABASE_URL), with the email transport captured. */
 const { pool, db } = testDb();
@@ -44,7 +43,7 @@ describe.skipIf(!TEST_DATABASE_URL)("account", () => {
   beforeEach(async () => {
     mail.reset();
     await clearTestData(db, ["refunds", "order_items", "orders", "inventory_holds", "carts", "auth_tokens", "sessions", "notification_log"]);
-    await seed(db);
+    await reseed(db);
   });
   afterAll(async () => {
     await clearTestData(db, ["refunds", "order_items", "orders", "inventory_holds", "carts"]);

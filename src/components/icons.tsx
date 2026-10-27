@@ -15,6 +15,12 @@ export const ClockIcon = ({ size = 15, ...p }: P) => (
 export const TruckIcon = ({ size = 22, ...p }: P) => (
   <svg {...base(size, p)} strokeWidth={2.2}><path d="M3 7h11v9H3z" /><path d="M14 10h4l3 3v3h-7" /><circle cx="7" cy="17.5" r="1.8" /><circle cx="17" cy="17.5" r="1.8" /></svg>
 );
+export const PauseIcon = ({ size = 14, ...p }: P) => (
+  <svg {...base(size, p)} strokeWidth={3}><path d="M8 5v14M16 5v14" /></svg>
+);
+export const PlayIcon = ({ size = 14, ...p }: P) => (
+  <svg {...base(size, { fill: "currentColor", ...p })} strokeWidth={2}><path d="M7 4.5l12 7.5-12 7.5z" /></svg>
+);
 export const CheckIcon = ({ size = 20, ...p }: P) => (
   <svg {...base(size, p)}><path d="M5 12l5 5 9-10" /></svg>
 );

@@ -31,7 +31,7 @@
 /* The radio itself is invisible but still the thing you click and focus. */
 .option input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
 .option:has(input:checked) { background: var(--pink); box-shadow: 0 3px 0 var(--ink); transform: translateY(-1px); }
-.option:has(input:focus-visible) { outline: 3px solid var(--aqua); outline-offset: 2px; }
+.option:has(input:focus-visible) { outline: 3px solid var(--focus); outline-offset: 2px; }
 /* Packaging: two cards, since each choice needs its description to make sense. */
 .packOptions { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(250px, 100%), 1fr)); gap: 12px; }
 .packOption {
@@ -44,7 +44,7 @@
 .packDesc { font-size: 14px; font-weight: 700; line-height: 1.5; }
 .packOption:has(input:checked) { background: var(--pink-soft); box-shadow: 4px 4px 0 var(--ink); transform: translateY(-1px); }
 .packOption:has(input:checked) .packDot { background: var(--pink); box-shadow: inset 0 0 0 4px var(--white); }
-.packOption:has(input:focus-visible) { outline: 3px solid var(--aqua); outline-offset: 2px; }
+.packOption:has(input:focus-visible) { outline: 3px solid var(--focus); outline-offset: 2px; }
 .inputError { border-color: #c0392b; }
 .err { display: flex; align-items: center; gap: 6px; margin-top: 2px; color: #c0392b; font-size: 13px; font-weight: 900; }
 .err svg { flex: none; }

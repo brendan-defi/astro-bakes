@@ -73,3 +73,32 @@ describe("ReorderButton", () => {
     });
   });
 });
+
+describe("CancelOrderButton focus", () => {
+  beforeEach(() => { cancelOrderAction.mockReset(); router.refresh.mockReset(); });
+  afterEach(cleanup);
+  const cancelButton = () => screen.getByRole("button", { name: "Cancel this order" });
+
+  it("moves focus to the question, and back to the button when the question closes", () => {
+    render(<CancelOrderButton locale="en" number="AB-003-001" />);
+    cancelButton().focus();
+    fireEvent.click(cancelButton());
+    expect(document.activeElement?.textContent).toBe("Cancel the whole order?");
+    fireEvent.click(screen.getByRole("button", { name: "Keep my order" }));
+    expect(document.activeElement).toBe(cancelButton());
+  });
+
+  it("returns focus to the button when the server turns the cancellation down", async () => {
+    cancelOrderAction.mockResolvedValue({ ok: false, error: "closed" });
+    render(<CancelOrderButton locale="en" number="AB-003-001" />);
+    fireEvent.click(cancelButton());
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Yes, cancel it" })); });
+    expect(screen.getByRole("alert")).toBeTruthy();
+    expect(document.activeElement).toBe(cancelButton());
+  });
+
+  it("does not take focus on its own when the page loads", () => {
+    render(<CancelOrderButton locale="en" number="AB-003-001" />);
+    expect(document.activeElement).toBe(document.body);
+  });
+});

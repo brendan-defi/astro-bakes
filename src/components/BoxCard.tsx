@@ -3,7 +3,7 @@
 import { useRef, type CSSProperties } from "react";
 import type { Box, Locale } from "@/lib/data";
 import { yen } from "@/lib/format";
-import { getStrings } from "@/lib/i18n";
+import { getStrings, jaLang } from "@/lib/i18n";
 import { maxFor, useCart } from "@/lib/cart";
 import { boop } from "@/lib/motion";
 import { burst, flyTo } from "@/lib/particles";
@@ -50,7 +50,7 @@ export function BoxCard({ box, locale }: { box: Box; locale: Locale }) {
       <div className={s.boxBody}>
         <div className={s.boxTitleRow}>
           <h3 className={`display ${s.boxName}`}>{box.name}</h3>
-          <div className={s.boxPrice}>{yen(box.price)} <span className={s.tax}>{t.taxIncl}</span></div>
+          <div className={s.boxPrice}>{yen(box.price)} <span className={s.tax} lang={jaLang(locale)}>{t.taxIncl}</span></div>
         </div>
         <p className={s.boxDesc}>{box.desc}</p>
         <p className={s.boxContents}>{box.contents}</p>

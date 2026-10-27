@@ -29,6 +29,7 @@ export function Story({ locale, settings }: { locale: Locale; settings: Settings
           <a href={settings.instagramUrl} className={`btn btn-secondary ${s.igBtn}`} target="_blank" rel="noreferrer">
             <InstagramIcon />
             {t.followOnInstagram}
+            <span className="sr-only">{t.opensNewTab}</span>
           </a>
         </div>
         <div className={s.polaroids}>

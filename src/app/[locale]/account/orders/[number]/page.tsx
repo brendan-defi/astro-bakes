@@ -7,7 +7,7 @@ import { cartIdFromCookie } from "@/lib/cart-cookie";
 import { settings as defaultSettings } from "@/lib/data";
 import { fmtDate, fmtDateTime, yen } from "@/lib/format";
 import { loadSettings } from "@/lib/drops";
-import { getStrings, isLocale } from "@/lib/i18n";
+import { getStrings, isLocale, jaLang } from "@/lib/i18n";
 import { privatePage, stringsFor } from "@/lib/metadata";
 import { Logo } from "@/components/Logo";
 import { ArrowLeftIcon, TruckIcon } from "@/components/icons";
@@ -59,7 +59,7 @@ export default async function OrderPage({ params }: { params: Promise<{ locale: 
                 {order.lines.map((l) => <div key={l.slug} className={a.line}><span>{l.name} × {l.qty} <span className={s.sub12}>({yen(l.unitPrice)} {t.each})</span></span><span>{yen(l.lineTotal)}</span></div>)}
                 <div className={a.line} style={{ borderTop: "2px dashed var(--ink)", paddingTop: 8, marginTop: 4 }}><span>{t.subtotal}</span><span>{yen(order.subtotal)}</span></div>
                 {order.shippingFee > 0 && <div className={a.line}><span>{t.shipping}</span><span>{yen(order.shippingFee)}</span></div>}
-                <div className={a.line} style={{ fontWeight: 900 }}><span>{t.total} <span className={s.sub12}>{t.taxIncl}</span></span><span>{yen(order.total)}</span></div>
+                <div className={a.line} style={{ fontWeight: 900 }}><span>{t.total} <span className={s.sub12} lang={jaLang(locale)}>{t.taxIncl}</span></span><span>{yen(order.total)}</span></div>
               </div>
             </section>
 

@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from "react";
@@ -8,7 +9,7 @@ import { placeOrderAction, startCheckoutAction } from "@/app/[locale]/checkout/a
 import { useSignInFlow } from "@/lib/use-sign-in";
 import { demoEnabled } from "@/lib/demo";
 import { fmtCountdown, fmtDate, fmtDateTime, yen } from "@/lib/format";
-import { getStrings, type Strings } from "@/lib/i18n";
+import { getStrings, jaLang, type Strings } from "@/lib/i18n";
 import { useCart, type CartLine } from "@/lib/cart";
 import { cleanPhoneInput, normalisePhone } from "@/lib/phone";
 import { cleanPostalInput, lookupPostal, normalisePostal, outsideWards, type PostalHit } from "@/lib/postal";
@@ -18,7 +19,7 @@ import { celebrate } from "@/lib/particles";
 import { formatReservationRef, parseReservationRef, reservationStatus, reservedLines, totals, type Reservation } from "@/lib/reservation";
 import { CleanInput } from "./CleanInput";
 import { CodeInput } from "./CodeInput";
-import { ArrowLeftIcon, CardIcon, CheckIcon, ClockIcon, StarShape, TruckIcon, WarningIcon } from "./icons";
+import { ArrowLeftIcon, CameraIcon, CardIcon, CheckIcon, ClockIcon, StarShape, TruckIcon, WarningIcon } from "./icons";
 import { Logo } from "./Logo";
 import { Stepper } from "./Stepper";
 import { InfoStrip } from "./InfoStrip";
@@ -251,13 +252,21 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
   }
   const addrValid = addr.name.trim() && normalisePhone(addr.phone) && addr.line1.trim() && hit?.deliverable;
   const phoneBad = touched && !normalisePhone(addr.phone);
+  const nameBad = touched && !addr.name.trim();
+  const postalBad = touched && !hit?.deliverable;
+  const line1Bad = touched && !addr.line1.trim();
   const addressLine = hit ? `〒${addr.postal} ${hit.prefecture}${hit.city}${hit.town}${addr.line1}${addr.line2 ? " " + addr.line2 : ""}` : "";
   const shortAddress = hit ? `${hit.prefecture}${hit.city}${hit.town}${addr.line1}` : "";
 
   function submitDelivery(e: FormEvent) {
     e.preventDefault();
     setTouched(true);
-    if (!addrValid) return;
+    if (!addrValid) {
+      // Each missing field gets its message (not just a red border); focus goes to the first one.
+      const first = !addr.name.trim() ? "co-name" : !normalisePhone(addr.phone) ? "co-phone" : !hit?.deliverable ? "co-postal" : "co-line1";
+      document.getElementById(first)?.focus();
+      return;
+    }
     go("pay");
   }
 
@@ -338,8 +347,9 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
   const doneAddr = placed ? `${placed.hit.prefecture}${placed.hit.city}${placed.hit.town}${placed.address.line1}` : shortAddress;
 
   const dotClass = (n: number) => `${s.dot} ${n < idx ? s.dotDone : n === idx ? s.dotCurrent : ""}`;
-  const stepList = (cls: string) => (
-    <ol aria-label={t.checkoutSteps} className={cls}>
+  // The phone layout wraps the list in a labelled <nav>, so the list itself goes unlabelled there.
+  const stepList = (cls: string, labelled = true) => (
+    <ol aria-label={labelled ? t.checkoutSteps : undefined} className={cls}>
       <li className={s.stepItem}><span className={dotClass(1)}>1</span>{t.stepSignIn}</li>
       <li aria-hidden className={s.dash} />
       <li className={s.stepItem}><span className={dotClass(2)}>2</span>{t.stepDelivery}</li>
@@ -389,16 +399,16 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
         </div>
       </header>
 
-      {inCheckout && stepList(s.steps)}
+      {inCheckout && <nav aria-label={t.checkoutSteps}>{stepList(s.steps, false)}</nav>}
 
       {(step === "signin" || step === "code" || step === "delivery") && (
-        <div className={s.pinned}>
+        <section aria-label={t.orderSummary} className={s.pinned}>
           <div style={{ minWidth: 0 }}>
             <div className={s.l1}>{t.boxCount(buying.count)} · {yen(buying.subtotal)} <span className={s.sub13}>{feeIncluded ? t.shippingIncluded : t.plusShipping}</span></div>
             <div className={s.l2}>{shipLine}</div>
           </div>
           <TruckIcon />
-        </div>
+        </section>
       )}
 
       <div className={s.body}>
@@ -420,7 +430,7 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
             <>
               {/* ---- Cart ---- */}
               {isCart && (
-                <CartStep t={t} cart={cart} changes={changes} maxFor={maxFor} shipLinePost={shipLinePost} feeLabel={feeLabel} totalLabel={totalLabel} onCheckout={onCheckout} home={home} demo={demo} closed={!drop} notice={notice} busy={busy} />
+                <CartStep t={t} locale={locale} cart={cart} changes={changes} maxFor={maxFor} shipLinePost={shipLinePost} feeLabel={feeLabel} totalLabel={totalLabel} onCheckout={onCheckout} home={home} demo={demo} closed={!drop} notice={notice} busy={busy} />
               )}
 
               {/* ---- Sign in ---- */}
@@ -474,7 +484,9 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
                     <div className={s.fields}>
                       <div className="field">
                         <label htmlFor="co-name" className="label">{t.recipientName} {jaHint("お名前")}</label>
-                        <input id="co-name" type="text" autoComplete="name" required className={`input ${touched && !addr.name.trim() ? s.inputError : ""}`} value={addr.name} onChange={(e) => setAddr({ ...addr, name: e.target.value })} />
+                        <input id="co-name" type="text" autoComplete="name" required className={`input ${nameBad ? s.inputError : ""}`} value={addr.name} onChange={(e) => setAddr({ ...addr, name: e.target.value })}
+                          aria-invalid={nameBad || undefined} aria-describedby={nameBad ? "co-name-err" : undefined} />
+                        {nameBad && <span id="co-name-err" className={s.err}><WarningIcon size={16} />{t.nameRequired}</span>}
                       </div>
                       <div className="field">
                         <label htmlFor="co-phone" className="label">{t.phone} {jaHint("電話番号")}</label>
@@ -487,14 +499,16 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
                       <div className="field">
                         <label htmlFor="co-postal" className="label">{t.postalCode} {jaHint("郵便番号")}</label>
                         <div className={s.postalRow}>
-                          <CleanInput id="co-postal" type="text" inputMode="numeric" autoComplete="postal-code" clean={cleanPostalInput} className="input" value={addr.postal}
+                          <CleanInput id="co-postal" type="text" inputMode="numeric" autoComplete="postal-code" required clean={cleanPostalInput} className={`input ${postalBad ? s.inputError : ""}`} value={addr.postal}
+                            aria-invalid={postalBad || undefined} aria-describedby="co-postal-status"
                             onValueChange={(postal) => { setAddr({ ...addr, postal }); setPostalTried(false); setHit(null); }}
                             onBlur={() => { if (normalisePostal(addr.postal).length === 7) doLookup(); }}
                             onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); doLookup(); } }} />
                           <button type="button" className={s.lookupBtn} onClick={doLookup}>{t.lookUp}</button>
                         </div>
                       </div>
-                      <div className={s.autofill}>
+                      {/* The lookup result doubles as the postal field's description, and is announced when it changes. */}
+                      <div id="co-postal-status" className={s.autofill} aria-live="polite">
                         <div className={s.k}>{t.filledFrom}</div>
                         {hit ? (
                           <>
@@ -504,12 +518,20 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
                               : <div className={s.badPill}><WarningIcon size={15} />{t.outsideArea}</div>}
                           </>
                         ) : (
-                          <div className={s.addr} style={{ opacity: postalTried ? 1 : 0.5 }}>{postalTried ? <span className={s.badPill}><WarningIcon size={15} />{outsideWards(addr.postal) ? t.outsideArea : t.postalNotFound}</span> : "—"}</div>
+                          <div className={s.addr} style={{ opacity: postalTried || postalBad ? 1 : 0.5 }}>
+                            {postalTried
+                              ? <span className={s.badPill}><WarningIcon size={15} />{outsideWards(addr.postal) ? t.outsideArea : t.postalNotFound}</span>
+                              : postalBad
+                                ? <span className={s.badPill}><WarningIcon size={15} />{t.postalRequired}</span>
+                                : <span aria-hidden>—</span>}
+                          </div>
                         )}
                       </div>
                       <div className="field">
                         <label htmlFor="co-line1" className="label">{t.streetNumber} {jaHint("番地")}</label>
-                        <input id="co-line1" type="text" autoComplete="address-line1" required className={`input ${touched && !addr.line1.trim() ? s.inputError : ""}`} value={addr.line1} onChange={(e) => setAddr({ ...addr, line1: e.target.value })} />
+                        <input id="co-line1" type="text" autoComplete="address-line1" required className={`input ${line1Bad ? s.inputError : ""}`} value={addr.line1} onChange={(e) => setAddr({ ...addr, line1: e.target.value })}
+                          aria-invalid={line1Bad || undefined} aria-describedby={line1Bad ? "co-line1-err" : undefined} />
+                        {line1Bad && <span id="co-line1-err" className={s.err}><WarningIcon size={16} />{t.streetRequired}</span>}
                       </div>
                       <div className="field">
                         <label htmlFor="co-line2" className="label">{t.building} {jaHint("建物名・部屋番号")} <span className="ja">{t.optional}</span></label>
@@ -567,7 +589,7 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
                       ))}
                       <div className={`${s.tr}`} style={{ borderTop: "2px dashed var(--ink)", paddingTop: 8, marginTop: 2 }}><span>{t.subtotal}</span><span className={s.v}>{yen(buying.subtotal)}</span></div>
                       {!feeIncluded && <div className={s.tr}><span>{t.shipping}</span><span className={s.v}>{feeLabel}</span></div>}
-                      <div className={`${s.tr} ${s.trTotal}`} style={{ borderTop: 0, paddingTop: 0, marginTop: 0 }}><span className={s.k}>{t.total} <span className={s.sub12}>{t.taxIncl}</span></span><span className={s.v}>{totalLabel}</span></div>
+                      <div className={`${s.tr} ${s.trTotal}`} style={{ borderTop: 0, paddingTop: 0, marginTop: 0 }}><span className={s.k}>{t.total} <span className={s.sub12} lang={jaLang(locale)}>{t.taxIncl}</span></span><span className={s.v}>{totalLabel}</span></div>
                     </section>
                   </div>
 
@@ -668,7 +690,7 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
             )}
             <div className={`${s.tr} ${s.trSub}`}><span>{t.subtotal} · {t.boxCount(summaryCount)}</span><span className={s.v}>{yen(summarySubtotal)}</span></div>
             {!feeIncluded && <div className={s.tr}><span>{t.shipping} <span className={s.sub13}>{t.shippingFlatShort}</span></span><span className={s.v}>{feeLabel}</span></div>}
-            <div className={`${s.tr} ${s.trTotal}`}><span className={s.k}>{t.total} <span className={s.sub12}>{t.taxIncl}</span></span><span className={s.v}>{totalLabel}</span></div>
+            <div className={`${s.tr} ${s.trTotal}`}><span className={s.k}>{t.total} <span className={s.sub12} lang={jaLang(locale)}>{t.taxIncl}</span></span><span className={s.v}>{totalLabel}</span></div>
             <div className={s.summaryStrip}><TruckIcon size={20} />{step === "delivery" || step === "pay" || step === "done" ? shipLineSlot : shipLine}</div>
           </section>
 
@@ -698,9 +720,18 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
   );
 }
 
+/** A cart row's picture: the box's photo, or a camera glyph on its tint until it has one (D4). The name sits beside it, so the image is decorative. */
+function Thumb({ box }: { box: Box }) {
+  return (
+    <div className={s.thumb} style={{ background: box.tint }}>
+      {box.photo ? <Image src={box.photo} alt="" fill sizes="104px" /> : <CameraIcon size={22} />}
+    </div>
+  );
+}
+
 /* ---------------- Cart step ---------------- */
-function CartStep({ t, cart, changes, maxFor, shipLinePost, feeLabel, totalLabel, onCheckout, home, demo, closed, notice, busy }: {
-  t: Strings; cart: ReturnType<typeof useCart>; changes: Change[] | null; maxFor: (b: Box) => number;
+function CartStep({ t, locale, cart, changes, maxFor, shipLinePost, feeLabel, totalLabel, onCheckout, home, demo, closed, notice, busy }: {
+  t: Strings; locale: Locale; cart: ReturnType<typeof useCart>; changes: Change[] | null; maxFor: (b: Box) => number;
   shipLinePost: string; feeLabel: string; totalLabel: string; onCheckout: () => void; home: string; demo: string | null;
   closed: boolean; notice: string | null; busy: boolean;
 }) {
@@ -754,14 +785,14 @@ function CartStep({ t, cart, changes, maxFor, shipLinePost, feeLabel, totalLabel
         <div className={s.rows}>
           {rows.map((l) => (
             <div key={l.box.id} className={s.row}>
-              <div className={s.thumb} style={{ background: l.box.tint }}>{t.photo}</div>
+              <Thumb box={l.box} />
               <div className={s.rowBody}>
                 <div className={s.rowTop}>
                   <div className={s.rowName}>{l.box.name}</div>
                   <div className={s.rowLine}>{yen(l.lineTotal)}</div>
                 </div>
                 <div className={s.rowBottom}>
-                  <span className={s.rowUnit}>{yen(l.box.price)} {t.each} <span className={s.sub12}>{t.taxIncl}</span></span>
+                  <span className={s.rowUnit}>{yen(l.box.price)} {t.each} <span className={s.sub12} lang={jaLang(locale)}>{t.taxIncl}</span></span>
                   <span className={s.mobileOnly}>
                     <Stepper size="sm" qty={l.qty} max={maxFor(l.box)} onInc={() => cart.set(l.box.id, Math.min(maxFor(l.box), l.qty + 1))} onDec={() => cart.dec(l.box.id)} labels={{ inc: t.addOne, dec: t.removeOne }} />
                   </span>
@@ -775,7 +806,7 @@ function CartStep({ t, cart, changes, maxFor, shipLinePost, feeLabel, totalLabel
           ))}
           {gone.map((c) => (
             <div key={c.box.id} className={`${s.row} ${s.rowGone}`}>
-              <div className={s.thumb} style={{ background: c.box.tint }}>{t.photo}</div>
+              <Thumb box={c.box} />
               <div className={s.rowBody}>
                 <div className={s.rowTop}>
                   <div className={s.rowName}>{c.box.name}</div>
@@ -795,7 +826,7 @@ function CartStep({ t, cart, changes, maxFor, shipLinePost, feeLabel, totalLabel
         <div className={s.totals}>
           <div className={s.tr}><span>{t.subtotal}</span><span className={s.v}>{yen(cart.subtotal)}</span></div>
           {cart.shippingFee !== 0 && <div className={s.tr}><span>{t.shipping} <span className={s.sub13}>{t.shippingFlat}</span></span><span className={s.v}>{feeLabel}</span></div>}
-          <div className={`${s.tr} ${s.trTotal}`}><span className={s.k}>{t.total} <span className={s.sub12}>{t.taxIncl}</span></span><span className={s.v}>{totalLabel}</span></div>
+          <div className={`${s.tr} ${s.trTotal}`}><span className={s.k}>{t.total} <span className={s.sub12} lang={jaLang(locale)}>{t.taxIncl}</span></span><span className={s.v}>{totalLabel}</span></div>
         </div>
         <InfoStrip><span>{shipLinePost}</span></InfoStrip>
         <button type="button" onClick={onCheckout} disabled={cart.count === 0 || busy} className="btn btn-primary btn-block" style={{ minHeight: 62, fontSize: 21 }}>{t.checkout}</button>

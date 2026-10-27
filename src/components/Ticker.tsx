@@ -1,6 +1,7 @@
 import type { HomeData, Locale } from "@/lib/data";
 import { daysUntil, fmtTickerDate, fmtTickerDateTime, fmtTickerDay } from "@/lib/format";
 import { getStrings } from "@/lib/i18n";
+import { MotionToggle } from "./MotionToggle";
 import styles from "./Ticker.module.css";
 
 /** Drop status ticker; copy per state from design-ref/DROP-STATES.md. */
@@ -40,6 +41,7 @@ export function Ticker({ locale, home }: { locale: Locale; home: HomeData }) {
         <div className={styles.group}>{group}</div>
         <div className={styles.group}>{group}</div>
       </div>
+      <MotionToggle locale={locale} />
     </div>
   );
 }

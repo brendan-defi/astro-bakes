@@ -2,10 +2,9 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { and, eq, sql } from "drizzle-orm";
 import * as schema from "@/db/schema";
-import { seed } from "@/db/seed";
 import { availability, heldCheckout, markPaid, placeOrder, startCheckout, type PlaceInput } from "@/lib/checkout";
 import { loadDrops } from "@/lib/drops";
-import { captureEmail, clearTestData, closeTestDb, resetDatabase, testDb, TEST_DATABASE_URL } from "@/test/db";
+import { captureEmail, clearTestData, closeTestDb, resetDatabase, reseed, testDb, TEST_DATABASE_URL } from "@/test/db";
 
 /**
  * The checkout write path against a real Postgres (TEST_DATABASE_URL; see README).
@@ -64,7 +63,7 @@ describe.skipIf(!TEST_DATABASE_URL)("checkout write path", () => {
   });
   beforeEach(async () => {
     await clearTestData(db, ["order_items", "orders", "inventory_holds", "carts"]);
-    await seed(db); // restores sold_qty
+    await reseed(db); // restores sold_qty
   });
   afterAll(async () => {
     await clearTestData(db, ["order_items", "orders", "inventory_holds", "carts"]);
@@ -231,7 +230,7 @@ describe.skipIf(!TEST_DATABASE_URL)("checkout write path", () => {
       expect(results[0].ok).toBe(true);
       for (const r of results.slice(1)) expect(r.ok).toBe(true);
       await db.execute(sql`truncate order_items, orders, inventory_holds, carts cascade`);
-      await seed(db);
+      await reseed(db);
     }
   });
 
