@@ -14,6 +14,7 @@ type Samples = { [K in keyof Strings as Strings[K] extends (...a: never[]) => st
  */
 const SAMPLES: Samples = {
   dropIsOpen: ["Drop 03"],
+  dropSoldOut: ["Drop 03"],
   leftCount: [3],
   allergen: ["Egg"],
   boxCount: [2],
@@ -21,6 +22,8 @@ const SAMPLES: Samples = {
   chipShipping: ["¥800"],
   notifyDoneSub: ["you@example.com"],
   tickerOpen: [3],
+  tickerSoldOut: [3],
+  tickerStatusSoldOut: [3, 2],
   tickerCloses: [2],
   tickerShips: ["OCT 25"],
   tickerStatus: [3, 2, "OCT 25"],

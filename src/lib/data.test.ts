@@ -88,3 +88,27 @@ describe("getHome", () => {
     expect(getHome({ viewer: "ordered" }, mockSource).viewer.order).toMatchObject({ dropId: "drop-03", boxCount: 2 });
   });
 });
+
+describe("getHome sold out (D9)", () => {
+  const gone = (d: Drop): Drop => ({ ...d, boxes: d.boxes.map((b) => ({ ...b, left: 0 })) });
+  it("flags an open drop whose every box has nothing left, and nothing else", () => {
+    const now = JST("2026-11-10T12:00:00");
+    expect(getHome({ now }, { ...mockSource, drops: [drop03, drop04] }).soldOut).toBe(false);
+    expect(getHome({ now }, { ...mockSource, drops: [drop03, gone(drop04)] })).toMatchObject({ state: "open", drop: { id: "drop-04" }, soldOut: true });
+    const oneLeft = { ...gone(drop04), boxes: gone(drop04).boxes.map((b, i) => (i === 0 ? { ...b, left: 1 } : b)) };
+    expect(getHome({ now }, { ...mockSource, drops: [drop03, oneLeft] }).soldOut).toBe(false);
+    expect(getHome({ now: JST("2026-10-30T12:00:00") }, { ...mockSource, drops: [drop03, gone(drop04)] })).toMatchObject({ state: "scheduled", soldOut: false });
+    expect(getHome({ state: "open", now }, { ...mockSource, drops: [gone(drop04)] }).soldOut).toBe(true);
+  });
+});
+
+describe("getHome with the next drop open while the last one is still in the kitchen", () => {
+  it("shows the open drop, not the earlier closed one", () => {
+    // Drop 03 closed on Oct 18 and ships Oct 25; the owner opens Drop 04 early, on Oct 20.
+    const early = { ...drop04, state: "open" as const, openAt: JST("2026-10-20T10:00:00") };
+    const now = JST("2026-10-21T12:00:00");
+    expect(getHome({ now }, { ...mockSource, drops: [drop03, early] })).toMatchObject({ state: "open", drop: { id: "drop-04" }, soldOut: false });
+    // Once Drop 04 closes too, the earliest unfinished drop is current again.
+    expect(getHome({ now: JST("2026-10-23T12:00:00") }, { ...mockSource, drops: [drop03, { ...early, closeAt: JST("2026-10-22T21:00:00") }] })).toMatchObject({ state: "closed", drop: { id: "drop-03" } });
+  });
+});

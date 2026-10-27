@@ -229,6 +229,8 @@ export interface HomeData {
   state: HomeState;
   /** The drop the hero is about: the current one, or null between drops. */
   drop: Drop | null;
+  /** Every box in the open drop is spoken for (D9, 2026-10-23): it stays open until its closing time, and the shop says sold out. */
+  soldOut: boolean;
   /** The next scheduled drop, shown on the closed page when there is one. */
   nextDrop: Drop | null;
   /** Boxes for section 1.3: the drop's boxes, or every active box between drops. */
@@ -272,39 +274,45 @@ export function getHome(q: HomeQuery = {}, src: HomeSource = mockSource): HomeDa
   const current = live.find(({ s }) => s === "open")?.d ?? null;
   const scheduled = live.find(({ s }) => s === "scheduled")?.d ?? null;
   const past = [...live].reverse().find(({ s }) => s === "closed" || s === "baking" || s === "shipped" || s === "complete")?.d ?? null;
+  const open = (d: Drop): HomeData => ({ ...base, state: "open", drop: d, nextDrop: null, boxes: d.boxes, soldOut: allSoldOut(d) });
+  const notOpen = (h: Omit<HomeData, "viewer" | "settings" | "soldOut">): HomeData => ({ ...base, ...h, soldOut: false });
 
   // Demo overrides so every state can be opened directly (see README).
   switch (q.state) {
     case "open": {
       const d = current ?? past ?? scheduled;
-      if (d) return { ...base, state: "open", drop: d, nextDrop: null, boxes: d.boxes };
+      if (d) return open(d);
       break;
     }
     case "scheduled": {
       const d = scheduled ?? live.at(-1)?.d;
-      if (d) return { ...base, state: "scheduled", drop: d, nextDrop: null, boxes: d.boxes };
+      if (d) return notOpen({ state: "scheduled", drop: d, nextDrop: null, boxes: d.boxes });
       break;
     }
     case "closed": {
       const d = past ?? current ?? scheduled;
       if (d) {
         const next = q.next === "0" || scheduled === d ? null : scheduled;
-        return { ...base, state: "closed", drop: d, nextDrop: next, boxes: next ? next.boxes : catalogue };
+        return notOpen({ state: "closed", drop: d, nextDrop: next, boxes: next ? next.boxes : catalogue });
       }
       break;
     }
     case "nodrop":
-      return { ...base, state: "nodrop", drop: null, nextDrop: null, boxes: catalogue };
+      return notOpen({ state: "nodrop", drop: null, nextDrop: null, boxes: catalogue });
   }
 
-  // Otherwise read the state machine: the earliest unfinished drop is "current".
+  // Otherwise read the state machine. A drop that is selling wins (the lifecycle keeps it to one at a time), even
+  // while an earlier drop is still being baked or shipped; otherwise the earliest unfinished drop is "current".
+  if (current) return open(current);
   const head = live.find(({ s }) => s !== "complete");
-  if (!head) return { ...base, state: "nodrop", drop: null, nextDrop: null, boxes: catalogue };
-  if (head.s === "scheduled") return { ...base, state: "scheduled", drop: head.d, nextDrop: null, boxes: head.d.boxes };
-  if (head.s === "open") return { ...base, state: "open", drop: head.d, nextDrop: null, boxes: head.d.boxes };
+  if (!head) return notOpen({ state: "nodrop", drop: null, nextDrop: null, boxes: catalogue });
+  if (head.s === "scheduled") return notOpen({ state: "scheduled", drop: head.d, nextDrop: null, boxes: head.d.boxes });
   const next = live.find(({ d, s }) => s === "scheduled" && d.openAt > head.d.openAt)?.d ?? null;
-  return { ...base, state: "closed", drop: head.d, nextDrop: next, boxes: next ? next.boxes : catalogue };
+  return notOpen({ state: "closed", drop: head.d, nextDrop: next, boxes: next ? next.boxes : catalogue });
 }
+
+/** Sold out as the shop means it (D9): every box in the drop has nothing left (sold plus held reaches its cap). */
+export const allSoldOut = (d: Drop): boolean => d.boxes.length > 0 && d.boxes.every((b) => b.left <= 0);
 
 export function getBox(id: string): Box | undefined {
   return boxes.find((b) => b.id === id);

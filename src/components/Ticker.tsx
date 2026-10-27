@@ -7,10 +7,15 @@ import styles from "./Ticker.module.css";
 /** Drop status ticker; copy per state from design-ref/DROP-STATES.md. */
 export function Ticker({ locale, home }: { locale: Locale; home: HomeData }) {
   const t = getStrings(locale);
-  const { state, drop, nextDrop } = home;
+  const { state, drop, nextDrop, soldOut } = home;
   let items: string[];
   let status: string;
-  if (state === "open" && drop) {
+  if (state === "open" && drop && soldOut) {
+    // D9: still open until its closing time, and every box is gone.
+    const days = daysUntil(drop.closeAt);
+    items = [t.tickerSoldOut(drop.number), t.tickerCloses(days), t.tickerArea, t.tickerNotified];
+    status = t.tickerStatusSoldOut(drop.number, days);
+  } else if (state === "open" && drop) {
     const days = daysUntil(drop.closeAt);
     const ship = fmtTickerDate(drop.shipAt, locale);
     items = [t.tickerOpen(drop.number), t.tickerCloses(days), t.tickerArea, t.tickerShips(ship)];
