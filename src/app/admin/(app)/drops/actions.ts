@@ -3,8 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireAdmin } from "@/lib/admin";
-import { dropContext, duplicateDrop, saveDrop } from "@/lib/drops-admin";
-import { isDropState, validateDrop, type Errors } from "@/lib/drop-rules";
+import type { DropState } from "@/lib/data";
+import { dropContext, duplicateDrop, saveDrop, transitionDrop } from "@/lib/drops-admin";
+import { fromJstLocal, isDropState, validateDrop, type Errors } from "@/lib/drop-rules";
+import { isDropAction } from "@/lib/drop-transitions";
 
 export type SaveDropResult = { ok: true; slug: string } | { ok: false; errors: Errors };
 
@@ -22,6 +24,23 @@ export async function saveDropAction(input: Record<string, unknown>, slug: strin
   const saved = await saveDrop(r.value, slug, isDropState(drawnFor) ? drawnFor : undefined);
   if (saved.ok) revalidatePath("/", "layout");
   return saved;
+}
+
+export type TransitionResult = { ok: true; state: DropState } | { ok: false; error: string };
+
+/**
+ * A lifecycle action on a drop (PRD 5.2a): schedule, open now, close now, reopen, baking, shipped, complete.
+ * Reopen takes the new closing time as a datetime-local value in Japan time. The shop shows the result at once,
+ * so the whole site is refreshed.
+ */
+export async function transitionDropAction(slug: string, action: unknown, input: { closeAt?: unknown } = {}): Promise<TransitionResult> {
+  await requireAdmin();
+  if (!isDropAction(action)) return { ok: false, error: "That isn't a lifecycle action." };
+  const closeAt = typeof input.closeAt === "string" && input.closeAt.trim() ? fromJstLocal(input.closeAt) : null;
+  if (action === "reopen" && !closeAt) return { ok: false, error: "Pick a new closing time." };
+  const r = await transitionDrop(slug, action, { closeAt });
+  if (r.ok) revalidatePath("/", "layout");
+  return r;
 }
 
 /** Copy a drop into a new draft and open it. */

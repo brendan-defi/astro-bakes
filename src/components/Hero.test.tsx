@@ -50,3 +50,22 @@ describe("Hero drop description (admin drop editor)", () => {
     expect(screen.queryByText(/Matcha season/)).toBeNull();
   });
 });
+
+describe("Hero on a sold-out drop (D9)", () => {
+  const openAt = (soldOut: boolean) => {
+    const home = getHome({ state: "open" }, mockSource);
+    return { ...home, soldOut };
+  };
+  it("keeps the open hero but says sold out in the bubble and the closing ticket, and points at the next drop", () => {
+    render(<Hero locale="en" home={openAt(true)} />);
+    expect(screen.getByText(t.dropSoldOut(t.dropN(openAt(true).drop!.number)))).toBeTruthy();
+    expect(screen.getByText(t.everyBoxSoldOut)).toBeTruthy();
+    expect(screen.getByRole("link", { name: t.headsUpNextDrop }).getAttribute("href")).toBe("#notify");
+    expect(screen.queryByRole("link", { name: t.pickYourBoxes })).toBeNull();
+  });
+  it("otherwise offers the boxes", () => {
+    render(<Hero locale="en" home={openAt(false)} />);
+    expect(screen.getByRole("link", { name: t.pickYourBoxes }).getAttribute("href")).toBe("#boxes");
+    expect(screen.getByText(t.orWhenSoldOut)).toBeTruthy();
+  });
+});

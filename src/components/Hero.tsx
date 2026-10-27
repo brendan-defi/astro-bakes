@@ -11,11 +11,12 @@ import s from "./home.module.css";
 
 /** Drop hero: one of four variants from the drop state (PRD 1.1). */
 export function Hero({ locale, home }: { locale: Locale; home: HomeData }) {
-  if (home.state === "open" && home.drop) return <HeroOpen locale={locale} drop={home.drop} />;
+  if (home.state === "open" && home.drop) return <HeroOpen locale={locale} drop={home.drop} soldOut={home.soldOut} />;
   return <HeroNotOpen locale={locale} home={home} />;
 }
 
-function HeroOpen({ locale, drop }: { locale: Locale; drop: Drop }) {
+/** The open hero; sold out (D9) keeps it, with the bubble, the closing ticket and the call to action saying so. */
+function HeroOpen({ locale, drop, soldOut }: { locale: Locale; drop: Drop; soldOut: boolean }) {
   const t = getStrings(locale);
   return (
     <section id="top" className={s.hero}>
@@ -26,14 +27,14 @@ function HeroOpen({ locale, drop }: { locale: Locale; drop: Drop }) {
           <Title t={t} />
         </div>
 
-        <HeroAstro photo="/images/astro-cookie.jpg" alt={t.astroAlt} bubble={t.dropIsOpen(t.dropN(drop.number))} />
+        <HeroAstro photo="/images/astro-cookie.jpg" alt={t.astroAlt} bubble={soldOut ? t.dropSoldOut(t.dropN(drop.number)) : t.dropIsOpen(t.dropN(drop.number))} />
 
         <div className={s.heroActions}>
           <div className={s.tickets}>
             <div className={`${s.ticket} ${s.ticketPink}`}>
               <div className={`eyebrow ${s.eyebrow}`}>{t.ordersClose}</div>
               <div className={s.ticketValue}>{fmtDate(drop.closeAt, locale)}<br />{fmtTime(drop.closeAt, locale)}</div>
-              <div className={s.ticketSub}>{t.orWhenSoldOut}</div>
+              <div className={s.ticketSub}>{soldOut ? t.everyBoxSoldOut : t.orWhenSoldOut}</div>
             </div>
             <div className={`${s.ticket} ${s.ticketAqua}`}>
               <div className={`eyebrow ${s.eyebrow}`}>{t.arrives}</div>
@@ -41,10 +42,17 @@ function HeroOpen({ locale, drop }: { locale: Locale; drop: Drop }) {
               <div className={s.ticketSub}>{t.ships} {fmtDate(drop.shipAt, locale)}</div>
             </div>
           </div>
-          <ScrollLink href="#boxes" className={`btn btn-primary sheen ${s.heroCta}`}>
-            {t.pickYourBoxes}
-            <ArrowDownIcon />
-          </ScrollLink>
+          {soldOut ? (
+            <ScrollLink href="#notify" className={`btn btn-primary ${s.heroCta}`}>
+              {t.headsUpNextDrop}
+              <ArrowDownIcon />
+            </ScrollLink>
+          ) : (
+            <ScrollLink href="#boxes" className={`btn btn-primary sheen ${s.heroCta}`}>
+              {t.pickYourBoxes}
+              <ArrowDownIcon />
+            </ScrollLink>
+          )}
         </div>
       </div>
     </section>

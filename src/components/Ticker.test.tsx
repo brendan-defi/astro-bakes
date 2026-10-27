@@ -7,7 +7,7 @@ const JST = (iso: string) => new Date(`${iso}+09:00`);
 
 // Drop 04 (sample data) closes Sun Nov 15 at 21:00 JST and ships Sun Nov 22.
 const drop = drops[1];
-const home: HomeData = { state: "open", drop, nextDrop: null, boxes: drop.boxes, viewer: anonymousViewer, settings };
+const home: HomeData = { state: "open", drop, nextDrop: null, boxes: drop.boxes, viewer: anonymousViewer, settings, soldOut: false };
 
 /** The ticker's screen-reader sentence at a given moment. */
 function statusAt(now: Date, locale: Locale = "en") {
@@ -49,5 +49,18 @@ describe("Ticker on an open drop", () => {
 
   it("counts calendar days further out", () => {
     expect(statusAt(JST("2026-11-12T22:00:00"))).toBe("Drop 04 is open. Closes in 3 days. Ships NOV 22.");
+  });
+});
+
+describe("Ticker on a sold-out drop (D9: open until it closes)", () => {
+  it("says sold out instead of open, and get notified instead of the ship date", () => {
+    vi.setSystemTime(JST("2026-11-13T10:00:00"));
+    render(<Ticker locale="en" home={{ ...home, soldOut: true }} />);
+    expect(screen.getByRole("status").getAttribute("aria-label")).toBe("Drop 04 is sold out. Closes in 2 days. Get notified for the next one.");
+    expect(screen.getByRole("status").textContent).toContain("DROP 04 SOLD OUT");
+    expect(screen.getByRole("status").textContent).not.toContain("SHIPS");
+    cleanup();
+    render(<Ticker locale="ja" home={{ ...home, soldOut: true }} />);
+    expect(screen.getByRole("status").getAttribute("aria-label")).toBe("ドロップ04は完売しました。締切まであと2日。次回のお知らせを受け取れます。");
   });
 });

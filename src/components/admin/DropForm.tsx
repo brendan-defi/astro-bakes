@@ -58,9 +58,17 @@ const STATE_NOTE: Record<DropState, string> = {
  * What can change depends on the drop's state (drop-rules.ts `editable`); locked fields are shown, not offered.
  * Times are Japan time.
  */
-export function DropForm({ slug, initial, number, state, choices, arrivalOffsetDays, notice }: {
+export interface DropFormProps {
   slug: string | null; initial: Initial | null; number: number; state: DropState; choices: Choice[]; arrivalOffsetDays: number; notice?: string;
-}) {
+  /** The stored drop's updatedAt, as a number: when it changes (a lifecycle action, or this form's own save coming back), the form starts again from `initial`. */
+  version?: number;
+  /** Told whenever the form gains or loses unsaved changes (DropEditor holds the lifecycle buttons back while it has some). */
+  onDirtyChange?: (dirty: boolean) => void;
+  /** Why the form can't be edited right now: a lifecycle action is under way (from its confirmation to the refresh that follows). */
+  locked?: string;
+}
+
+export function DropForm({ slug, initial, number, state, choices, arrivalOffsetDays, notice, version, onDirtyChange, locked }: DropFormProps) {
   const router = useRouter();
   const creating = slug === null;
   const can = editable(state);
@@ -72,6 +80,23 @@ export function DropForm({ slug, initial, number, state, choices, arrivalOffsetD
   /** The drop moved to a state that locks different fields while this form was open: only a reload shows the truth. */
   const [stale, setStale] = useState(false);
   const dirty = !same(draft, saved);
+  /**
+   * The state the draft was drawn for. The save sends it, not the current `state`, so edits made under one state
+   * are never relabelled as the next one's: if the drop moved on meanwhile, the server refuses (errors.state) instead
+   * of quietly keeping the stored values for fields the new state locks.
+   */
+  const [draftState, setDraftState] = useState(state);
+  // The stored drop changed under this form, or the clock moved its state (adjusted while rendering, so stale
+  // values never paint): the saved baseline follows it, and so does the draft unless the owner is mid-edit.
+  const key = `${version ?? "new"}:${state}`;
+  const [seenKey, setSeenKey] = useState(key);
+  if (key !== seenKey) {
+    setSeenKey(key);
+    const fresh = fromInitial(number, initial, choices);
+    setSaved(fresh);
+    if (!dirty) { setDraft(fresh); setDraftState(state); setErrors({}); setStale(false); }
+  }
+  useEffect(() => { onDirtyChange?.(dirty); }, [dirty, onDirtyChange]);
   const focusNext = useRef<string | null>(null);
   useEffect(() => {
     if (busy || !focusNext.current) return;
@@ -99,7 +124,7 @@ export function DropForm({ slug, initial, number, state, choices, arrivalOffsetD
     try {
       // The state this form was drawn for goes along: the server refuses if the drop has since moved to a state that
       // locks different fields, rather than quietly keeping the stored values and letting this form call them saved.
-      const r = await saveDropAction(payload(draft), slug, creating ? undefined : state);
+      const r = await saveDropAction(payload(draft), slug, creating ? undefined : draftState);
       if (!r.ok) {
         setErrors(r.errors);
         setStale(!!r.errors.state);
@@ -114,6 +139,7 @@ export function DropForm({ slug, initial, number, state, choices, arrivalOffsetD
         return;
       }
       setSaved(draft);
+      setDraftState(state);
       setErrors({});
       setStatus({ kind: "saved", text: "Saved." });
       router.refresh();
@@ -154,7 +180,7 @@ export function DropForm({ slug, initial, number, state, choices, arrivalOffsetD
   return (
     <form onSubmit={submit} noValidate className={s.adminForm} aria-busy={busy}>
       <p className={s.banner}>{STATE_NOTE[state]}</p>
-      <fieldset disabled={busy} className={s.formFieldset}>
+      <fieldset disabled={busy || !!locked} className={s.formFieldset}>
         <section aria-labelledby="drop-sec-name" className={`panel ${s.formSection}`}>
           <h2 id="drop-sec-name" className={s.sectionTitle}>Drop</h2>
           <div className={s.fields}>
@@ -236,11 +262,12 @@ export function DropForm({ slug, initial, number, state, choices, arrivalOffsetD
         </section>
       </fieldset>
       <div className={s.saveBar}>
-        <button type="submit" className={`btn btn-primary ${s.btnSm}`} disabled={busy || (!creating && !dirty)}>{busy ? "Saving…" : creating ? "Create draft" : "Save drop"}</button>
+        <button type="submit" className={`btn btn-primary ${s.btnSm}`} disabled={busy || !!locked || (!creating && !dirty)}>{busy ? "Saving…" : creating ? "Create draft" : "Save drop"}</button>
         <span role="status" aria-live="polite" className={!status ? s.muted : status.kind === "error" ? s.statusError : s.statusOk}>
-          {status?.text ?? (dirty && !creating ? "Unsaved changes" : "")}
+          {locked ?? status?.text ?? (dirty && !creating ? "Unsaved changes" : "")}
         </span>
         {stale && <button type="button" className={s.linkBtn} onClick={() => window.location.reload()}>Reload</button>}
+        {dirty && !creating && !busy && !locked && <button type="button" className={s.linkBtn} onClick={() => { setDraft(saved); setDraftState(state); setErrors({}); setStatus(null); setStale(false); }}>Discard changes</button>}
       </div>
     </form>
   );

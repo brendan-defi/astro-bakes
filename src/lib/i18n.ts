@@ -37,6 +37,8 @@ const en = {
   ships: "ships",
   pickYourBoxes: "Pick your boxes",
   dropIsOpen: (n: string) => `${n} is open!`,
+  dropSoldOut: (n: string) => `${n} is sold out!`,
+  everyBoxSoldOut: "every box is sold out",
   astroAlt: "Astro the Australian Shepherd eyeing a marshmallow cookie",
   astroOutsideAlt: "Astro the Australian Shepherd outdoors",
   // boxes
@@ -158,6 +160,9 @@ const en = {
   copyright: "© Astro Bakes",
   // ticker
   tickerOpen: (n: number) => `DROP ${pad2(n)} IS OPEN`,
+  tickerSoldOut: (n: number) => `DROP ${pad2(n)} SOLD OUT`,
+  tickerStatusSoldOut: (n: number, days: number) =>
+    `Drop ${pad2(n)} is sold out. ${days === 0 ? "Closes today" : days === 1 ? "Closes tomorrow" : `Closes in ${days} days`}. Get notified for the next one.`,
   tickerCloses: (days: number) => days === 0 ? "CLOSES TODAY" : days === 1 ? "CLOSES TOMORROW" : `CLOSES IN ${days} DAYS`,
   tickerArea: "TOKYO 23 WARDS",
   tickerShips: (d: string) => `SHIPS ${d}`,
@@ -451,6 +456,8 @@ const ja: Strings = {
   ships: "発送日",
   pickYourBoxes: "ボックスを選ぶ",
   dropIsOpen: (n) => `${n}、受付中！`,
+  dropSoldOut: (n) => `${n}、完売！`,
+  everyBoxSoldOut: "全ボックス完売",
   astroAlt: "マシュマロクッキーを見つめるオーストラリアン・シェパードのアストロ",
   astroOutsideAlt: "外で過ごすオーストラリアン・シェパードのアストロ",
   // boxes
@@ -571,6 +578,9 @@ const ja: Strings = {
   copyright: "© Astro Bakes",
   // ticker
   tickerOpen: (n) => `ドロップ${pad2(n)} 受付中`,
+  tickerSoldOut: (n) => `ドロップ${pad2(n)} 完売`,
+  tickerStatusSoldOut: (n, days) =>
+    `ドロップ${pad2(n)}は完売しました。${days === 0 ? "本日締切" : days === 1 ? "明日締切" : `締切まであと${days}日`}。次回のお知らせを受け取れます。`,
   tickerCloses: (days) => days === 0 ? "本日締切" : days === 1 ? "明日締切" : `締切まであと${days}日`,
   tickerArea: "東京23区限定",
   tickerShips: (d) => `${d}発送`,

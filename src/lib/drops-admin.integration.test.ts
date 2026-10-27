@@ -2,8 +2,11 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import * as schema from "@/db/schema";
-import { duplicateDropAction, saveDropAction } from "@/app/admin/(app)/drops/actions";
-import { startCheckout } from "@/lib/checkout";
+import { duplicateDropAction, saveDropAction, transitionDropAction } from "@/app/admin/(app)/drops/actions";
+import { cancelOrder, loadOrders } from "@/lib/account";
+import { placeOrder, startCheckout } from "@/lib/checkout";
+import { effectiveState, getHome, settings as defaultSettings } from "@/lib/data";
+import { loadDrops } from "@/lib/drops";
 import { nextMonth, toJstDay, toJstLocal } from "@/lib/drop-rules";
 import { dropForForm, listDropsAdmin } from "@/lib/drops-admin";
 import { closeTestDb, resetDatabase, testDb, TEST_DATABASE_URL } from "@/test/db";
@@ -199,4 +202,201 @@ describe.skipIf(!TEST_DATABASE_URL)("drop editor, review follow-ups", () => {
 
 afterAll(async () => {
   await closeTestDb(pool);
+});
+
+describe.skipIf(!TEST_DATABASE_URL)("drop lifecycle (PRD 5.2a)", () => {
+  beforeEach(async () => {
+    await resetDatabase(db);
+  });
+  const stored = async (slug: string) => (await db.query.drops.findFirst({ where: eq(schema.drops.slug, slug) }))!;
+  const at = (days: number) => new Date(Date.now() + days * DAY);
+  /** A new draft six weeks out, whatever the clock says. */
+  const futureDrop = () => newDrop({ openAt: toJstLocal(at(42)), closeAt: toJstLocal(at(49)), shipAt: toJstDay(at(56)) });
+  const shop = async () => getHome({}, { drops: await loadDrops("en"), catalogue: [], settings: defaultSettings });
+  const near = (a: Date, b: Date) => Math.abs(a.getTime() - b.getTime()) < 5_000;
+  /** A customer with a paid order in the given drop, placed through the real checkout. */
+  async function paidOrder(slug: string, email: string) {
+    const [c] = await db.insert(schema.customers).values({ email, emailVerifiedAt: new Date(), name: "Test Person", phone: "090-0000-0000" }).returning({ id: schema.customers.id });
+    const r = await startCheckout({ dropId: slug, items: { "cookie-box": 1 }, flags: { state: "open" } }, null);
+    if (!r.ok || !r.checkoutId) throw new Error("expected holds");
+    const p = await placeOrder({ dropId: slug, checkoutId: r.checkoutId, revision: r.revision!, locale: "en", delivery: { name: "Test Person", phone: "090-0000-0000", postal: "153-0061", line1: "1-2-3", line2: "" }, gift: null, paymentMethod: "card" }, r.checkoutId, c.id);
+    if (!p.ok) throw new Error("expected order: " + p.error);
+    return { customerId: c.id, number: p.order.number };
+  }
+
+  it("schedules a draft, which the shop then shows as coming up; a draft that would already be open is sent to Open now", async () => {
+    await saveDropAction(futureDrop(), null); // drop-05, six weeks out
+    expect(await transitionDropAction("drop-05", "schedule")).toEqual({ ok: true, state: "scheduled" });
+    expect((await dropForForm("drop-05"))!).toMatchObject({ state: "scheduled", storedState: "scheduled" });
+    expect(await transitionDropAction("drop-05", "unschedule")).toEqual({ ok: true, state: "draft" });
+    await db.update(schema.drops).set({ openAt: new Date(Date.now() - DAY) }).where(eq(schema.drops.slug, "drop-05"));
+    expect(await transitionDropAction("drop-05", "schedule")).toEqual({ ok: false, error: "A scheduled drop has to open in the future. To open it now, use Open now." });
+  });
+
+  it("won't schedule over another drop's window, and won't open while another drop is open", async () => {
+    const d04 = await stored("drop-04"); // scheduled, two weeks out
+    await saveDropAction(newDrop({ openAt: toJstLocal(new Date(d04.openAt.getTime() + DAY)), closeAt: toJstLocal(new Date(d04.closeAt.getTime() + DAY)), shipAt: toJstDay(new Date(d04.shipAt.getTime() + DAY)) }), null);
+    expect(await transitionDropAction("drop-05", "schedule")).toEqual({ ok: false, error: "Drop 04 is scheduled over those dates. Only one drop can be open at a time; change the dates first." });
+    expect(await transitionDropAction("drop-04", "open")).toEqual({ ok: true, state: "open" });
+    expect(await transitionDropAction("drop-05", "open")).toEqual({ ok: false, error: "Drop 04 is open now. Close it first; only one drop can be open at a time." });
+  });
+
+  it("opens now: the opening time becomes now, the shop sells it, and the editor locks what customers have seen", async () => {
+    const before = new Date();
+    expect(await transitionDropAction("drop-04", "open")).toEqual({ ok: true, state: "open" });
+    const d = await stored("drop-04");
+    expect(d.state).toBe("open");
+    expect(near(d.openAt, before)).toBe(true);
+    expect(await shop()).toMatchObject({ state: "open", drop: { id: "drop-04" }, soldOut: false });
+    expect((await dropForForm("drop-04"))!.state).toBe("open");
+    const r = await saveDropAction(await formFor("drop-04", { nameEn: "Live!", shipAt: "2027-01-01" }), "drop-04", "open");
+    expect(r).toEqual({ ok: true, slug: "drop-04" });
+    expect(toJstDay((await stored("drop-04")).shipAt)).toBe(toJstDay(d.shipAt)); // the date change was ignored, the name saved
+  });
+
+  it("closes now: no new checkouts, the customer's free cancellation ends, and the drop can reopen until a new closing time", async () => {
+    await transitionDropAction("drop-04", "open");
+    const { customerId } = await paidOrder("drop-04", "buyer@test.invalid");
+    expect((await loadOrders(customerId, "en"))[0]).toMatchObject({ status: "confirmed", canCancel: true });
+    const before = new Date();
+    expect(await transitionDropAction("drop-04", "close")).toEqual({ ok: true, state: "closed" });
+    const d = await stored("drop-04");
+    expect(near(d.closeAt, before)).toBe(true);
+    expect((await loadOrders(customerId, "en"))[0]).toMatchObject({ status: "confirmed", canCancel: false });
+    expect((await startCheckout({ dropId: "drop-04", items: { "cookie-box": 1 }, flags: {} }, null)).ok).toBe(false);
+    expect((await shop()).state).toBe("closed"); // the homepage's closed hero (Drop 03, still to ship, comes first)
+    expect((await dropForForm("drop-04"))!.state).toBe("closed");
+    // Reopen: the new closing time has to be ahead of now and before the ship date.
+    expect(await transitionDropAction("drop-04", "reopen", { closeAt: toJstLocal(new Date(Date.now() - 3_600_000)) })).toEqual({ ok: false, error: "The new closing time has to be in the future." });
+    expect(await transitionDropAction("drop-04", "reopen", { closeAt: toJstLocal(new Date(d.shipAt.getTime() + 3_600_000)) })).toEqual({ ok: false, error: "The new closing time has to be before the ship date." });
+    expect(await transitionDropAction("drop-04", "reopen", {})).toEqual({ ok: false, error: "Pick a new closing time." });
+    const until = new Date(Date.now() + 2 * DAY);
+    expect(await transitionDropAction("drop-04", "reopen", { closeAt: toJstLocal(until) })).toEqual({ ok: true, state: "open" });
+    expect(toJstLocal((await stored("drop-04")).closeAt)).toBe(toJstLocal(until)); // entered to the minute
+    expect((await loadOrders(customerId, "en"))[0].canCancel).toBe(true);
+  });
+
+  it("baking, shipped, complete: complete delivers the shipped orders and leaves the rest", async () => {
+    await transitionDropAction("drop-04", "open");
+    const a = await paidOrder("drop-04", "a@test.invalid");
+    const b = await paidOrder("drop-04", "b@test.invalid");
+    await transitionDropAction("drop-04", "close");
+    expect(await transitionDropAction("drop-04", "baking")).toEqual({ ok: true, state: "baking" });
+    expect((await loadOrders(a.customerId, "en"))[0].status).toBe("baking");
+    expect(await transitionDropAction("drop-04", "complete")).toEqual({ ok: false, error: "Mark complete isn't available: the drop is baking." });
+    expect(await transitionDropAction("drop-04", "shipped")).toEqual({ ok: true, state: "shipped" });
+    await db.update(schema.orders).set({ state: "shipped", shippedAt: new Date() }).where(eq(schema.orders.number, a.number));
+    expect(await transitionDropAction("drop-04", "complete")).toEqual({ ok: true, state: "complete" });
+    expect((await loadOrders(a.customerId, "en"))[0].status).toBe("delivered");
+    expect((await loadOrders(b.customerId, "en"))[0].status).toBe("baking"); // never shipped: not touched
+    expect((await dropForForm("drop-04"))!).toMatchObject({ state: "complete", storedState: "complete" });
+    expect(await transitionDropAction("drop-04", "complete")).toMatchObject({ ok: false });
+  });
+
+  it("turns down an unknown action and a drop that doesn't exist", async () => {
+    expect(await transitionDropAction("drop-04", "launch")).toEqual({ ok: false, error: "That isn't a lifecycle action." });
+    expect(await transitionDropAction("drop-99", "schedule")).toEqual({ ok: false, error: "That drop no longer exists." });
+  });
+});
+
+describe.skipIf(!TEST_DATABASE_URL)("one open drop at a time, across future windows (review of #31)", () => {
+  beforeEach(async () => {
+    await resetDatabase(db);
+  });
+  const at = (days: number) => new Date(Date.now() + days * DAY);
+  const window = (open: number, close: number, ship: number) => ({ openAt: toJstLocal(at(open)), closeAt: toJstLocal(at(close)), shipAt: toJstDay(at(ship)) });
+  /** Which drops the shop would see as open on a given day, from the stored dates and states. */
+  const openOn = async (day: number) => (await loadDrops("en")).filter((d) => effectiveState(d, at(day)) === "open").map((d) => d.id);
+  const clash04 = { ok: false, error: "Drop 04 is scheduled over those dates. Only one drop can be open at a time; change the dates first." };
+
+  it("A: Open now looks ahead; a scheduled drop that would open before this one closes refuses it", async () => {
+    await saveDropAction(newDrop(window(28, 35, 42)), null); // Drop 04 is scheduled for days 14 to 21
+    expect(await transitionDropAction("drop-05", "schedule")).toEqual({ ok: true, state: "scheduled" });
+    expect(await transitionDropAction("drop-05", "open")).toEqual(clash04);
+    expect(await openOn(15)).toEqual(["drop-04"]); // Drop 04 alone, when its day comes
+    expect(await transitionDropAction("drop-04", "unschedule")).toEqual({ ok: true, state: "draft" });
+    expect(await transitionDropAction("drop-05", "open")).toEqual({ ok: true, state: "open" });
+    expect(await openOn(15)).toEqual(["drop-05"]);
+  });
+
+  it("B: Reopen can't run into the next scheduled drop", async () => {
+    await saveDropAction(newDrop(window(1, 7, 10)), null);
+    expect(await transitionDropAction("drop-05", "open")).toEqual({ ok: true, state: "open" });
+    expect(await transitionDropAction("drop-05", "close")).toEqual({ ok: true, state: "closed" });
+    expect(await transitionDropAction("drop-05", "reopen", { closeAt: toJstLocal(at(9)) })).toEqual({ ok: true, state: "open" });
+    expect(await transitionDropAction("drop-05", "close")).toEqual({ ok: true, state: "closed" });
+    await db.update(schema.drops).set({ shipAt: at(40) }).where(eq(schema.drops.slug, "drop-05")); // room to reopen past Drop 04
+    expect(await transitionDropAction("drop-05", "reopen", { closeAt: toJstLocal(at(28)) })).toEqual(clash04);
+    expect(await openOn(15)).toEqual(["drop-04"]);
+  });
+
+  it("C: saving a scheduled drop's dates can't move it onto another drop's window", async () => {
+    await saveDropAction(newDrop(window(28, 35, 42)), null);
+    await transitionDropAction("drop-05", "schedule");
+    const onto04 = await formFor("drop-05", window(15, 22, 29));
+    expect(await saveDropAction(onto04, "drop-05", "scheduled")).toEqual({ ok: false, errors: { openAt: clash04.error } });
+    expect(await openOn(16)).toEqual(["drop-04"]);
+    expect(await saveDropAction(await formFor("drop-05", window(22, 29, 36)), "drop-05", "scheduled")).toEqual({ ok: true, slug: "drop-05" }); // after Drop 04 closes
+    expect(await openOn(16)).toEqual(["drop-04"]);
+    expect(await openOn(25)).toEqual(["drop-05"]);
+  });
+
+  it("a date save and an Open now that would collide wait for the same lock; only one goes through", async () => {
+    await saveDropAction(newDrop(window(28, 35, 42)), null);
+    await transitionDropAction("drop-05", "schedule");
+    const other = await pool!.connect();
+    await other.query("begin");
+    await other.query("select pg_advisory_xact_lock(hashtext('drop-lifecycle'))");
+    let settled = 0;
+    const save = saveDropAction(await formFor("drop-05", window(15, 22, 29)), "drop-05", "scheduled").finally(() => settled++);
+    const open = transitionDropAction("drop-04", "open").finally(() => settled++);
+    await new Promise((r) => setTimeout(r, 400));
+    expect(settled).toBe(0);
+    await other.query("commit");
+    other.release();
+    const [s, o] = await Promise.all([save, open]);
+    expect([s.ok, o.ok].filter(Boolean).length).toBe(1);
+    expect((await openOn(16)).length).toBe(1);
+  });
+});
+
+describe.skipIf(!TEST_DATABASE_URL)("Mark complete and a customer's request on the same order (review of #31)", () => {
+  beforeEach(async () => {
+    await resetDatabase(db);
+  });
+  async function shippedDrop04() {
+    await transitionDropAction("drop-04", "open");
+    const [c] = await db.insert(schema.customers).values({ email: "ship@test.invalid", emailVerifiedAt: new Date(), name: "Test Person", phone: "090-0000-0000" }).returning({ id: schema.customers.id });
+    const r = await startCheckout({ dropId: "drop-04", items: { "cookie-box": 1 }, flags: { state: "open" } }, null);
+    if (!r.ok || !r.checkoutId) throw new Error("expected holds");
+    const p = await placeOrder({ dropId: "drop-04", checkoutId: r.checkoutId, revision: r.revision!, locale: "en", delivery: { name: "Test Person", phone: "090-0000-0000", postal: "153-0061", line1: "1-2-3", line2: "" }, gift: null, paymentMethod: "card" }, r.checkoutId, c.id);
+    if (!p.ok) throw new Error(p.error);
+    await transitionDropAction("drop-04", "close");
+    await transitionDropAction("drop-04", "baking");
+    await transitionDropAction("drop-04", "shipped");
+    await db.update(schema.orders).set({ state: "shipped", shippedAt: new Date() }).where(eq(schema.orders.number, p.order.number));
+    return { customerId: c.id, number: p.order.number };
+  }
+
+  it("takes the locks in the customer's order (order, then drop), so neither side deadlocks", async () => {
+    const { customerId, number } = await shippedDrop04();
+    // A customer request has the order row and is about to take the drop row.
+    const customer = await pool!.connect();
+    await customer.query("begin");
+    await customer.query("select id from orders where number = $1 for update", [number]);
+    const complete = transitionDropAction("drop-04", "complete");
+    await new Promise((r) => setTimeout(r, 300));
+    await customer.query("select id from drops where slug = 'drop-04' for update"); // free: completion is waiting on the order, not holding the drop
+    await customer.query("commit");
+    customer.release();
+    expect(await complete).toEqual({ ok: true, state: "complete" });
+    expect((await loadOrders(customerId, "en"))[0].status).toBe("delivered");
+  });
+
+  it("a real cancellation racing a completion: both settle, no deadlock error", async () => {
+    const { customerId, number } = await shippedDrop04();
+    const [cancel, complete] = await Promise.all([cancelOrder(customerId, number), transitionDropAction("drop-04", "complete")]);
+    expect(cancel).toEqual({ ok: false, error: "closed" }); // shipped orders can't be cancelled
+    expect(complete).toEqual({ ok: true, state: "complete" });
+  });
 });

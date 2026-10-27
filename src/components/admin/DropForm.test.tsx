@@ -116,3 +116,78 @@ describe("DropForm and the state it was drawn for", () => {
     expect(document.getElementById(box.getAttribute("aria-describedby")!)?.textContent).toBe("Choose a box.");
   });
 });
+
+describe("DropForm when the stored drop changes under it", () => {
+  const later = { ...OPEN, closeAt: fromJstLocal("2026-10-31T18:00")!, boxes: [{ ...OPEN.boxes[0], cap: 25 }] };
+  const view = (initial: typeof OPEN, version: number, state: "open" | "closed" = "open") =>
+    <DropForm slug="drop-03" initial={initial} number={3} state={state} choices={CHOICES} arrivalOffsetDays={1} version={version} />;
+
+  it("shows the stored values once the version changes (a lifecycle action came back)", () => {
+    const r = render(view(OPEN, 1));
+    expect((screen.getByLabelText("Closes *") as HTMLInputElement).value).toBe("2026-10-30T21:00");
+    r.rerender(view(later, 2, "closed"));
+    expect((screen.getByLabelText("Closes *") as HTMLInputElement).value).toBe("2026-10-31T18:00");
+    expect((screen.getByLabelText("Cap for box 1") as HTMLInputElement).value).toBe("25");
+    expect(screen.getByText(/^Closed\./)).toBeTruthy();
+    expect((screen.getByRole("button", { name: "Save drop" }) as HTMLButtonElement).disabled).toBe(true); // nothing unsaved
+  });
+
+  it("keeps an edit in progress but moves the saved baseline, so Save still sends the edit", () => {
+    const r = render(view(OPEN, 1));
+    fireEvent.change(screen.getByLabelText("Cap for box 1"), { target: { value: "30" } });
+    r.rerender(view(later, 2));
+    expect((screen.getByLabelText("Cap for box 1") as HTMLInputElement).value).toBe("30");
+    expect((screen.getByLabelText("Closes *") as HTMLInputElement).value).toBe("2026-10-30T21:00"); // the draft is the owner's
+    expect(status()).toBe("Unsaved changes");
+  });
+
+  it("reports unsaved changes to its owner, and Discard changes takes them back", () => {
+    const onDirtyChange = vi.fn();
+    render(<DropForm slug="drop-03" initial={OPEN} number={3} state="open" choices={CHOICES} arrivalOffsetDays={1} version={1} onDirtyChange={onDirtyChange} />);
+    expect(onDirtyChange).toHaveBeenLastCalledWith(false);
+    fireEvent.change(screen.getByLabelText("Cap for box 1"), { target: { value: "30" } });
+    expect(onDirtyChange).toHaveBeenLastCalledWith(true);
+    fireEvent.click(screen.getByRole("button", { name: "Discard changes" }));
+    expect((screen.getByLabelText("Cap for box 1") as HTMLInputElement).value).toBe("20");
+    expect(onDirtyChange).toHaveBeenLastCalledWith(false);
+    expect(screen.queryByRole("button", { name: "Discard changes" })).toBeNull();
+  });
+});
+
+describe("DropForm remembers the state its draft was drawn for", () => {
+  const SCHEDULED = { ...OPEN, openAt: fromJstLocal("2026-12-06T10:00")!, closeAt: fromJstLocal("2026-12-13T21:00")!, shipAt: fromJstDay("2026-12-20")!, boxes: [{ ...OPEN.boxes[0], sold: 0, held: 0 }] };
+  const view = (state: "scheduled" | "open", version: number, over: Partial<typeof SCHEDULED> = {}) =>
+    <DropForm slug="drop-05" initial={{ ...SCHEDULED, ...over }} number={5} state={state} choices={CHOICES} arrivalOffsetDays={1} version={version} />;
+
+  it("sends the draft's own state after the drop moved on under an edit, so the server can refuse instead of ignoring", async () => {
+    actions.saveDropAction.mockResolvedValue({ ok: false, errors: { state: "This drop is now open, so a different set of fields can change. Reload the page to see what it has now, then make your change again." } });
+    const r = render(view("scheduled", 1));
+    fireEvent.change(screen.getByLabelText("Ships *"), { target: { value: "2026-12-24" } });
+    // The drop opens (a lifecycle action elsewhere, or the clock): new state, new version, the edit still on screen.
+    r.rerender(view("open", 2, { openAt: fromJstLocal("2026-12-01T10:00")! }));
+    expect((screen.getByLabelText("Ships *") as HTMLInputElement).value).toBe("2026-12-24");
+    expect((screen.getByLabelText("Ships *") as HTMLInputElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Save drop" }));
+    await waitFor(() => expect(status()).toMatch(/^This drop is now open/));
+    expect(sent()[2]).toBe("scheduled");
+    expect(screen.getByRole("button", { name: "Reload" })).toBeTruthy();
+  });
+
+  it("draws a clean form for the new state, so its saves carry that state", async () => {
+    actions.saveDropAction.mockResolvedValue({ ok: true, slug: "drop-05" });
+    const r = render(view("scheduled", 1));
+    r.rerender(view("open", 2, { openAt: fromJstLocal("2026-12-01T10:00")! }));
+    fireEvent.change(document.getElementById("drop-nameEn")!, { target: { value: "Drop 05 · Live" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save drop" }));
+    await waitFor(() => expect(status()).toBe("Saved."));
+    expect(sent()[2]).toBe("open");
+  });
+
+  it("is read-only while locked, and says why", () => {
+    render(<DropForm slug="drop-05" initial={SCHEDULED} number={5} state="scheduled" choices={CHOICES} arrivalOffsetDays={1} version={1} locked="A lifecycle action is under way; the form picks up the stored drop when it finishes." />);
+    expect((document.querySelector("fieldset") as HTMLFieldSetElement).disabled).toBe(true);
+    expect(screen.getByLabelText("Ships *").matches(":disabled")).toBe(true);
+    expect((screen.getByRole("button", { name: "Save drop" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(status()).toMatch(/^A lifecycle action is under way/);
+  });
+});

@@ -452,7 +452,7 @@ Every customer-facing text field is stored in both languages (`name_ja`, `name_e
 |---|---|---|---|
 | draft | scheduled | admin: Schedule | Homepage shows *Scheduled* hero |
 | scheduled | open | system at open_at, or admin: Open now | Homepage flips to *Open*; (optional) "drop is open" announcement if scheduled in 4.8 |
-| open | closed | system at close_at, or when every box sells out (D9), or admin: Close now | Carts cleared; new checkouts blocked; in-flight holds allowed to finish |
+| open | closed | system at close_at, or admin: Close now (a sold-out drop stays open and shows sold out, D9 as revised 2026-10-23) | New checkouts blocked; in-flight holds allowed to finish |
 | closed | open | admin: Reopen (only before ship_at) | — |
 | closed | baking | admin | (optional) "closed — baking on" email |
 | baking | shipped | admin, usually via the 4.6 tracking import | Per-order shipped emails |
@@ -529,6 +529,7 @@ Not decisions — things to verify when the relevant piece is built.
 
 ## Changelog
 
+- **2026-10-27** — Drop lifecycle (4.2, 5.2a) in admin: Schedule, Back to draft, Open now, Close now, Reopen, Start baking, Mark shipped, Mark complete, with one drop open at a time and Mark complete delivering the shipped orders. The homepage shows a sold-out open drop as sold out (D9). Cancel drop waits for the orders work.
 - **2026-10-23** — D9 changes. A drop that sells out stays open until its close date, and the shop shows it as sold out. Customers keep free cancellation until the close date their confirmation promised (D22), and a cancelled box goes back on sale. The owner can still close it early. The admin drop editor (4.2) creates drafts, edits by state (everything before opening; afterwards names, caps and limits only, with caps never below sold plus held) and duplicates a drop a month later. Scheduling and the other lifecycle actions follow.
 - **2026-10-21** — Boxes and items (4.3) are editable in the admin. Allergens are chosen as checkboxes from the 特定原材料 (9: cashew was added by the Consumer Affairs Agency's notice of 2026-04-01) and the 推奨表示 (19), rather than free text, so the shop can label every one in both languages. The card's contents line stays separate copy from the box's recipe. Slugs are fixed once created. The per-item bake buffer moves to the production sheet (4.5), where it's used, as a whole number of baking units. Photo uploads come next.
 - **2026-10-21** — Notify-me stays single opt-in (1.5) rather than moving to double opt-in: a confirmation step would cost real sign-ups, and Japanese carrier addresses often filter unfamiliar senders, so confirmations would quietly never arrive. Instead, a per-visitor limit (10 sign-ups an hour) stops bulk abuse, a welcome email with a one-click unsubscribe lets anyone added without asking leave, and drop announcements carry the same unsubscribe link and headers. Revisit double opt-in if complaint rates climb.
