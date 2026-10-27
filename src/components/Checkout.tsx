@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from "react";
@@ -18,7 +19,7 @@ import { celebrate } from "@/lib/particles";
 import { formatReservationRef, parseReservationRef, reservationStatus, reservedLines, totals, type Reservation } from "@/lib/reservation";
 import { CleanInput } from "./CleanInput";
 import { CodeInput } from "./CodeInput";
-import { ArrowLeftIcon, CardIcon, CheckIcon, ClockIcon, StarShape, TruckIcon, WarningIcon } from "./icons";
+import { ArrowLeftIcon, CameraIcon, CardIcon, CheckIcon, ClockIcon, StarShape, TruckIcon, WarningIcon } from "./icons";
 import { Logo } from "./Logo";
 import { Stepper } from "./Stepper";
 import { InfoStrip } from "./InfoStrip";
@@ -698,6 +699,15 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
   );
 }
 
+/** A cart row's picture: the box's photo, or a camera glyph on its tint until it has one (D4). The name sits beside it, so the image is decorative. */
+function Thumb({ box }: { box: Box }) {
+  return (
+    <div className={s.thumb} style={{ background: box.tint }}>
+      {box.photo ? <Image src={box.photo} alt="" fill sizes="104px" /> : <CameraIcon size={22} />}
+    </div>
+  );
+}
+
 /* ---------------- Cart step ---------------- */
 function CartStep({ t, cart, changes, maxFor, shipLinePost, feeLabel, totalLabel, onCheckout, home, demo, closed, notice, busy }: {
   t: Strings; cart: ReturnType<typeof useCart>; changes: Change[] | null; maxFor: (b: Box) => number;
@@ -754,7 +764,7 @@ function CartStep({ t, cart, changes, maxFor, shipLinePost, feeLabel, totalLabel
         <div className={s.rows}>
           {rows.map((l) => (
             <div key={l.box.id} className={s.row}>
-              <div className={s.thumb} style={{ background: l.box.tint }}>{t.photo}</div>
+              <Thumb box={l.box} />
               <div className={s.rowBody}>
                 <div className={s.rowTop}>
                   <div className={s.rowName}>{l.box.name}</div>
@@ -775,7 +785,7 @@ function CartStep({ t, cart, changes, maxFor, shipLinePost, feeLabel, totalLabel
           ))}
           {gone.map((c) => (
             <div key={c.box.id} className={`${s.row} ${s.rowGone}`}>
-              <div className={s.thumb} style={{ background: c.box.tint }}>{t.photo}</div>
+              <Thumb box={c.box} />
               <div className={s.rowBody}>
                 <div className={s.rowTop}>
                   <div className={s.rowName}>{c.box.name}</div>

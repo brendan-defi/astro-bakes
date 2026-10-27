@@ -71,7 +71,9 @@
 /* ===== Cart rows ===== */
 .rows { display: flex; flex-direction: column; gap: 12px; }
 .row { display: flex; gap: 12px; align-items: center; background: var(--white); border: var(--border); border-radius: 20px; box-shadow: 4px 4px 0 var(--ink); padding: 12px; }
-.thumb { flex: none; width: 64px; height: 64px; border-radius: 14px; border: var(--border-thin); display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 900; text-align: center; }
+/* The box's photo (object-fit: cover inside the rounded square), or a camera glyph until it has one. */
+.thumb { flex: none; position: relative; overflow: hidden; width: 64px; height: 64px; border-radius: 14px; border: var(--border-thin); display: flex; align-items: center; justify-content: center; color: var(--ink); }
+.thumb img { object-fit: cover; }
 .rowBody { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
 .rowTop { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
 .rowName { font-family: var(--font-display), sans-serif; font-size: 17px; line-height: 1.15; }
@@ -87,7 +89,7 @@
 @media (min-width: 900px) {
   .rows { gap: 16px; }
   .row { gap: 18px; border-radius: 24px; box-shadow: 5px 5px 0 var(--ink); padding: 16px; }
-  .thumb { width: 104px; height: 104px; border-radius: 18px; font-size: 12px; }
+  .thumb { width: 104px; height: 104px; border-radius: 18px; }
   .rowBody { gap: 4px; }
   .rowTop .rowLine { display: none; }
   .rowName { font-size: 22px; }

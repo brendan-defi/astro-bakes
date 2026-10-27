@@ -190,7 +190,6 @@ const en = {
   totalTitle: "Total",
   // cart
   yourBoxes: "Your boxes",
-  photo: "Photo",
   each: "each",
   limitNote: "Up to 5 of each box per person, per drop.",
   holdNote: "Your boxes are held for 10 minutes once you start checkout.",
@@ -598,7 +597,6 @@ const ja: Strings = {
   totalTitle: "合計",
   // cart
   yourBoxes: "カート",
-  photo: "写真",
   each: "/ 箱",
   limitNote: "各ボックス、1回のドロップにつきおひとり様5点までです。",
   holdNote: "購入手続きを始めると、ボックスを10分間お取り置きします。",
