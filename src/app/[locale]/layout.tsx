@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { isLocale } from "@/lib/i18n";
 import { openGraphBase, SITE_URL, stringsFor } from "@/lib/metadata";
 import { SelectionColors } from "@/components/SelectionColors";
-import { MOTION_ATTR, MOTION_KEY, PAUSED } from "@/lib/motion";
+import { MOTION_ATTR, MOTION_KEY, PAUSED } from "@/lib/motion-pause";
 import { fontVariables } from "../fonts";
 import "../globals.css";
 

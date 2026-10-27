@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import { MOTION_ATTR, MOTION_KEY, PAUSED } from "./motion-pause";
 import { readStored, useStored, writeStored } from "./stored";
 
 /**
@@ -9,13 +10,10 @@ import { readStored, useStored, writeStored } from "./stored";
 const REDUCED = "(prefers-reduced-motion: reduce)";
 
 /**
- * The viewer's own pause switch (MotionToggle in the ticker; WCAG 2.2.2), kept in localStorage so it holds
+ * The viewer's own pause switch (MotionToggle in the ticker; WCAG 2.2.2) is kept in localStorage so it holds
  * for the next page. While paused, <html data-motion="paused"> turns on the stylesheet's kill switch, and the
- * helpers here treat it like the OS reduced-motion preference.
+ * helpers here treat it like the OS reduced-motion preference. The constants live in motion-pause.ts.
  */
-export const MOTION_KEY = "ab-motion";
-export const PAUSED = "paused";
-export const MOTION_ATTR = "motion";
 const pausedByViewer = () => readStored("local", MOTION_KEY) === PAUSED;
 
 /** True when we may animate from JS: the browser has el.animate() and the viewer hasn't asked for reduced motion or paused it. */

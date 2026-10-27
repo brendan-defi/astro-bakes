@@ -3,7 +3,8 @@
 import { useEffect } from "react";
 import type { Locale } from "@/lib/data";
 import { getStrings } from "@/lib/i18n";
-import { applyMotionAttribute, MOTION_KEY, PAUSED, setMotionPaused } from "@/lib/motion";
+import { applyMotionAttribute, setMotionPaused } from "@/lib/motion";
+import { MOTION_KEY, PAUSED } from "@/lib/motion-pause";
 import { useHydrated, useStored } from "@/lib/stored";
 import { PauseIcon, PlayIcon } from "./icons";
 import s from "./Ticker.module.css";
