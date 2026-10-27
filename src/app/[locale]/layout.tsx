@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { notFound } from "next/navigation";
 import { isLocale } from "@/lib/i18n";
 import { openGraphBase, SITE_URL, stringsFor } from "@/lib/metadata";
+import { MotionSync } from "@/components/MotionSync";
 import { SelectionColors } from "@/components/SelectionColors";
 import { MOTION_ATTR, MOTION_KEY, PAUSED } from "@/lib/motion-pause";
 import { fontVariables } from "../fonts";
@@ -50,6 +51,7 @@ export default async function LocaleLayout({
         <script dangerouslySetInnerHTML={{ __html: PAUSE_SCRIPT }} />
         {children}
         <SelectionColors />
+        <MotionSync />
       </body>
     </html>
   );
