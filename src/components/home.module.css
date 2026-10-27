@@ -194,8 +194,10 @@
 .cartLink .fee { font-family: var(--font-body), sans-serif; font-size: 12px; font-weight: 900; }
 .cartLink .go { white-space: nowrap; }
 @media (min-width: 768px) {
-  .cartBar { --focus: var(--ink); background: transparent; padding: 14px var(--gutter) 26px; }
+  .cartBar { background: transparent; padding: 14px var(--gutter) 26px; }
   .cartLink { max-width: 640px; gap: 16px; min-height: 64px; padding: 0 30px; border-color: var(--ink); box-shadow: 0 6px 0 var(--ink); font-size: 20px; }
+  /* The bar is transparent and sticky here, so whatever scrolls under it is the ring's background: a white halo inside an ink ring shows on the light ground and over the ink story and footer alike. */
+  .cartLink:focus-visible { outline-color: var(--ink); box-shadow: 0 0 0 3px var(--white), 0 6px 0 var(--ink); }
   .cartLink .fee { font-size: 13px; }
 }
 
