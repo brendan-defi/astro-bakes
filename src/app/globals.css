@@ -293,6 +293,8 @@ select.input {
  */
 @keyframes ab-sheen { 0% { translate: -110% 0; } 16%, 100% { translate: 110% 0; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+/* The viewer's own pause switch (MotionToggle in the ticker) does the same from an attribute on <html>. */
+:root[data-motion="paused"] *, :root[data-motion="paused"] *::before, :root[data-motion="paused"] *::after { animation: none !important; transition: none !important; }
 
 .sr-only {
   position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;

@@ -1,4 +1,6 @@
 .ticker {
+  --focus: var(--aqua);
+  position: relative;
   background: var(--ink); color: var(--butter);
   overflow: hidden; white-space: nowrap;
   padding: 9px 0;
@@ -10,6 +12,14 @@
 .item { display: inline-flex; gap: 22px; padding-left: 22px; }
 .pink { color: var(--pink); }
 .aqua { color: var(--aqua); }
+/* The pause switch for every animation on the site (WCAG 2.2.2) rides at the end of the ticker; the text passes behind it. */
+.pause {
+  position: absolute; top: 50%; right: 8px; translate: 0 -50%;
+  width: 28px; height: 28px; padding: 0; border-radius: var(--radius-pill);
+  border: 2px solid var(--butter); background: var(--ink); color: var(--butter);
+  display: flex; align-items: center; justify-content: center; cursor: pointer;
+}
+.pause:hover { background: var(--butter); color: var(--ink); }
 @media (min-width: 768px) {
   .ticker { padding: 10px 0; font-size: 15px; }
   .track { animation-duration: 40s; }

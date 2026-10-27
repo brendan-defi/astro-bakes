@@ -15,6 +15,7 @@ const en = {
   home: "Astro Bakes home",
   language: "Language",
   cart: "Cart",
+  pauseMotion: "Pause animations",
   signIn: "Sign in",
   // page metadata
   metaTitle: "Astro Bakes · American-style bakes from Sangenjaya",
@@ -428,6 +429,7 @@ const ja: Strings = {
   home: "Astro Bakes ホーム",
   language: "言語",
   cart: "カート",
+  pauseMotion: "アニメーションを一時停止",
   signIn: "ログイン",
   // page metadata
   metaTitle: "Astro Bakes｜三軒茶屋のアメリカンスタイル焼き菓子",
