@@ -4,18 +4,22 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireAdmin } from "@/lib/admin";
 import { dropContext, duplicateDrop, saveDrop } from "@/lib/drops-admin";
-import { validateDrop, type Errors } from "@/lib/drop-rules";
+import { isDropState, validateDrop, type Errors } from "@/lib/drop-rules";
 
 export type SaveDropResult = { ok: true; slug: string } | { ok: false; errors: Errors };
 
-/** Create a draft (`slug` null) or save the drop with that slug. A scheduled or live drop shows on the shop, so the whole site is refreshed. */
-export async function saveDropAction(input: Record<string, unknown>, slug: string | null): Promise<SaveDropResult> {
+/**
+ * Create a draft (`slug` null) or save the drop with that slug. `drawnFor` is the state the form was drawn for; a
+ * drop that has since moved to a state locking different fields is refused with errors.state (see drops-admin.ts).
+ * A scheduled or live drop shows on the shop, so the whole site is refreshed.
+ */
+export async function saveDropAction(input: Record<string, unknown>, slug: string | null, drawnFor?: unknown): Promise<SaveDropResult> {
   await requireAdmin();
   const ctx = await dropContext(slug);
   if (!ctx) return { ok: false, errors: { form: "That drop no longer exists." } };
   const r = validateDrop(input, ctx);
   if (!r.ok) return r;
-  const saved = await saveDrop(r.value, slug);
+  const saved = await saveDrop(r.value, slug, isDropState(drawnFor) ? drawnFor : undefined);
   if (saved.ok) revalidatePath("/", "layout");
   return saved;
 }

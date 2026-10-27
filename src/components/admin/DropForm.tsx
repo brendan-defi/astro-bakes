@@ -69,6 +69,8 @@ export function DropForm({ slug, initial, number, state, choices, arrivalOffsetD
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<{ kind: "saved" | "error"; text: string } | null>(notice ? { kind: "saved", text: notice } : null);
+  /** The drop moved to a state that locks different fields while this form was open: only a reload shows the truth. */
+  const [stale, setStale] = useState(false);
   const dirty = !same(draft, saved);
   const focusNext = useRef<string | null>(null);
   useEffect(() => {
@@ -79,6 +81,7 @@ export function DropForm({ slug, initial, number, state, choices, arrivalOffsetD
 
   const touch = (key: string) => {
     setStatus(null);
+    setStale(false);
     setErrors((errs) => Object.fromEntries(Object.entries(errs).filter(([k]) => k !== key && !k.startsWith(`${key}.`))));
   };
   const set = (key: Text, value: string) => { setDraft((d) => ({ ...d, [key]: value })); touch(key); };
@@ -94,10 +97,13 @@ export function DropForm({ slug, initial, number, state, choices, arrivalOffsetD
     setBusy(true);
     setStatus(null);
     try {
-      const r = await saveDropAction(payload(draft), slug);
+      // The state this form was drawn for goes along: the server refuses if the drop has since moved to a state that
+      // locks different fields, rather than quietly keeping the stored values and letting this form call them saved.
+      const r = await saveDropAction(payload(draft), slug, creating ? undefined : state);
       if (!r.ok) {
         setErrors(r.errors);
-        setStatus({ kind: "error", text: r.errors.form ?? "Some fields need fixing; they're marked below." });
+        setStale(!!r.errors.state);
+        setStatus({ kind: "error", text: r.errors.state ?? r.errors.form ?? "Some fields need fixing; they're marked below." });
         const box = firstBoxError(r.errors);
         focusNext.current = ORDER.find((k) => r.errors[k]) ?? box ?? null;
         if (focusNext.current === "boxes") focusNext.current = can.boxes ? "boxes" : firstBoxError(r.errors) ?? null;
@@ -203,7 +209,7 @@ export function DropForm({ slug, initial, number, state, choices, arrivalOffsetD
               return (
                 <div key={r.key}>
                   <div className={s.dropBoxRow}>
-                    <select id={fieldId(k("box"))} aria-label={`Box ${i + 1}`} className="input" value={r.boxSlug} disabled={!can.boxes} aria-invalid={err("box") ? true : undefined} onChange={(e) => choose(r.key, e.target.value)}>
+                    <select id={fieldId(k("box"))} aria-label={`Box ${i + 1}`} className="input" value={r.boxSlug} disabled={!can.boxes} aria-invalid={err("box") ? true : undefined} aria-describedby={err("box") ? `${fieldId(k("box"))}-err` : undefined} onChange={(e) => choose(r.key, e.target.value)}>
                       <option value="">Choose a box…</option>
                       {choices.map((c) => (
                         <option key={c.slug} value={c.slug} disabled={c.slug !== r.boxSlug && chosen.has(c.slug)}>{c.name}{c.active ? "" : " (hidden)"}</option>
@@ -234,6 +240,7 @@ export function DropForm({ slug, initial, number, state, choices, arrivalOffsetD
         <span role="status" aria-live="polite" className={!status ? s.muted : status.kind === "error" ? s.statusError : s.statusOk}>
           {status?.text ?? (dirty && !creating ? "Unsaved changes" : "")}
         </span>
+        {stale && <button type="button" className={s.linkBtn} onClick={() => window.location.reload()}>Reload</button>}
       </div>
     </form>
   );

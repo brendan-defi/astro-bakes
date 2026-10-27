@@ -56,6 +56,12 @@ export function editable(state: DropState) {
   return { dates: before, boxes: before, prices: before, caps: before || selling };
 }
 
+export const DROP_STATES = ["draft", "scheduled", "open", "closed", "baking", "shipped", "complete", "cancelled"] as const satisfies readonly DropState[];
+export const isDropState = (s: unknown): s is DropState => typeof s === "string" && (DROP_STATES as readonly string[]).includes(s);
+
+/** True when two states let the editor change the same fields, so a save drawn up under one is still right under the other. */
+export const sameEditability = (a: DropState, b: DropState) => JSON.stringify(editable(a)) === JSON.stringify(editable(b));
+
 export type Errors = Record<string, string>;
 type Raw = Record<string, unknown>;
 

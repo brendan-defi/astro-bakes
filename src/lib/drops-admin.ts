@@ -3,7 +3,7 @@ import { and, asc, count, desc, eq, gt, inArray, max, sql, sum } from "drizzle-o
 import { getDb, type Db } from "@/db";
 import { boxes, dropBoxes, drops, inventoryHolds, orderItems, orders } from "@/db/schema";
 import { arrivalDate, effectiveState, type DropState } from "./data";
-import { dropSlug, editable, nextMonth, type DropContext, type DropValue, type Errors } from "./drop-rules";
+import { dropSlug, editable, nextMonth, sameEditability, type DropContext, type DropValue, type Errors } from "./drop-rules";
 import { arrivalOffsetDays } from "./settings";
 
 /**
@@ -155,10 +155,14 @@ async function boxIds(tx: Tx, slugs: string[]) {
   return new Map(rows.map((r) => [r.slug, r.id]));
 }
 
-/** Create a draft drop (no `slug`), or save the one with that slug, applying only what its state lets change. */
-export async function saveDrop(value: DropValue, slug: string | null): Promise<Saved> {
+/**
+ * Create a draft drop (no `slug`), or save the one with that slug, applying only what its state lets change.
+ * `drawnFor` is the state the form was drawn for: if the drop has since moved to a state that locks different
+ * fields, the save is refused (errors.state) rather than silently keeping the stored values for them.
+ */
+export async function saveDrop(value: DropValue, slug: string | null, drawnFor?: DropState): Promise<Saved> {
   try {
-    return await getDb().transaction(async (tx) => (slug === null ? create(tx, value) : update(tx, value, slug)));
+    return await getDb().transaction(async (tx) => (slug === null ? create(tx, value) : update(tx, value, slug, drawnFor)));
   } catch (e) {
     if (e instanceof Refused) return { ok: false, errors: e.errors };
     if (slug === null && isUniqueViolation(e)) return { ok: false, errors: { number: "Another drop already has this number." } };
@@ -167,6 +171,9 @@ export async function saveDrop(value: DropValue, slug: string | null): Promise<S
 }
 
 async function create(tx: Tx, v: DropValue): Promise<Saved> {
+  // Numbering is serialised with Duplicate (the same lock): a duplicate started meanwhile waits, then sees this
+  // number in max(number) instead of taking it too and failing on the unique constraint when this commits.
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtext('drop-number'))`);
   const ids = await boxIds(tx, v.boxes.map((b) => b.boxSlug));
   const missing = v.boxes.findIndex((b) => !ids.has(b.boxSlug));
   if (missing >= 0) throw new Refused({ [`boxes.${missing}.box`]: "That box doesn't exist any more." });
@@ -179,10 +186,14 @@ async function create(tx: Tx, v: DropValue): Promise<Saved> {
   return { ok: true, slug };
 }
 
-async function update(tx: Tx, v: DropValue, slug: string): Promise<Saved> {
+async function update(tx: Tx, v: DropValue, slug: string, drawnFor?: DropState): Promise<Saved> {
   const [d] = await tx.select().from(drops).where(eq(drops.slug, slug)).for("update");
   if (!d) throw new Refused({ form: "That drop no longer exists." });
-  const can = editable(await liveState(d));
+  const state = await liveState(d);
+  if (drawnFor && !sameEditability(drawnFor, state)) {
+    throw new Refused({ state: `This drop is now ${state}, so a different set of fields can change. Reload the page to see what it has now, then make your change again.` });
+  }
+  const can = editable(state);
   const current = await tx
     .select({ id: dropBoxes.id, boxSlug: boxes.slug, soldQty: dropBoxes.soldQty })
     .from(dropBoxes)
@@ -227,10 +238,9 @@ async function update(tx: Tx, v: DropValue, slug: string): Promise<Saved> {
     }
     const taken = existing.soldQty + (held.get(existing.id) ?? 0);
     if (can.caps && b.cap < taken) errors[`boxes.${i}.cap`] = `At least ${taken}: ${existing.soldQty} sold${taken > existing.soldQty ? `, ${taken - existing.soldQty} in checkouts right now` : ""}.`;
-    await tx
-      .update(dropBoxes)
-      .set({ ...(can.caps ? { cap: b.cap, maxPerCustomer: b.maxPerCustomer } : {}), ...(can.prices ? { price: b.price } : {}), ...(can.boxes ? { sort: i } : {}) })
-      .where(eq(dropBoxes.id, existing.id));
+    const changes = { ...(can.caps ? { cap: b.cap, maxPerCustomer: b.maxPerCustomer } : {}), ...(can.prices ? { price: b.price } : {}), ...(can.boxes ? { sort: i } : {}) };
+    // Once shipped, only the names can change: an empty update would make Drizzle throw and roll the names back too.
+    if (Object.keys(changes).length) await tx.update(dropBoxes).set(changes).where(eq(dropBoxes.id, existing.id));
   }
   if (Object.keys(errors).length) throw new Refused(errors);
   return { ok: true, slug };

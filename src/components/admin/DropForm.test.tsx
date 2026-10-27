@@ -76,3 +76,43 @@ describe("DropForm", () => {
     expect(status()).toMatch(/need fixing/);
   });
 });
+
+describe("DropForm and the state it was drawn for", () => {
+  it("sends the state it was drawn for with an edit, and nothing for a new drop", async () => {
+    actions.saveDropAction.mockResolvedValue({ ok: true, slug: "drop-03" });
+    render(<DropForm slug="drop-03" initial={OPEN} number={3} state="open" choices={CHOICES} arrivalOffsetDays={1} />);
+    fireEvent.change(screen.getByLabelText("Cap for box 1"), { target: { value: "25" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save drop" }));
+    await waitFor(() => expect(status()).toBe("Saved."));
+    expect(sent()[2]).toBe("open");
+    cleanup();
+    actions.saveDropAction.mockResolvedValue({ ok: true, slug: "drop-05" });
+    render(<DropForm slug={null} initial={null} number={5} state="draft" choices={CHOICES} arrivalOffsetDays={1} />);
+    fireEvent.click(screen.getByRole("button", { name: "Create draft" }));
+    await waitFor(() => expect(router.push).toHaveBeenCalled());
+    expect(sent()[2]).toBeUndefined();
+  });
+
+  it("shows a stale-state refusal with a Reload button and keeps the draft unsaved", async () => {
+    router.refresh.mockReset();
+    actions.saveDropAction.mockResolvedValue({ ok: false, errors: { state: "This drop is now open, so a different set of fields can change. Reload the page to see what it has now, then make your change again." } });
+    render(<DropForm slug="drop-04" initial={OPEN} number={4} state="scheduled" choices={CHOICES} arrivalOffsetDays={1} />);
+    fireEvent.change(screen.getByLabelText("Ships *"), { target: { value: "2026-12-24" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save drop" }));
+    await waitFor(() => expect(status()).toMatch(/^This drop is now open/));
+    expect(screen.getByRole("button", { name: "Reload" })).toBeTruthy();
+    expect((screen.getByRole("button", { name: "Save drop" }) as HTMLButtonElement).disabled).toBe(false); // still dirty, not "saved"
+    expect(router.refresh).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText("Ships *"), { target: { value: "2026-12-25" } });
+    expect(screen.queryByRole("button", { name: "Reload" })).toBeNull();
+  });
+
+  it("links the box picker to its error, like the numeric fields", async () => {
+    actions.saveDropAction.mockResolvedValue({ ok: false, errors: { "boxes.0.box": "Choose a box." } });
+    render(<DropForm slug={null} initial={null} number={5} state="draft" choices={CHOICES} arrivalOffsetDays={1} />);
+    fireEvent.click(screen.getByRole("button", { name: "Create draft" }));
+    const box = screen.getByLabelText("Box 1");
+    await waitFor(() => expect(box.getAttribute("aria-invalid")).toBe("true"));
+    expect(document.getElementById(box.getAttribute("aria-describedby")!)?.textContent).toBe("Choose a box.");
+  });
+});
