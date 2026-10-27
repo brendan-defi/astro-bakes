@@ -51,15 +51,17 @@ export default async function HomePage({ params, searchParams }: { params: Promi
     <CartProvider dropId={home.drop?.id ?? "none"} boxes={home.drop?.boxes ?? []} shippingFee={settings.shippingFee}>
       <Ticker locale={locale} home={home} />
       <Nav locale={locale} showCart={open} viewer={home.viewer} />
-      <Hero locale={locale} home={home} />
-      <Wave from="var(--lilac)" to="var(--ground)" />
-      <Boxes locale={locale} home={home} />
-      <Wave from="var(--ground)" to="var(--butter)" reverse />
-      <HowItWorks locale={locale} settings={settings} />
-      <Wave from="var(--butter)" to="var(--pink-soft)" />
-      <PartyOrders locale={locale} />
-      <Story locale={locale} settings={settings} />
-      <Notify locale={locale} settings={settings} viewer={home.viewer} />
+      <main>
+        <Hero locale={locale} home={home} />
+        <Wave from="var(--lilac)" to="var(--ground)" />
+        <Boxes locale={locale} home={home} />
+        <Wave from="var(--ground)" to="var(--butter)" reverse />
+        <HowItWorks locale={locale} settings={settings} />
+        <Wave from="var(--butter)" to="var(--pink-soft)" />
+        <PartyOrders locale={locale} />
+        <Story locale={locale} settings={settings} />
+        <Notify locale={locale} settings={settings} viewer={home.viewer} />
+      </main>
       <Footer locale={locale} settings={settings} />
       {open && <CartBar locale={locale} />}
     </CartProvider>

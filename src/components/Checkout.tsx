@@ -347,8 +347,9 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
   const doneAddr = placed ? `${placed.hit.prefecture}${placed.hit.city}${placed.hit.town}${placed.address.line1}` : shortAddress;
 
   const dotClass = (n: number) => `${s.dot} ${n < idx ? s.dotDone : n === idx ? s.dotCurrent : ""}`;
-  const stepList = (cls: string) => (
-    <ol aria-label={t.checkoutSteps} className={cls}>
+  // The phone layout wraps the list in a labelled <nav>, so the list itself goes unlabelled there.
+  const stepList = (cls: string, labelled = true) => (
+    <ol aria-label={labelled ? t.checkoutSteps : undefined} className={cls}>
       <li className={s.stepItem}><span className={dotClass(1)}>1</span>{t.stepSignIn}</li>
       <li aria-hidden className={s.dash} />
       <li className={s.stepItem}><span className={dotClass(2)}>2</span>{t.stepDelivery}</li>
@@ -398,16 +399,16 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
         </div>
       </header>
 
-      {inCheckout && stepList(s.steps)}
+      {inCheckout && <nav aria-label={t.checkoutSteps}>{stepList(s.steps, false)}</nav>}
 
       {(step === "signin" || step === "code" || step === "delivery") && (
-        <div className={s.pinned}>
+        <section aria-label={t.orderSummary} className={s.pinned}>
           <div style={{ minWidth: 0 }}>
             <div className={s.l1}>{t.boxCount(buying.count)} · {yen(buying.subtotal)} <span className={s.sub13}>{feeIncluded ? t.shippingIncluded : t.plusShipping}</span></div>
             <div className={s.l2}>{shipLine}</div>
           </div>
           <TruckIcon />
-        </div>
+        </section>
       )}
 
       <div className={s.body}>
