@@ -2,7 +2,7 @@ import { Pool } from "pg";
 import { parse } from "pg-connection-string";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import * as schema from "@/db/schema";
 import { closeDb } from "@/db";
 import { seed } from "@/db/seed";
@@ -59,11 +59,26 @@ export function testDb(max = 2) {
 
 export type TestDb = ReturnType<typeof testDb>["db"];
 
-/** Start from nothing so regenerated migrations never collide with stale state, then migrate and seed. */
+/** Start from nothing so regenerated migrations never collide with stale state, then migrate, seed and pin the drops to the clock. */
 export async function resetDatabase(db: TestDb) {
   await db.execute(sql`drop schema if exists public cascade; create schema public; drop schema if exists drizzle cascade`);
   await migrate(db, { migrationsFolder: "drizzle" });
+  await reseed(db);
+}
+
+/**
+ * Seed, or re-seed between tests (it restores sold_qty and the drop states), then pin the drops to the clock.
+ * The seed's drops carry real calendar dates (they double as sample data), so by the clock drop-03 drifts from
+ * closed to shipped to complete and the suites' "closed by the clock" assumption expires (it did on 2026-10-25: a
+ * paid order read "baking" instead of "confirmed"). Both drops are set relative to now: drop-03 closed two days
+ * ago and ships in five, drop-04 opens in two weeks. The seed's upsert would put the calendar dates back, so
+ * suites call this instead of seed() directly.
+ */
+export async function reseed(db: TestDb) {
   await seed(db);
+  const at = (days: number) => new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+  await db.update(schema.drops).set({ openAt: at(-9), closeAt: at(-2), bakeAt: at(4), shipAt: at(5) }).where(eq(schema.drops.slug, "drop-03"));
+  await db.update(schema.drops).set({ openAt: at(14), closeAt: at(21), bakeAt: at(27), shipAt: at(28) }).where(eq(schema.drops.slug, "drop-04"));
 }
 
 /** Truncate the given tables (cascading) and remove the `@test.invalid` customers they referenced. */
