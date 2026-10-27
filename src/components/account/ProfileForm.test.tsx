@@ -45,3 +45,42 @@ describe("ProfileForm phone and postal code", () => {
     expect(screen.getByRole("status").textContent).toBe("Saved.");
   });
 });
+
+describe("ProfileForm missing fields", () => {
+  beforeEach(() => { updateProfileAction.mockReset(); });
+  afterEach(cleanup);
+  const empty: ProfileValues = { name: "", phone: "", locale: "en", postal: "", line1: "", line2: "" };
+  const describedBy = (el: HTMLElement) => document.getElementById(el.getAttribute("aria-describedby") ?? "")?.textContent ?? "";
+
+  it("says nothing before the first save", () => {
+    render(<ProfileForm locale="en" initial={empty} />);
+    expect(document.querySelectorAll("[aria-invalid]").length).toBe(0);
+    expect(screen.queryByText("Enter the recipient's name.")).toBeNull();
+  });
+
+  it("names each missing field, links the message to it, and focuses the first", async () => {
+    render(<ProfileForm locale="en" initial={empty} />);
+    await save();
+    const name = field(/Recipient name/);
+    expect(name.getAttribute("aria-invalid")).toBe("true");
+    expect(describedBy(name)).toContain("Enter the recipient's name.");
+    expect(document.activeElement).toBe(name);
+    const postal = field(/Postal code/);
+    expect(postal.getAttribute("aria-invalid")).toBe("true");
+    expect(describedBy(postal)).toContain("Enter a postal code and look it up.");
+    const street = field(/Street number/);
+    expect(street.getAttribute("aria-invalid")).toBe("true");
+    expect(describedBy(street)).toContain("Enter the street number.");
+    expect(updateProfileAction).not.toHaveBeenCalled();
+  });
+
+  it("clears a field's message once it is filled, and moves on to the next problem", async () => {
+    render(<ProfileForm locale="en" initial={empty} />);
+    await save();
+    fireEvent.change(field(/Recipient name/), { target: { value: "山田 花子" } });
+    expect(field(/Recipient name/).getAttribute("aria-invalid")).toBeNull();
+    expect(screen.queryByText("Enter the recipient's name.")).toBeNull();
+    await save();
+    expect(document.activeElement).toBe(field(/Phone/));
+  });
+});

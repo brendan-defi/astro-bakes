@@ -346,3 +346,25 @@ describe("Checkout's cart step with a box slugged like an Object.prototype name"
     await waitFor(() => expect(stored()).toEqual({}));
   });
 });
+
+describe("Checkout delivery form errors", () => {
+  it("names each missing field, links the message to it, and focuses the first", () => {
+    mountAt("delivery", { ...customer, name: "", line1: "" });
+    fireEvent.submit(document.getElementById("co-name")!.closest("form")!);
+    const name = document.getElementById("co-name")!;
+    expect(name.getAttribute("aria-invalid")).toBe("true");
+    expect(document.getElementById(name.getAttribute("aria-describedby")!)?.textContent).toContain(t.nameRequired);
+    expect(document.activeElement).toBe(name);
+    const street = document.getElementById("co-line1")!;
+    expect(street.getAttribute("aria-invalid")).toBe("true");
+    expect(document.getElementById(street.getAttribute("aria-describedby")!)?.textContent).toContain(t.streetRequired);
+    expect(nav.params.get("step")).toBe("delivery");
+  });
+
+  it("keeps the postal lookup result as the postal field's description", () => {
+    mountAt("delivery");
+    const postal = document.getElementById("co-postal")!;
+    expect(document.getElementById(postal.getAttribute("aria-describedby")!)?.textContent).toContain(t.weDeliverTo("Meguro-ku"));
+    expect(postal.getAttribute("aria-invalid")).toBeNull();
+  });
+});
