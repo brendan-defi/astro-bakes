@@ -66,6 +66,7 @@ export async function loadDrops(locale: Locale, excludeCartId: string | null = n
     id: d.slug,
     number: d.number,
     name: pick(locale, d.nameEn, d.nameJa),
+    description: pick(locale, d.descriptionEn, d.descriptionJa) || undefined,
     state: d.state,
     openAt: d.openAt,
     closeAt: d.closeAt,
