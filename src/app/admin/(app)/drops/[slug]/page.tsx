@@ -1,14 +1,23 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { DropForm } from "@/components/admin/DropForm";
+import { DropLifecycle } from "@/components/admin/DropLifecycle";
 import { DropStatePill } from "@/components/admin/DropStatePill";
 import { requireAdmin } from "@/lib/admin";
+import { fromJstLocal, toJstLocal } from "@/lib/drop-rules";
 import { boxChoices, dropForForm } from "@/lib/drops-admin";
 import { arrivalOffsetDays } from "@/lib/settings";
 import { duplicateDropAction } from "../actions";
 import s from "../../../admin.module.css";
 
 export const metadata: Metadata = { title: "Edit drop" };
+
+/** Reopen's suggested closing time: tomorrow at 21:00 Japan time, or the last hour before the ship date if that is sooner. */
+function reopenDefault(shipAt: Date, now = new Date()): string {
+  const tomorrowEvening = fromJstLocal(`${toJstLocal(new Date(now.getTime() + 86_400_000)).slice(0, 10)}T21:00`)!;
+  const lastHour = new Date(shipAt.getTime() - 3_600_000);
+  return toJstLocal(tomorrowEvening < lastHour ? tomorrowEvening : lastHour);
+}
 
 export default async function EditDropPage({ params, searchParams }: { params: Promise<{ slug: string }>; searchParams: Promise<{ created?: string; duplicated?: string }> }) {
   await requireAdmin();
@@ -27,6 +36,7 @@ export default async function EditDropPage({ params, searchParams }: { params: P
           </form>
         </div>
       </div>
+      <DropLifecycle slug={drop.slug} number={drop.number} state={drop.state} storedState={drop.storedState} reopenDefault={reopenDefault(drop.shipAt)} />
       <DropForm slug={drop.slug} initial={drop} number={drop.number} state={drop.state} choices={choices} arrivalOffsetDays={offset} notice={notice} />
     </>
   );

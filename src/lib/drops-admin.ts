@@ -1,9 +1,10 @@
 import "server-only";
-import { and, asc, count, desc, eq, gt, inArray, max, sql, sum } from "drizzle-orm";
+import { and, asc, count, desc, eq, gt, inArray, max, ne, sql, sum } from "drizzle-orm";
 import { getDb, type Db } from "@/db";
 import { boxes, dropBoxes, drops, inventoryHolds, orderItems, orders } from "@/db/schema";
 import { arrivalDate, effectiveState, type DropState } from "./data";
 import { dropSlug, editable, nextMonth, sameEditability, type DropContext, type DropValue, type Errors } from "./drop-rules";
+import { transition, type DropAction, type OtherDrop } from "./drop-transitions";
 import { arrivalOffsetDays } from "./settings";
 
 /**
@@ -82,7 +83,10 @@ export async function listDropsAdmin(): Promise<DropSummary[]> {
 export interface DropForm {
   slug: string;
   number: number;
+  /** As the shop sees it now (effectiveState). */
   state: DropState;
+  /** As set by the lifecycle actions; the clock may have moved `state` past it. */
+  storedState: DropState;
   nameEn: string;
   nameJa: string;
   descriptionEn: string;
@@ -114,6 +118,7 @@ export async function dropForForm(slug: string): Promise<DropForm | null> {
     slug: d.slug,
     number: d.number,
     state: await liveState(d),
+    storedState: d.state,
     nameEn: d.nameEn,
     nameJa: d.nameJa ?? "",
     descriptionEn: d.descriptionEn ?? "",
@@ -244,6 +249,29 @@ async function update(tx: Tx, v: DropValue, slug: string, drawnFor?: DropState):
   }
   if (Object.keys(errors).length) throw new Refused(errors);
   return { ok: true, slug };
+}
+
+export type Transitioned = { ok: true; state: DropState } | { ok: false; error: string };
+
+/**
+ * A lifecycle action (drop-transitions.ts) applied under the drop's row lock, plus a lock shared by every
+ * lifecycle action so two drops can't be opened at the same moment. Mark complete also delivers the drop's
+ * shipped orders (PRD 5.2b), which is what customers see as "Delivered".
+ */
+export async function transitionDrop(slug: string, action: DropAction, input: { closeAt?: Date | null } = {}, now = new Date()): Promise<Transitioned> {
+  const offset = await arrivalOffsetDays();
+  return getDb().transaction(async (tx) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext('drop-lifecycle'))`);
+    const [d] = await tx.select().from(drops).where(eq(drops.slug, slug)).for("update");
+    if (!d) return { ok: false, error: "That drop no longer exists." };
+    const rows = await tx.select({ number: drops.number, state: drops.state, openAt: drops.openAt, closeAt: drops.closeAt, shipAt: drops.shipAt }).from(drops).where(ne(drops.id, d.id));
+    const others: OtherDrop[] = await Promise.all(rows.map(async (o) => ({ number: o.number, state: await liveState(o, offset, now), openAt: o.openAt, closeAt: o.closeAt })));
+    const r = transition({ ...d, arriveAt: arrivalDate(d.shipAt, offset) }, action, { now, others, closeAt: input.closeAt });
+    if (!r.ok) return r;
+    await tx.update(drops).set({ ...r.patch, updatedAt: now }).where(eq(drops.id, d.id));
+    if (action === "complete") await tx.update(orders).set({ state: "complete", updatedAt: now }).where(and(eq(orders.dropId, d.id), eq(orders.state, "shipped")));
+    return { ok: true, state: r.patch.state };
+  });
 }
 
 /**

@@ -110,6 +110,15 @@
 
 /* ---------- Drops ---------- */
 .headActions { display: flex; align-items: center; gap: 12px; }
+/* Lifecycle buttons under the drop's title, and the one-question confirm box they turn into. */
+.lifecycle { display: flex; flex-direction: column; gap: 8px; margin: 4px 0 18px; }
+.lifecycleRow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
+.lifecycleRow .help { flex-basis: 100%; margin: 0; }
+.confirmBox { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px 16px; padding: 12px 16px; border: var(--border-thin); border-radius: var(--radius-input); background: var(--butter-soft); }
+.confirmText { flex: 1 1 320px; margin: 0; font-size: 15px; }
+.confirmField { display: flex; flex-direction: column; gap: 4px; }
+.confirmField .input { height: 40px; }
+.confirmActions { display: flex; align-items: center; gap: 12px; }
 .headActions form { margin: 0; }
 .state_draft { background: var(--white); color: var(--link-hover); border-color: var(--link-hover); }
 .state_scheduled { background: var(--butter-soft); }
