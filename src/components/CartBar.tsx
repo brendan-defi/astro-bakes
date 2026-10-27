@@ -14,7 +14,7 @@ export function CartBar({ locale }: { locale: Locale }) {
   const demoQuery = useDemoQuery();
   if (!hydrated || count === 0) return null;
   return (
-    <div id="cart" className={s.cartBar}>
+    <section id="cart" aria-label={t.cart} className={s.cartBar}>
       <Link href={`/${locale}/checkout${demoQuery}`} className={`sheen ${s.cartLink}`} data-cart-target>
         <span>
           {t.boxCount(count)} · {yen(subtotal)}{" "}
@@ -22,6 +22,6 @@ export function CartBar({ locale }: { locale: Locale }) {
         </span>
         <span className={s.go}>{t.checkout}</span>
       </Link>
-    </div>
+    </section>
   );
 }
