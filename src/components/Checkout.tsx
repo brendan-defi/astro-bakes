@@ -252,13 +252,21 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
   }
   const addrValid = addr.name.trim() && normalisePhone(addr.phone) && addr.line1.trim() && hit?.deliverable;
   const phoneBad = touched && !normalisePhone(addr.phone);
+  const nameBad = touched && !addr.name.trim();
+  const postalBad = touched && !hit?.deliverable;
+  const line1Bad = touched && !addr.line1.trim();
   const addressLine = hit ? `〒${addr.postal} ${hit.prefecture}${hit.city}${hit.town}${addr.line1}${addr.line2 ? " " + addr.line2 : ""}` : "";
   const shortAddress = hit ? `${hit.prefecture}${hit.city}${hit.town}${addr.line1}` : "";
 
   function submitDelivery(e: FormEvent) {
     e.preventDefault();
     setTouched(true);
-    if (!addrValid) return;
+    if (!addrValid) {
+      // Each missing field gets its message (not just a red border); focus goes to the first one.
+      const first = !addr.name.trim() ? "co-name" : !normalisePhone(addr.phone) ? "co-phone" : !hit?.deliverable ? "co-postal" : "co-line1";
+      document.getElementById(first)?.focus();
+      return;
+    }
     go("pay");
   }
 
@@ -475,7 +483,9 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
                     <div className={s.fields}>
                       <div className="field">
                         <label htmlFor="co-name" className="label">{t.recipientName} {jaHint("お名前")}</label>
-                        <input id="co-name" type="text" autoComplete="name" required className={`input ${touched && !addr.name.trim() ? s.inputError : ""}`} value={addr.name} onChange={(e) => setAddr({ ...addr, name: e.target.value })} />
+                        <input id="co-name" type="text" autoComplete="name" required className={`input ${nameBad ? s.inputError : ""}`} value={addr.name} onChange={(e) => setAddr({ ...addr, name: e.target.value })}
+                          aria-invalid={nameBad || undefined} aria-describedby={nameBad ? "co-name-err" : undefined} />
+                        {nameBad && <span id="co-name-err" className={s.err}><WarningIcon size={16} />{t.nameRequired}</span>}
                       </div>
                       <div className="field">
                         <label htmlFor="co-phone" className="label">{t.phone} {jaHint("電話番号")}</label>
@@ -488,14 +498,16 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
                       <div className="field">
                         <label htmlFor="co-postal" className="label">{t.postalCode} {jaHint("郵便番号")}</label>
                         <div className={s.postalRow}>
-                          <CleanInput id="co-postal" type="text" inputMode="numeric" autoComplete="postal-code" clean={cleanPostalInput} className="input" value={addr.postal}
+                          <CleanInput id="co-postal" type="text" inputMode="numeric" autoComplete="postal-code" required clean={cleanPostalInput} className={`input ${postalBad ? s.inputError : ""}`} value={addr.postal}
+                            aria-invalid={postalBad || undefined} aria-describedby="co-postal-status"
                             onValueChange={(postal) => { setAddr({ ...addr, postal }); setPostalTried(false); setHit(null); }}
                             onBlur={() => { if (normalisePostal(addr.postal).length === 7) doLookup(); }}
                             onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); doLookup(); } }} />
                           <button type="button" className={s.lookupBtn} onClick={doLookup}>{t.lookUp}</button>
                         </div>
                       </div>
-                      <div className={s.autofill}>
+                      {/* The lookup result doubles as the postal field's description, and is announced when it changes. */}
+                      <div id="co-postal-status" className={s.autofill} aria-live="polite">
                         <div className={s.k}>{t.filledFrom}</div>
                         {hit ? (
                           <>
@@ -505,12 +517,20 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
                               : <div className={s.badPill}><WarningIcon size={15} />{t.outsideArea}</div>}
                           </>
                         ) : (
-                          <div className={s.addr} style={{ opacity: postalTried ? 1 : 0.5 }}>{postalTried ? <span className={s.badPill}><WarningIcon size={15} />{outsideWards(addr.postal) ? t.outsideArea : t.postalNotFound}</span> : "—"}</div>
+                          <div className={s.addr} style={{ opacity: postalTried || postalBad ? 1 : 0.5 }}>
+                            {postalTried
+                              ? <span className={s.badPill}><WarningIcon size={15} />{outsideWards(addr.postal) ? t.outsideArea : t.postalNotFound}</span>
+                              : postalBad
+                                ? <span className={s.badPill}><WarningIcon size={15} />{t.postalRequired}</span>
+                                : <span aria-hidden>—</span>}
+                          </div>
                         )}
                       </div>
                       <div className="field">
                         <label htmlFor="co-line1" className="label">{t.streetNumber} {jaHint("番地")}</label>
-                        <input id="co-line1" type="text" autoComplete="address-line1" required className={`input ${touched && !addr.line1.trim() ? s.inputError : ""}`} value={addr.line1} onChange={(e) => setAddr({ ...addr, line1: e.target.value })} />
+                        <input id="co-line1" type="text" autoComplete="address-line1" required className={`input ${line1Bad ? s.inputError : ""}`} value={addr.line1} onChange={(e) => setAddr({ ...addr, line1: e.target.value })}
+                          aria-invalid={line1Bad || undefined} aria-describedby={line1Bad ? "co-line1-err" : undefined} />
+                        {line1Bad && <span id="co-line1-err" className={s.err}><WarningIcon size={16} />{t.streetRequired}</span>}
                       </div>
                       <div className="field">
                         <label htmlFor="co-line2" className="label">{t.building} {jaHint("建物名・部屋番号")} <span className="ja">{t.optional}</span></label>
