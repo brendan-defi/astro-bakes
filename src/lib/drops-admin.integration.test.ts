@@ -4,7 +4,7 @@ import { eq } from "drizzle-orm";
 import * as schema from "@/db/schema";
 import { duplicateDropAction, saveDropAction } from "@/app/admin/(app)/drops/actions";
 import { startCheckout } from "@/lib/checkout";
-import { toJstDay, toJstLocal } from "@/lib/drop-rules";
+import { nextMonth, toJstDay, toJstLocal } from "@/lib/drop-rules";
 import { dropForForm, listDropsAdmin } from "@/lib/drops-admin";
 import { closeTestDb, resetDatabase, testDb, TEST_DATABASE_URL } from "@/test/db";
 
@@ -114,12 +114,15 @@ describe.skipIf(!TEST_DATABASE_URL)("drop editor", () => {
   });
 
   it("duplicates into the next-numbered draft, a month later, with the boxes and nothing sold", async () => {
+    const source = (await dropForForm("drop-03"))!;
     const go = await duplicateDropAction("drop-03").catch((e: { to?: string }) => e.to);
     expect(go).toBe("/admin/drops/drop-05?duplicated=1");
     const copy = (await dropForForm("drop-05"))!;
     expect(copy).toMatchObject({ number: 5, state: "draft", nameEn: "Drop 03 · October (copy)", nameJa: "ドロップ03 · 10月（コピー）" });
-    expect(toJstLocal(copy.openAt)).toBe("2026-11-11T12:00");
-    expect(toJstDay(copy.shipAt)).toBe("2026-11-25");
+    // The seed's dates are pinned to the clock by reseed() in test/db.ts, so compare with the rule rather than a calendar date.
+    expect(toJstLocal(copy.openAt)).toBe(toJstLocal(nextMonth(source.openAt)));
+    expect(toJstDay(copy.shipAt)).toBe(toJstDay(nextMonth(source.shipAt)));
+    expect(copy.openAt.getTime()).toBeGreaterThan(source.openAt.getTime() + 27 * DAY);
     expect(copy.boxes.map((b) => [b.boxSlug, b.cap, b.sold])).toEqual([["cookie-box", 20, 0], ["banana-bread", 10, 0], ["sampler-box", 10, 0]]);
   });
 });
