@@ -53,26 +53,44 @@ export type TransitionResult = { ok: true; patch: Patch } | { ok: false; error: 
 const pad = (n: number) => String(n).padStart(2, "0");
 const overlaps = (aOpen: Date, aClose: Date, bOpen: Date, bClose: Date) => aOpen < bClose && bOpen < aClose;
 
+/**
+ * One open drop at a time, now and later: the other scheduled or open drop whose selling window overlaps
+ * [openAt, closeAt), if any. Every writer that gives a drop a public window checks the window it would end up
+ * with (Schedule, Open now, Reopen in transition(); a scheduled drop's date edits in drops-admin.ts), under the
+ * same lock, so the clock can never open two drops at once. Back to back is fine: a window may start exactly
+ * when another closes.
+ */
+export function windowClash(openAt: Date, closeAt: Date, others: OtherDrop[]): OtherDrop | undefined {
+  return others.find((o) => (o.state === "scheduled" || o.state === "open") && overlaps(openAt, closeAt, o.openAt, o.closeAt));
+}
+
+/** Why a window was refused: a drop selling right now has to be closed; one that would clash later needs other dates. */
+export function clashMessage(o: OtherDrop, now: Date): string {
+  if (o.state === "open" && o.openAt <= now) return `Drop ${pad(o.number)} is open now. Close it first; only one drop can be open at a time.`;
+  return `Drop ${pad(o.number)} is ${o.state} over those dates. Only one drop can be open at a time; change the dates first.`;
+}
+
 export function transition(drop: DropTimeline & { number: number }, action: DropAction, input: TransitionInput): TransitionResult {
   const state = effectiveState(drop, input.now);
   const info = ACTIONS[action];
   if (!info.from.includes(state) || (action === "complete" && drop.state === "complete")) {
     return { ok: false, error: `${info.label} isn't available: the drop is ${state === drop.state ? state : `${state} (stored as ${drop.state})`}.` };
   }
-  const openNow = input.others.find((o) => o.state === "open");
+  /** The window the drop would end up with has to be clear of every other scheduled or open drop's. */
+  const clear = (openAt: Date, closeAt: Date): TransitionResult | null => {
+    const clash = windowClash(openAt, closeAt, input.others);
+    return clash ? { ok: false, error: clashMessage(clash, input.now) } : null;
+  };
   switch (action) {
     case "schedule": {
       if (drop.openAt <= input.now) return { ok: false, error: "A scheduled drop has to open in the future. To open it now, use Open now." };
-      const clash = input.others.find((o) => (o.state === "scheduled" || o.state === "open") && overlaps(drop.openAt, drop.closeAt, o.openAt, o.closeAt));
-      if (clash) return { ok: false, error: `Drop ${pad(clash.number)} is ${clash.state} over those dates. Only one drop can be open at a time; change the dates first.` };
-      return { ok: true, patch: { state: "scheduled" } };
+      return clear(drop.openAt, drop.closeAt) ?? { ok: true, patch: { state: "scheduled" } };
     }
     case "unschedule":
       return { ok: true, patch: { state: "draft" } };
     case "open": {
       if (drop.closeAt <= input.now) return { ok: false, error: "Set a closing time in the future first." };
-      if (openNow) return { ok: false, error: `Drop ${pad(openNow.number)} is open now. Close it first; only one drop can be open at a time.` };
-      return { ok: true, patch: { state: "open", openAt: input.now } };
+      return clear(input.now, drop.closeAt) ?? { ok: true, patch: { state: "open", openAt: input.now } };
     }
     case "close":
       return { ok: true, patch: { state: "closed", closeAt: input.now } };
@@ -81,8 +99,7 @@ export function transition(drop: DropTimeline & { number: number }, action: Drop
       if (!closeAt) return { ok: false, error: "Pick a new closing time." };
       if (closeAt <= input.now) return { ok: false, error: "The new closing time has to be in the future." };
       if (closeAt >= drop.shipAt) return { ok: false, error: "The new closing time has to be before the ship date." };
-      if (openNow) return { ok: false, error: `Drop ${pad(openNow.number)} is open now. Close it first; only one drop can be open at a time.` };
-      return { ok: true, patch: { state: "open", closeAt } };
+      return clear(input.now, closeAt) ?? { ok: true, patch: { state: "open", closeAt } };
     }
     case "baking":
       return { ok: true, patch: { state: "baking" } };

@@ -65,7 +65,8 @@ describe("transition", () => {
       const d = drop("draft", { openAt: JST("2026-11-12T10:00:00") });
       const other = { number: 4, openAt: JST("2026-11-14T10:00:00"), closeAt: JST("2026-11-20T21:00:00") };
       expect(err(run(d, "schedule", { others: [{ ...other, state: "scheduled" }] }))).toBe("Drop 04 is scheduled over those dates. Only one drop can be open at a time; change the dates first.");
-      expect(err(run(d, "schedule", { others: [{ ...other, state: "open", openAt: JST("2026-11-09T10:00:00") }] }))).toMatch(/^Drop 04 is open over those dates/);
+      // A drop selling right now: closing it would free the window, so that is the advice.
+      expect(err(run(d, "schedule", { others: [{ ...other, state: "open", openAt: JST("2026-11-09T10:00:00") }] }))).toBe("Drop 04 is open now. Close it first; only one drop can be open at a time.");
       // Back to back is fine, and so is a drop that is already past.
       expect(run(d, "schedule", { others: [{ ...other, state: "scheduled", openAt: JST("2026-11-15T21:00:00") }] }).ok).toBe(true);
       expect(run(d, "schedule", { others: [{ ...other, state: "closed", openAt: JST("2026-11-01T10:00:00"), closeAt: JST("2026-11-14T21:00:00") }] }).ok).toBe(true);
@@ -81,6 +82,13 @@ describe("transition", () => {
       expect(err(run(drop("draft", { openAt: JST("2026-11-01T10:00:00"), closeAt: JST("2026-11-05T21:00:00"), shipAt: JST("2026-11-30T00:00:00"), arriveAt: JST("2026-12-01T00:00:00") }), "open"))).toBe("Set a closing time in the future first.");
       expect(err(run(drop("draft", { openAt: JST("2026-12-01T10:00:00") }), "open", { others: [{ number: 4, state: "open", openAt: JST("2026-11-08T10:00:00"), closeAt: JST("2026-11-12T21:00:00") }] }))).toBe("Drop 04 is open now. Close it first; only one drop can be open at a time.");
     });
+    it("looks ahead: the window from now to the closing time can't run into a scheduled drop", () => {
+      // Drop 05 would stay open until Nov 15; Drop 04 is scheduled to open on Nov 12, which the clock would do by itself.
+      const soon = { number: 4, state: "scheduled" as const, openAt: JST("2026-11-12T10:00:00"), closeAt: JST("2026-11-20T21:00:00") };
+      expect(err(run(drop("draft", { openAt: JST("2026-12-01T10:00:00") }), "open", { others: [soon] }))).toBe("Drop 04 is scheduled over those dates. Only one drop can be open at a time; change the dates first.");
+      // A drop scheduled to open exactly when this one closes is fine.
+      expect(run(drop("draft", { openAt: JST("2026-12-01T10:00:00") }), "open", { others: [{ ...soon, openAt: JST("2026-11-15T21:00:00") }] }).ok).toBe(true);
+    });
   });
 
   it("close now sets the closing time to now", () => {
@@ -95,8 +103,11 @@ describe("transition", () => {
       expect(err(run(closed, "reopen", { closeAt: JST("2026-11-22T00:00:00") }))).toBe("The new closing time has to be before the ship date.");
       expect(err(run(closed, "reopen", { closeAt: JST("2026-11-13T21:00:00"), others: [{ number: 6, state: "open", openAt: NOW, closeAt: new Date(NOW.getTime() + DAY) }] }))).toMatch(/^Drop 06 is open now/);
     });
-    it("reopens until that time", () => {
+    it("reopens until that time, unless a scheduled drop would open before then", () => {
       expect(ok(run(closed, "reopen", { closeAt: JST("2026-11-13T21:00:00") }))).toEqual({ state: "open", closeAt: JST("2026-11-13T21:00:00") });
+      const soon = { number: 4, state: "scheduled" as const, openAt: JST("2026-11-12T10:00:00"), closeAt: JST("2026-11-20T21:00:00") };
+      expect(err(run(closed, "reopen", { closeAt: JST("2026-11-13T21:00:00"), others: [soon] }))).toMatch(/^Drop 04 is scheduled over those dates/);
+      expect(run(closed, "reopen", { closeAt: JST("2026-11-12T10:00:00"), others: [soon] }).ok).toBe(true); // back to back
     });
     it("isn't offered once the drop has shipped by the clock", () => {
       expect(err(run(drop("closed", { closeAt: JST("2026-11-01T21:00:00"), shipAt: JST("2026-11-09T00:00:00"), arriveAt: JST("2026-11-10T00:00:00") }), "reopen", { closeAt: NOW }))).toMatch(/the drop is shipped \(stored as closed\)/);

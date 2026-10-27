@@ -4,7 +4,7 @@ import { getDb, type Db } from "@/db";
 import { boxes, dropBoxes, drops, inventoryHolds, orderItems, orders } from "@/db/schema";
 import { arrivalDate, effectiveState, type DropState } from "./data";
 import { dropSlug, editable, nextMonth, sameEditability, type DropContext, type DropValue, type Errors } from "./drop-rules";
-import { transition, type DropAction, type OtherDrop } from "./drop-transitions";
+import { clashMessage, transition, windowClash, type DropAction, type OtherDrop } from "./drop-transitions";
 import { arrivalOffsetDays } from "./settings";
 
 /**
@@ -87,6 +87,8 @@ export interface DropForm {
   state: DropState;
   /** As set by the lifecycle actions; the clock may have moved `state` past it. */
   storedState: DropState;
+  /** Changes with every save and lifecycle action; the editor starts again from the stored drop when it does. */
+  updatedAt: Date;
   nameEn: string;
   nameJa: string;
   descriptionEn: string;
@@ -119,6 +121,7 @@ export async function dropForForm(slug: string): Promise<DropForm | null> {
     number: d.number,
     state: await liveState(d),
     storedState: d.state,
+    updatedAt: d.updatedAt,
     nameEn: d.nameEn,
     nameJa: d.nameJa ?? "",
     descriptionEn: d.descriptionEn ?? "",
@@ -191,14 +194,35 @@ async function create(tx: Tx, v: DropValue): Promise<Saved> {
   return { ok: true, slug };
 }
 
+/**
+ * The lock every writer that can change a public selling window takes first, before any row: saves (a scheduled
+ * drop's dates) and lifecycle actions alike, so the one-open-drop rule is checked and committed in turn.
+ */
+const lockLifecycle = (tx: Tx) => tx.execute(sql`select pg_advisory_xact_lock(hashtext('drop-lifecycle'))`);
+
+/** Every other drop's selling window with its effective state, for the one-open-drop rule (drop-transitions.ts). */
+async function otherWindows(tx: Tx, dropId: string, offset: number, now: Date): Promise<OtherDrop[]> {
+  const rows = await tx.select({ number: drops.number, state: drops.state, openAt: drops.openAt, closeAt: drops.closeAt, shipAt: drops.shipAt }).from(drops).where(ne(drops.id, dropId));
+  return Promise.all(rows.map(async (o) => ({ number: o.number, state: await liveState(o, offset, now), openAt: o.openAt, closeAt: o.closeAt })));
+}
+
 async function update(tx: Tx, v: DropValue, slug: string, drawnFor?: DropState): Promise<Saved> {
+  await lockLifecycle(tx);
+  const now = new Date();
+  const offset = await arrivalOffsetDays();
   const [d] = await tx.select().from(drops).where(eq(drops.slug, slug)).for("update");
   if (!d) throw new Refused({ form: "That drop no longer exists." });
-  const state = await liveState(d);
+  const state = await liveState(d, offset, now);
   if (drawnFor && !sameEditability(drawnFor, state)) {
     throw new Refused({ state: `This drop is now ${state}, so a different set of fields can change. Reload the page to see what it has now, then make your change again.` });
   }
   const can = editable(state);
+  // A scheduled drop's dates are public: the window they make must stay clear of every other scheduled or open drop's,
+  // the same rule Schedule applies, so the clock can never open two drops at once.
+  if (state === "scheduled" && can.dates) {
+    const clash = windowClash(v.openAt, v.closeAt, await otherWindows(tx, d.id, offset, now));
+    if (clash) throw new Refused({ openAt: clashMessage(clash, now) });
+  }
   const current = await tx
     .select({ id: dropBoxes.id, boxSlug: boxes.slug, soldQty: dropBoxes.soldQty })
     .from(dropBoxes)
@@ -254,22 +278,27 @@ async function update(tx: Tx, v: DropValue, slug: string, drawnFor?: DropState):
 export type Transitioned = { ok: true; state: DropState } | { ok: false; error: string };
 
 /**
- * A lifecycle action (drop-transitions.ts) applied under the drop's row lock, plus a lock shared by every
- * lifecycle action so two drops can't be opened at the same moment. Mark complete also delivers the drop's
- * shipped orders (PRD 5.2b), which is what customers see as "Delivered".
+ * A lifecycle action (drop-transitions.ts) applied under the lifecycle lock and the drop's row lock. Mark complete
+ * also delivers the drop's shipped orders (PRD 5.2b), which is what customers see as "Delivered": it locks those
+ * orders before the drop row, the order the customer paths use (account.ts cancels and slot changes lock the
+ * order, then its drop), and delivers exactly the orders it locked, so the two can't deadlock.
  */
 export async function transitionDrop(slug: string, action: DropAction, input: { closeAt?: Date | null } = {}, now = new Date()): Promise<Transitioned> {
   const offset = await arrivalOffsetDays();
   return getDb().transaction(async (tx) => {
-    await tx.execute(sql`select pg_advisory_xact_lock(hashtext('drop-lifecycle'))`);
-    const [d] = await tx.select().from(drops).where(eq(drops.slug, slug)).for("update");
+    await lockLifecycle(tx);
+    const [found] = await tx.select({ id: drops.id }).from(drops).where(eq(drops.slug, slug));
+    if (!found) return { ok: false, error: "That drop no longer exists." };
+    const shipped = action === "complete"
+      ? await tx.select({ id: orders.id }).from(orders).where(and(eq(orders.dropId, found.id), eq(orders.state, "shipped"))).for("update")
+      : [];
+    const [d] = await tx.select().from(drops).where(eq(drops.id, found.id)).for("update");
     if (!d) return { ok: false, error: "That drop no longer exists." };
-    const rows = await tx.select({ number: drops.number, state: drops.state, openAt: drops.openAt, closeAt: drops.closeAt, shipAt: drops.shipAt }).from(drops).where(ne(drops.id, d.id));
-    const others: OtherDrop[] = await Promise.all(rows.map(async (o) => ({ number: o.number, state: await liveState(o, offset, now), openAt: o.openAt, closeAt: o.closeAt })));
+    const others = await otherWindows(tx, d.id, offset, now);
     const r = transition({ ...d, arriveAt: arrivalDate(d.shipAt, offset) }, action, { now, others, closeAt: input.closeAt });
     if (!r.ok) return r;
     await tx.update(drops).set({ ...r.patch, updatedAt: now }).where(eq(drops.id, d.id));
-    if (action === "complete") await tx.update(orders).set({ state: "complete", updatedAt: now }).where(and(eq(orders.dropId, d.id), eq(orders.state, "shipped")));
+    if (action === "complete" && shipped.length) await tx.update(orders).set({ state: "complete", updatedAt: now }).where(inArray(orders.id, shipped.map((o) => o.id)));
     return { ok: true, state: r.patch.state };
   });
 }
