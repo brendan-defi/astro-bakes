@@ -12,7 +12,13 @@ import s from "@/app/admin/admin.module.css";
  * customers see at once (open, close, reopen) ask twice; Reopen also takes the new closing time, Japan time.
  * `reopenDefault` is a datetime-local value the page works out (tomorrow evening, before the ship date).
  */
-export function DropLifecycle({ slug, number, state, storedState, reopenDefault }: { slug: string; number: number; state: DropState; storedState: DropState; reopenDefault: string }) {
+export interface DropLifecycleProps {
+  slug: string; number: number; state: DropState; storedState: DropState; reopenDefault: string;
+  /** Why the buttons are held back right now (the form beside them has unsaved changes). */
+  blocked?: string;
+}
+
+export function DropLifecycle({ slug, number, state, storedState, reopenDefault, blocked }: DropLifecycleProps) {
   const router = useRouter();
   const actions = actionsFor(state, storedState);
   const [pending, setPending] = useState<DropAction | null>(null);
@@ -23,6 +29,7 @@ export function DropLifecycle({ slug, number, state, storedState, reopenDefault 
   const name = `Drop ${String(number).padStart(2, "0")}`;
 
   const start = (action: DropAction) => {
+    if (blocked) return;
     setError(null);
     setDone(null);
     if (ACTIONS[action].confirm) setPending(action);
@@ -67,9 +74,9 @@ export function DropLifecycle({ slug, number, state, storedState, reopenDefault 
       ) : (
         <div className={s.lifecycleRow}>
           {actions.map((a) => (
-            <button key={a} type="button" className={`btn btn-secondary ${s.btnSm}`} disabled={busy} title={ACTIONS[a].effect} onClick={() => start(a)}>{ACTIONS[a].label}</button>
+            <button key={a} type="button" className={`btn btn-secondary ${s.btnSm}`} disabled={busy || !!blocked} title={ACTIONS[a].effect} onClick={() => start(a)}>{ACTIONS[a].label}</button>
           ))}
-          {actions.length > 0 && <span className={s.help}>{actions.map((a) => `${ACTIONS[a].label}: ${ACTIONS[a].effect}`).join(" ")}</span>}
+          {actions.length > 0 && <span className={s.help}>{blocked ?? actions.map((a) => `${ACTIONS[a].label}: ${ACTIONS[a].effect}`).join(" ")}</span>}
         </div>
       )}
       {error && <p role="alert" className={s.statusError}>{error}</p>}

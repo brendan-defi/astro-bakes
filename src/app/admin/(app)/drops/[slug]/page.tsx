@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { DropForm } from "@/components/admin/DropForm";
-import { DropLifecycle } from "@/components/admin/DropLifecycle";
+import { DropEditor } from "@/components/admin/DropEditor";
 import { DropStatePill } from "@/components/admin/DropStatePill";
 import { requireAdmin } from "@/lib/admin";
 import { fromJstLocal, toJstLocal } from "@/lib/drop-rules";
@@ -36,8 +35,10 @@ export default async function EditDropPage({ params, searchParams }: { params: P
           </form>
         </div>
       </div>
-      <DropLifecycle slug={drop.slug} number={drop.number} state={drop.state} storedState={drop.storedState} reopenDefault={reopenDefault(drop.shipAt)} />
-      <DropForm slug={drop.slug} initial={drop} number={drop.number} state={drop.state} choices={choices} arrivalOffsetDays={offset} notice={notice} />
+      <DropEditor
+        lifecycle={{ slug: drop.slug, number: drop.number, state: drop.state, storedState: drop.storedState, reopenDefault: reopenDefault(drop.shipAt) }}
+        form={{ slug: drop.slug, initial: drop, number: drop.number, state: drop.state, choices, arrivalOffsetDays: offset, notice, version: drop.updatedAt.getTime() }}
+      />
     </>
   );
 }

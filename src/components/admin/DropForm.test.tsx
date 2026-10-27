@@ -116,3 +116,40 @@ describe("DropForm and the state it was drawn for", () => {
     expect(document.getElementById(box.getAttribute("aria-describedby")!)?.textContent).toBe("Choose a box.");
   });
 });
+
+describe("DropForm when the stored drop changes under it", () => {
+  const later = { ...OPEN, closeAt: fromJstLocal("2026-10-31T18:00")!, boxes: [{ ...OPEN.boxes[0], cap: 25 }] };
+  const view = (initial: typeof OPEN, version: number, state: "open" | "closed" = "open") =>
+    <DropForm slug="drop-03" initial={initial} number={3} state={state} choices={CHOICES} arrivalOffsetDays={1} version={version} />;
+
+  it("shows the stored values once the version changes (a lifecycle action came back)", () => {
+    const r = render(view(OPEN, 1));
+    expect((screen.getByLabelText("Closes *") as HTMLInputElement).value).toBe("2026-10-30T21:00");
+    r.rerender(view(later, 2, "closed"));
+    expect((screen.getByLabelText("Closes *") as HTMLInputElement).value).toBe("2026-10-31T18:00");
+    expect((screen.getByLabelText("Cap for box 1") as HTMLInputElement).value).toBe("25");
+    expect(screen.getByText(/^Closed\./)).toBeTruthy();
+    expect((screen.getByRole("button", { name: "Save drop" }) as HTMLButtonElement).disabled).toBe(true); // nothing unsaved
+  });
+
+  it("keeps an edit in progress but moves the saved baseline, so Save still sends the edit", () => {
+    const r = render(view(OPEN, 1));
+    fireEvent.change(screen.getByLabelText("Cap for box 1"), { target: { value: "30" } });
+    r.rerender(view(later, 2));
+    expect((screen.getByLabelText("Cap for box 1") as HTMLInputElement).value).toBe("30");
+    expect((screen.getByLabelText("Closes *") as HTMLInputElement).value).toBe("2026-10-30T21:00"); // the draft is the owner's
+    expect(status()).toBe("Unsaved changes");
+  });
+
+  it("reports unsaved changes to its owner, and Discard changes takes them back", () => {
+    const onDirtyChange = vi.fn();
+    render(<DropForm slug="drop-03" initial={OPEN} number={3} state="open" choices={CHOICES} arrivalOffsetDays={1} version={1} onDirtyChange={onDirtyChange} />);
+    expect(onDirtyChange).toHaveBeenLastCalledWith(false);
+    fireEvent.change(screen.getByLabelText("Cap for box 1"), { target: { value: "30" } });
+    expect(onDirtyChange).toHaveBeenLastCalledWith(true);
+    fireEvent.click(screen.getByRole("button", { name: "Discard changes" }));
+    expect((screen.getByLabelText("Cap for box 1") as HTMLInputElement).value).toBe("20");
+    expect(onDirtyChange).toHaveBeenLastCalledWith(false);
+    expect(screen.queryByRole("button", { name: "Discard changes" })).toBeNull();
+  });
+});

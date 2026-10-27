@@ -58,9 +58,15 @@ const STATE_NOTE: Record<DropState, string> = {
  * What can change depends on the drop's state (drop-rules.ts `editable`); locked fields are shown, not offered.
  * Times are Japan time.
  */
-export function DropForm({ slug, initial, number, state, choices, arrivalOffsetDays, notice }: {
+export interface DropFormProps {
   slug: string | null; initial: Initial | null; number: number; state: DropState; choices: Choice[]; arrivalOffsetDays: number; notice?: string;
-}) {
+  /** The stored drop's updatedAt, as a number: when it changes (a lifecycle action, or this form's own save coming back), the form starts again from `initial`. */
+  version?: number;
+  /** Told whenever the form gains or loses unsaved changes (DropEditor holds the lifecycle buttons back while it has some). */
+  onDirtyChange?: (dirty: boolean) => void;
+}
+
+export function DropForm({ slug, initial, number, state, choices, arrivalOffsetDays, notice, version, onDirtyChange }: DropFormProps) {
   const router = useRouter();
   const creating = slug === null;
   const can = editable(state);
@@ -72,6 +78,16 @@ export function DropForm({ slug, initial, number, state, choices, arrivalOffsetD
   /** The drop moved to a state that locks different fields while this form was open: only a reload shows the truth. */
   const [stale, setStale] = useState(false);
   const dirty = !same(draft, saved);
+  // The stored drop changed under this form (adjusted while rendering, so stale values never paint): the saved
+  // baseline follows it, and so does the draft unless the owner is mid-edit, which the lifecycle buttons rule out.
+  const [seenVersion, setSeenVersion] = useState(version);
+  if (version !== seenVersion) {
+    setSeenVersion(version);
+    const fresh = fromInitial(number, initial, choices);
+    setSaved(fresh);
+    if (!dirty) { setDraft(fresh); setErrors({}); setStale(false); }
+  }
+  useEffect(() => { onDirtyChange?.(dirty); }, [dirty, onDirtyChange]);
   const focusNext = useRef<string | null>(null);
   useEffect(() => {
     if (busy || !focusNext.current) return;
@@ -241,6 +257,7 @@ export function DropForm({ slug, initial, number, state, choices, arrivalOffsetD
           {status?.text ?? (dirty && !creating ? "Unsaved changes" : "")}
         </span>
         {stale && <button type="button" className={s.linkBtn} onClick={() => window.location.reload()}>Reload</button>}
+        {dirty && !creating && !busy && <button type="button" className={s.linkBtn} onClick={() => { setDraft(saved); setErrors({}); setStatus(null); setStale(false); }}>Discard changes</button>}
       </div>
     </form>
   );

@@ -74,3 +74,13 @@ describe("DropLifecycle", () => {
     expect(screen.getAllByRole("button").map((b) => b.textContent)).toEqual(["Mark complete"]);
   });
 });
+
+describe("DropLifecycle held back", () => {
+  it("disables the buttons and says why while the form beside it has unsaved changes", () => {
+    render(<DropLifecycle slug="drop-05" number={5} state="scheduled" storedState="scheduled" reopenDefault="2026-11-11T21:00" blocked="Save or discard the form's changes first: a lifecycle action reloads the drop as it is stored." />);
+    for (const b of screen.getAllByRole("button")) expect((b as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText(/Save or discard the form's changes first/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Open now" }));
+    expect(screen.queryByRole("group")).toBeNull();
+  });
+});
