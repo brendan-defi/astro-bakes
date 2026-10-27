@@ -10,6 +10,8 @@
 .holdLow { background: var(--pink); }
 .stepsTop { display: none; }
 .headerLink { display: none; }
+/* A header action that has no icon-button stand-in on phones (the account page's Sign out): a compact pill at every width. */
+.headerBtn { flex: none; display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 16px; background: var(--white); border: var(--border); border-radius: var(--radius-pill); font: inherit; font-size: 14px; font-weight: 900; color: var(--ink); text-decoration: none; cursor: pointer; }
 @media (min-width: 900px) {
   .header { padding: 16px var(--gutter); }
   .headerRow { flex-wrap: wrap; gap: 16px 28px; }
@@ -18,6 +20,7 @@
   .holdLabel { display: inline; }
   .stepsTop { display: flex; }
   .headerLink { display: flex; align-items: center; gap: 8px; min-height: 48px; padding: 0 20px; background: var(--white); border: var(--border); border-radius: var(--radius-pill); font-size: 15px; font-weight: 900; text-decoration: none; }
+  .headerBtn { min-height: 48px; padding: 0 20px; font-size: 15px; }
 }
 
 /* ===== Step indicator ===== */

@@ -41,7 +41,7 @@ export default async function AccountPage({ params }: { params: Promise<{ locale
           <Link href={home} aria-label={t.backToShop} className={s.iconBtn}><ArrowLeftIcon /></Link>
           <Logo href={home} label={t.home} size="sm" />
           <span className={s.spacer} />
-          <form action={signOut}><button type="submit" className={s.headerLink}>{t.signOut}</button></form>
+          <form action={signOut}><button type="submit" className={s.headerBtn}>{t.signOut}</button></form>
         </div>
       </header>
       <div className={s.body}>
