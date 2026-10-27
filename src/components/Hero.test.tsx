@@ -32,3 +32,21 @@ describe("Hero drop-email status (PRD 1.5, 2.4)", () => {
     expect(screen.getByRole("textbox", { name: t.remindLabel(t.dropN(scheduled.drop!.number)) })).toBeTruthy();
   });
 });
+
+describe("Hero drop description (admin drop editor)", () => {
+  const withDescription = (state: "open" | "scheduled" | "closed", description?: string) =>
+    getHome({ state }, { ...mockSource, drops: mockSource.drops.map((d) => ({ ...d, description })) });
+
+  it("shows the drop's line under its name while open, scheduled and closed", () => {
+    for (const state of ["open", "scheduled", "closed"] as const) {
+      render(<Hero locale="en" home={withDescription(state, "Matcha season: two new cookies.")} />);
+      expect(screen.getByText("Matcha season: two new cookies.")).toBeTruthy();
+      cleanup();
+    }
+  });
+
+  it("shows nothing extra when the drop has no description", () => {
+    render(<Hero locale="en" home={withDescription("open")} />);
+    expect(screen.queryByText(/Matcha season/)).toBeNull();
+  });
+});

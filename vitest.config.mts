@@ -13,6 +13,8 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     include: ["src/**/*.test.{ts,tsx}"],
+    // TEST_CLOCK=<ISO date-time> fakes Date for the run (see src/test/clock.ts).
+    setupFiles: ["./src/test/clock.ts"],
     // Integration tests talk to Postgres (TEST_DATABASE_URL) one file at a time.
     fileParallelism: false,
     testTimeout: 20_000,

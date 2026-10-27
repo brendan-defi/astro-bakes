@@ -22,6 +22,7 @@ function HeroOpen({ locale, drop }: { locale: Locale; drop: Drop }) {
       <div className={`container ${s.heroGrid}`}>
         <div className={s.heroText}>
           <div className={s.eyebrowSticker}>{drop.name}</div>
+          {drop.description && <p className={s.dropNote}>{drop.description}</p>}
           <Title t={t} />
         </div>
 
@@ -80,6 +81,7 @@ function HeroNotOpen({ locale, home }: { locale: Locale; home: HomeData }) {
       <div className={`container ${s.heroGrid} ${s.heroStates}`}>
         <div className={s.heroText}>
           <div className={`${s.eyebrowSticker} ${eyebrowClass}`}>{eyebrow}</div>
+          {(state === "scheduled" || state === "closed") && drop?.description && <p className={s.dropNote}>{drop.description}</p>}
           <Title t={t} />
 
           {state === "scheduled" && drop && (

@@ -34,6 +34,8 @@ export interface Drop {
   id: string;
   number: number;
   name: string;
+  /** Optional line under the name in the hero, from the admin drop editor (English when there is no Japanese). */
+  description?: string;
   /** As set by admin; see effectiveState() for the system transitions. */
   state: DropState;
   openAt: Date;

@@ -1,0 +1,202 @@
+// @vitest-environment node
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { eq } from "drizzle-orm";
+import * as schema from "@/db/schema";
+import { duplicateDropAction, saveDropAction } from "@/app/admin/(app)/drops/actions";
+import { startCheckout } from "@/lib/checkout";
+import { nextMonth, toJstDay, toJstLocal } from "@/lib/drop-rules";
+import { dropForForm, listDropsAdmin } from "@/lib/drops-admin";
+import { closeTestDb, resetDatabase, testDb, TEST_DATABASE_URL } from "@/test/db";
+
+// The real actions, with only the admin check and Next's cache stubbed; redirect() throws as Next's does.
+vi.mock("@/lib/admin", () => ({ requireAdmin: async () => ({ id: "admin", email: "owner@test.invalid", name: null }) }));
+vi.mock("next/cache", () => ({ revalidatePath: () => {} }));
+vi.mock("next/navigation", () => ({ redirect: (to: string) => { throw Object.assign(new Error("NEXT_REDIRECT"), { to }); } }));
+
+/** The drop editor (PRD 4.2) against a real Postgres, starting from the seeded drops (03: closed by the clock; 04: scheduled for November). */
+const { pool, db } = testDb();
+const DAY = 86_400_000;
+
+const newDrop = (over: Record<string, unknown> = {}) => ({
+  number: "5", nameEn: "Drop 05 · December", nameJa: "ドロップ05 · 12月", descriptionEn: "", descriptionJa: "",
+  openAt: "2026-12-06T10:00", closeAt: "2026-12-13T21:00", bakeAt: "", shipAt: "2026-12-20",
+  boxes: [{ boxSlug: "cookie-box", cap: "20", price: "1000", maxPerCustomer: "5" }, { boxSlug: "banana-bread", cap: "10", price: "500", maxPerCustomer: "3" }],
+  ...over,
+});
+/** The edit form as it would arrive for an existing drop: its current values, with changes on top. */
+async function formFor(slug: string, over: Record<string, unknown> = {}) {
+  const d = (await dropForForm(slug))!;
+  return {
+    nameEn: d.nameEn, nameJa: d.nameJa, descriptionEn: d.descriptionEn, descriptionJa: d.descriptionJa,
+    openAt: toJstLocal(d.openAt), closeAt: toJstLocal(d.closeAt), bakeAt: d.bakeAt ? toJstLocal(d.bakeAt) : "", shipAt: toJstDay(d.shipAt),
+    boxes: d.boxes.map((b) => ({ boxSlug: b.boxSlug, cap: String(b.cap), price: String(b.price), maxPerCustomer: String(b.maxPerCustomer) })),
+    ...over,
+  };
+}
+/** Make Drop 03 open right now (closing in a day), as if the owner had opened it. */
+const openDrop03 = () => db.update(schema.drops).set({ state: "open", closeAt: new Date(Date.now() + DAY) }).where(eq(schema.drops.slug, "drop-03"));
+
+describe.skipIf(!TEST_DATABASE_URL)("drop editor", () => {
+  beforeEach(async () => {
+    await resetDatabase(db);
+  });
+
+  it("lists drops newest first with the state the shop sees, sold against cap, and paid revenue", async () => {
+    const list = await listDropsAdmin();
+    expect(list.map((d) => [d.slug, d.state])).toEqual([["drop-04", "scheduled"], ["drop-03", "closed"]]);
+    expect(list[1]).toMatchObject({ sold: 30, cap: 40, orders: 0, revenue: 0 });
+  });
+
+  it("creates a draft numbered as given, with its boxes; drafts stay off the shop", async () => {
+    expect(await saveDropAction(newDrop(), null)).toEqual({ ok: true, slug: "drop-05" });
+    const d = await dropForForm("drop-05");
+    expect(d).toMatchObject({ number: 5, state: "draft", nameJa: "ドロップ05 · 12月", boxes: [{ boxSlug: "cookie-box", cap: 20, price: 1000 }, { boxSlug: "banana-bread", cap: 10, price: 500, maxPerCustomer: 3 }] });
+    expect(d!.openAt.toISOString()).toBe("2026-12-06T01:00:00.000Z");
+    expect(await saveDropAction(newDrop(), null)).toEqual({ ok: false, errors: { number: "Another drop already has this number." } });
+  });
+
+  it("edits everything before the drop opens: dates, boxes in and out, prices", async () => {
+    // A day later than the fixture's close (which reseed() pins to the clock), still before its bake and ship dates.
+    const closeAt = toJstLocal(new Date((await dropForForm("drop-04"))!.closeAt.getTime() + DAY));
+    const r = await saveDropAction(await formFor("drop-04", { closeAt, boxes: [{ boxSlug: "sampler-box", cap: "12", price: "950", maxPerCustomer: "2" }, { boxSlug: "cookie-box", cap: "25", price: "1100", maxPerCustomer: "5" }] }), "drop-04");
+    expect(r).toEqual({ ok: true, slug: "drop-04" });
+    const d = (await dropForForm("drop-04"))!;
+    expect(toJstLocal(d.closeAt)).toBe(closeAt);
+    expect(d.boxes.map((b) => [b.boxSlug, b.cap, b.price])).toEqual([["sampler-box", 12, 950], ["cookie-box", 25, 1100]]);
+  });
+
+  it("once open, changes names, caps and limits but keeps dates, boxes and prices as customers saw them", async () => {
+    await openDrop03();
+    const before = (await dropForForm("drop-03"))!;
+    const r = await saveDropAction(await formFor("drop-03", {
+      nameEn: "Drop 03 · October (extended)",
+      openAt: "2026-01-01T10:00",
+      // A new price is sent too, and ignored: customers may have paid the old one.
+      boxes: before.boxes.map((b) => ({ boxSlug: b.boxSlug, cap: String(b.boxSlug === "cookie-box" ? 30 : b.cap), price: "999", maxPerCustomer: "4" })),
+    }), "drop-03");
+    expect(r).toEqual({ ok: true, slug: "drop-03" });
+    const after = (await dropForForm("drop-03"))!;
+    expect(after.nameEn).toBe("Drop 03 · October (extended)");
+    expect(after.openAt).toEqual(before.openAt);
+    expect(after.boxes.find((b) => b.boxSlug === "cookie-box")).toMatchObject({ cap: 30, maxPerCustomer: 4, price: before.boxes.find((b) => b.boxSlug === "cookie-box")!.price });
+  });
+
+  it("refuses removing or adding boxes once open, saving nothing", async () => {
+    await openDrop03();
+    const r = await saveDropAction(await formFor("drop-03", { nameEn: "Renamed", boxes: [{ boxSlug: "cookie-box", cap: "20", price: "1000", maxPerCustomer: "5" }] }), "drop-03");
+    expect(r).toEqual({ ok: false, errors: { boxes: "Boxes can't be added or removed once the drop has opened." } });
+    expect((await dropForForm("drop-03"))!.nameEn).toBe("Drop 03 · October");
+  });
+
+  it("never lets a cap fall below what's sold plus what checkouts hold right now", async () => {
+    await openDrop03();
+    // 13 of 20 cookie boxes sold; a checkout holds 2 more.
+    const hold = await startCheckout({ dropId: "drop-03", items: { "cookie-box": 2 } }, null);
+    expect(hold.ok).toBe(true);
+    const form = await formFor("drop-03");
+    const capTo = (n: number) => ({ ...form, boxes: form.boxes.map((b) => (b.boxSlug === "cookie-box" ? { ...b, cap: String(n) } : b)) });
+    const r = await saveDropAction(capTo(14), "drop-03");
+    expect(r.ok === false && Object.values(r.errors)[0]).toBe("At least 15: 13 sold, 2 in checkouts right now.");
+    expect(await saveDropAction(capTo(15), "drop-03")).toEqual({ ok: true, slug: "drop-03" });
+  });
+
+  it("won't remove a box that has sales, even before opening", async () => {
+    await saveDropAction(newDrop(), null);
+    await db.update(schema.dropBoxes).set({ soldQty: 1 }).where(eq(schema.dropBoxes.dropId, (await db.query.drops.findFirst({ where: eq(schema.drops.slug, "drop-05") }))!.id));
+    const r = await saveDropAction(await formFor("drop-05", { boxes: [{ boxSlug: "cookie-box", cap: "20", price: "1000", maxPerCustomer: "5" }] }), "drop-05");
+    expect(r).toEqual({ ok: false, errors: { boxes: "A box that has orders can't be removed." } });
+  });
+
+  it("keeps a scheduled drop's opening in the future", async () => {
+    const r = await saveDropAction(await formFor("drop-04", { openAt: "2026-01-01T10:00" }), "drop-04");
+    expect(r.ok === false && r.errors.openAt).toMatch(/Open now/);
+  });
+
+  it("duplicates into the next-numbered draft, a month later, with the boxes and nothing sold", async () => {
+    const source = (await dropForForm("drop-03"))!;
+    const go = await duplicateDropAction("drop-03").catch((e: { to?: string }) => e.to);
+    expect(go).toBe("/admin/drops/drop-05?duplicated=1");
+    const copy = (await dropForForm("drop-05"))!;
+    expect(copy).toMatchObject({ number: 5, state: "draft", nameEn: "Drop 03 · October (copy)", nameJa: "ドロップ03 · 10月（コピー）" });
+    // The seed's dates are pinned to the clock by reseed() in test/db.ts, so compare with the rule rather than a calendar date.
+    expect(toJstLocal(copy.openAt)).toBe(toJstLocal(nextMonth(source.openAt)));
+    expect(toJstDay(copy.shipAt)).toBe(toJstDay(nextMonth(source.shipAt)));
+    expect(copy.openAt.getTime()).toBeGreaterThan(source.openAt.getTime() + 27 * DAY);
+    expect(copy.boxes.map((b) => [b.boxSlug, b.cap, b.sold])).toEqual([["cookie-box", 20, 0], ["banana-bread", 10, 0], ["sampler-box", 10, 0]]);
+  });
+});
+
+describe.skipIf(!TEST_DATABASE_URL)("drop editor, review follow-ups", () => {
+  beforeEach(async () => {
+    await resetDatabase(db);
+  });
+  const setState = (slug: string, state: "shipped" | "complete" | "cancelled") => db.update(schema.drops).set({ state }).where(eq(schema.drops.slug, slug));
+  const boxRows = (slug: string) => db.select({ cap: schema.dropBoxes.cap, price: schema.dropBoxes.price }).from(schema.dropBoxes).innerJoin(schema.drops, eq(schema.drops.id, schema.dropBoxes.dropId)).where(eq(schema.drops.slug, slug)).orderBy(schema.dropBoxes.sort);
+
+  it.each(["shipped", "complete", "cancelled"] as const)("saves a name and description change on a %s drop, leaving its boxes alone", async (state) => {
+    await setState("drop-03", state);
+    const before = await boxRows("drop-03");
+    const form = await formFor("drop-03", { nameEn: "Drop 03 · October (renamed)", descriptionJa: "完売御礼。", boxes: (await formFor("drop-03")).boxes.map((b) => ({ ...b, cap: "999", price: "9999" })) });
+    expect(await saveDropAction(form, "drop-03", state)).toEqual({ ok: true, slug: "drop-03" });
+    const after = (await dropForForm("drop-03"))!;
+    expect(after).toMatchObject({ state, nameEn: "Drop 03 · October (renamed)", descriptionJa: "完売御礼。" });
+    expect(await boxRows("drop-03")).toEqual(before); // caps and prices ignored, not applied
+  });
+
+  it("refuses a save drawn for a scheduled drop once it has opened, so the form can't call ignored dates and prices saved", async () => {
+    const form = await formFor("drop-04", { shipAt: "2026-12-24", boxes: (await formFor("drop-04")).boxes.map((b) => ({ ...b, price: "1234" })) });
+    const stored = (await dropForForm("drop-04"))!;
+    // The owner's tab is still on the scheduled form; meanwhile the drop opens (the next PR's "Open now", or the clock).
+    await db.update(schema.drops).set({ state: "open", openAt: new Date(Date.now() - 3_600_000), closeAt: new Date(Date.now() + DAY) }).where(eq(schema.drops.slug, "drop-04"));
+    const r = await saveDropAction(form, "drop-04", "scheduled");
+    expect(r.ok).toBe(false);
+    expect(r.ok === false && r.errors).toEqual({ state: expect.stringMatching(/^This drop is now open, .*Reload the page/) });
+    const now = (await dropForForm("drop-04"))!;
+    expect([toJstDay(now.shipAt), now.boxes.map((b) => b.price)]).toEqual([toJstDay(stored.shipAt), stored.boxes.map((b) => b.price)]);
+    // A form drawn for the drop as it is now goes through, names only changing.
+    expect(await saveDropAction(await formFor("drop-04", { nameEn: "Drop 04 · November!" }), "drop-04", "open")).toEqual({ ok: true, slug: "drop-04" });
+  });
+
+  it("still saves across states that lock the same fields (closed to baking), and without a drawn-for state", async () => {
+    await db.update(schema.drops).set({ state: "baking" }).where(eq(schema.drops.slug, "drop-03"));
+    expect(await saveDropAction(await formFor("drop-03", { nameEn: "Baking now" }), "drop-03", "closed")).toEqual({ ok: true, slug: "drop-03" });
+    expect(await saveDropAction(await formFor("drop-03", { nameEn: "No state sent" }), "drop-03")).toEqual({ ok: true, slug: "drop-03" });
+  });
+
+  it("New drop and Duplicate take numbers in turn: a duplicate waits for an uncommitted creation, then numbers after it", async () => {
+    // Another tab is creating number 5 and hasn't committed yet: hold the numbering lock with its row inserted.
+    const other = await pool!.connect();
+    await other.query("begin");
+    await other.query("select pg_advisory_xact_lock(hashtext('drop-number'))");
+    await other.query("insert into drops (number, slug, name_en, state, open_at, close_at, ship_at) values (5, 'drop-05', 'Drop 05', 'draft', now(), now() + interval '1 day', now() + interval '3 days')");
+    let settled = false;
+    const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+    // Postgres grants a contended lock to waiters in the order they queued: the duplicate first, then the creation.
+    const dup = duplicateDropAction("drop-03").catch((e: { to?: string }) => e.to).finally(() => { settled = true; });
+    await wait(250);
+    const creating = saveDropAction(newDrop({ number: "7" }), null).finally(() => { settled = true; });
+    await wait(250);
+    expect(settled).toBe(false); // both wait for the lock rather than racing the uncommitted row
+    await other.query("commit");
+    other.release();
+    expect(await dup).toBe("/admin/drops/drop-06?duplicated=1");
+    expect(await creating).toEqual({ ok: true, slug: "drop-07" });
+    expect((await listDropsAdmin()).map((d) => d.number)).toEqual([7, 6, 5, 4, 3]);
+  });
+
+  it("carries the description to the homepage model in each language, English standing in for a missing Japanese line", async () => {
+    const { loadDrops } = await import("@/lib/drops");
+    expect(await saveDropAction(await formFor("drop-04", { descriptionEn: "Matcha season: two new cookies.", descriptionJa: "抹茶の季節。新作クッキー2種。" }), "drop-04", "scheduled")).toEqual({ ok: true, slug: "drop-04" });
+    const en = (await loadDrops("en")).find((d) => d.id === "drop-04")!;
+    const ja = (await loadDrops("ja")).find((d) => d.id === "drop-04")!;
+    expect([en.description, ja.description]).toEqual(["Matcha season: two new cookies.", "抹茶の季節。新作クッキー2種。"]);
+    expect(await saveDropAction(await formFor("drop-04", { descriptionJa: "" }), "drop-04", "scheduled")).toEqual({ ok: true, slug: "drop-04" });
+    expect((await loadDrops("ja")).find((d) => d.id === "drop-04")!.description).toBe("Matcha season: two new cookies.");
+    expect(await saveDropAction(await formFor("drop-04", { descriptionEn: "", descriptionJa: "" }), "drop-04", "scheduled")).toEqual({ ok: true, slug: "drop-04" });
+    expect((await loadDrops("en")).find((d) => d.id === "drop-04")!.description).toBeUndefined();
+  });
+});
+
+afterAll(async () => {
+  await closeTestDb(pool);
+});
