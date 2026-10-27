@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DropLifecycle } from "./DropLifecycle";
 
@@ -76,11 +76,41 @@ describe("DropLifecycle", () => {
 });
 
 describe("DropLifecycle held back", () => {
+  afterEach(cleanup);
   it("disables the buttons and says why while the form beside it has unsaved changes", () => {
     render(<DropLifecycle slug="drop-05" number={5} state="scheduled" storedState="scheduled" reopenDefault="2026-11-11T21:00" blocked="Save or discard the form's changes first: a lifecycle action reloads the drop as it is stored." />);
     for (const b of screen.getAllByRole("button")) expect((b as HTMLButtonElement).disabled).toBe(true);
     expect(screen.getByText(/Save or discard the form's changes first/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Open now" }));
     expect(screen.queryByRole("group")).toBeNull();
+  });
+});
+
+describe("DropLifecycle guards the confirmation too", () => {
+  beforeEach(() => { actions.transitionDropAction.mockReset(); router.refresh.mockReset(); });
+  afterEach(cleanup);
+  it("won't run a confirmed action once the form has become dirty, and says so", () => {
+    const view = (blocked?: string) => <DropLifecycle slug="drop-05" number={5} state="scheduled" storedState="scheduled" reopenDefault="2026-11-11T21:00" blocked={blocked} />;
+    const r = render(view());
+    fireEvent.click(screen.getByRole("button", { name: "Open now" }));
+    r.rerender(view("Save or discard the form's changes first: a lifecycle action reloads the drop as it is stored."));
+    expect((screen.getByRole("button", { name: "Yes, open now" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByRole("alert").textContent).toMatch(/Save or discard/);
+    fireEvent.click(screen.getByRole("button", { name: "Yes, open now" }));
+    expect(actions.transitionDropAction).not.toHaveBeenCalled();
+  });
+
+  it("reports when it is active: from the confirmation opening until the request settles", async () => {
+    const onActiveChange = vi.fn();
+    let settle!: (v: unknown) => void;
+    actions.transitionDropAction.mockReturnValue(new Promise((r) => { settle = r; }));
+    render(<DropLifecycle slug="drop-05" number={5} state="scheduled" storedState="scheduled" reopenDefault="2026-11-11T21:00" onActiveChange={onActiveChange} />);
+    expect(onActiveChange).toHaveBeenLastCalledWith(false);
+    fireEvent.click(screen.getByRole("button", { name: "Open now" }));
+    expect(onActiveChange).toHaveBeenLastCalledWith(true);
+    fireEvent.click(screen.getByRole("button", { name: "Yes, open now" }));
+    expect(onActiveChange).toHaveBeenLastCalledWith(true);
+    await act(async () => { settle({ ok: true, state: "open" }); });
+    expect(onActiveChange).toHaveBeenLastCalledWith(false);
   });
 });

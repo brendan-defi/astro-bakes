@@ -153,3 +153,41 @@ describe("DropForm when the stored drop changes under it", () => {
     expect(screen.queryByRole("button", { name: "Discard changes" })).toBeNull();
   });
 });
+
+describe("DropForm remembers the state its draft was drawn for", () => {
+  const SCHEDULED = { ...OPEN, openAt: fromJstLocal("2026-12-06T10:00")!, closeAt: fromJstLocal("2026-12-13T21:00")!, shipAt: fromJstDay("2026-12-20")!, boxes: [{ ...OPEN.boxes[0], sold: 0, held: 0 }] };
+  const view = (state: "scheduled" | "open", version: number, over: Partial<typeof SCHEDULED> = {}) =>
+    <DropForm slug="drop-05" initial={{ ...SCHEDULED, ...over }} number={5} state={state} choices={CHOICES} arrivalOffsetDays={1} version={version} />;
+
+  it("sends the draft's own state after the drop moved on under an edit, so the server can refuse instead of ignoring", async () => {
+    actions.saveDropAction.mockResolvedValue({ ok: false, errors: { state: "This drop is now open, so a different set of fields can change. Reload the page to see what it has now, then make your change again." } });
+    const r = render(view("scheduled", 1));
+    fireEvent.change(screen.getByLabelText("Ships *"), { target: { value: "2026-12-24" } });
+    // The drop opens (a lifecycle action elsewhere, or the clock): new state, new version, the edit still on screen.
+    r.rerender(view("open", 2, { openAt: fromJstLocal("2026-12-01T10:00")! }));
+    expect((screen.getByLabelText("Ships *") as HTMLInputElement).value).toBe("2026-12-24");
+    expect((screen.getByLabelText("Ships *") as HTMLInputElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Save drop" }));
+    await waitFor(() => expect(status()).toMatch(/^This drop is now open/));
+    expect(sent()[2]).toBe("scheduled");
+    expect(screen.getByRole("button", { name: "Reload" })).toBeTruthy();
+  });
+
+  it("draws a clean form for the new state, so its saves carry that state", async () => {
+    actions.saveDropAction.mockResolvedValue({ ok: true, slug: "drop-05" });
+    const r = render(view("scheduled", 1));
+    r.rerender(view("open", 2, { openAt: fromJstLocal("2026-12-01T10:00")! }));
+    fireEvent.change(document.getElementById("drop-nameEn")!, { target: { value: "Drop 05 · Live" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save drop" }));
+    await waitFor(() => expect(status()).toBe("Saved."));
+    expect(sent()[2]).toBe("open");
+  });
+
+  it("is read-only while locked, and says why", () => {
+    render(<DropForm slug="drop-05" initial={SCHEDULED} number={5} state="scheduled" choices={CHOICES} arrivalOffsetDays={1} version={1} locked="A lifecycle action is under way; the form picks up the stored drop when it finishes." />);
+    expect((document.querySelector("fieldset") as HTMLFieldSetElement).disabled).toBe(true);
+    expect(screen.getByLabelText("Ships *").matches(":disabled")).toBe(true);
+    expect((screen.getByRole("button", { name: "Save drop" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(status()).toMatch(/^A lifecycle action is under way/);
+  });
+});

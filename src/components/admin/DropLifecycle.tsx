@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { transitionDropAction } from "@/app/admin/(app)/drops/actions";
 import type { DropState } from "@/lib/data";
 import { ACTIONS, actionsFor, type DropAction } from "@/lib/drop-transitions";
@@ -16,9 +16,11 @@ export interface DropLifecycleProps {
   slug: string; number: number; state: DropState; storedState: DropState; reopenDefault: string;
   /** Why the buttons are held back right now (the form beside them has unsaved changes). */
   blocked?: string;
+  /** Told while an action is under way, from its confirmation opening to the request settling (DropEditor locks the form meanwhile). */
+  onActiveChange?: (active: boolean) => void;
 }
 
-export function DropLifecycle({ slug, number, state, storedState, reopenDefault, blocked }: DropLifecycleProps) {
+export function DropLifecycle({ slug, number, state, storedState, reopenDefault, blocked, onActiveChange }: DropLifecycleProps) {
   const router = useRouter();
   const actions = actionsFor(state, storedState);
   const [pending, setPending] = useState<DropAction | null>(null);
@@ -27,6 +29,8 @@ export function DropLifecycle({ slug, number, state, storedState, reopenDefault,
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
   const name = `Drop ${String(number).padStart(2, "0")}`;
+  const active = pending !== null || busy;
+  useEffect(() => { onActiveChange?.(active); }, [active, onActiveChange]);
 
   const start = (action: DropAction) => {
     if (blocked) return;
@@ -37,6 +41,9 @@ export function DropLifecycle({ slug, number, state, storedState, reopenDefault,
   };
   async function run(action: DropAction) {
     if (busy) return;
+    // Checked again here, not only at the first button: the form is locked while a confirmation is open, but a
+    // change that got in anyway must not be thrown away by the refresh this action ends with.
+    if (blocked) { setPending(null); setError(blocked); return; }
     setBusy(true);
     setError(null);
     try {
@@ -67,9 +74,10 @@ export function DropLifecycle({ slug, number, state, storedState, reopenDefault,
             </label>
           )}
           <div className={s.confirmActions}>
-            <button type="button" className={`btn btn-primary ${s.btnSm}`} disabled={busy} onClick={() => void run(pending)}>{busy ? "Working…" : `Yes, ${ACTIONS[pending].label.toLowerCase()}`}</button>
+            <button type="button" className={`btn btn-primary ${s.btnSm}`} disabled={busy || !!blocked} onClick={() => void run(pending)}>{busy ? "Working…" : `Yes, ${ACTIONS[pending].label.toLowerCase()}`}</button>
             <button type="button" className={s.linkBtn} disabled={busy} onClick={() => { setPending(null); setError(null); }}>Cancel</button>
           </div>
+          {blocked && <p role="alert" className={s.statusError}>{blocked}</p>}
         </div>
       ) : (
         <div className={s.lifecycleRow}>

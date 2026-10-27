@@ -1,5 +1,5 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fromJstDay, fromJstLocal } from "@/lib/drop-rules";
 import { DropEditor } from "./DropEditor";
 
@@ -28,5 +28,41 @@ describe("DropEditor", () => {
     fireEvent.click(screen.getByRole("button", { name: "Discard changes" }));
     expect(openNow().disabled).toBe(false);
     expect((screen.getByLabelText("Ships *") as HTMLInputElement).value).toBe("2026-12-20");
+  });
+});
+
+describe("DropEditor guards the whole lifecycle operation", () => {
+  beforeEach(() => { actions.transitionDropAction.mockReset(); });
+  afterEach(cleanup);
+  /** Inputs inside a disabled fieldset don't report `disabled` themselves; the fieldset does. */
+  const fieldset = () => document.querySelector("fieldset") as HTMLFieldSetElement;
+  const mount = () =>
+    render(<DropEditor lifecycle={{ slug: "drop-05", number: 5, state: "scheduled", storedState: "scheduled", reopenDefault: "2026-12-07T21:00" }} form={{ slug: "drop-05", initial: SCHEDULED, number: 5, state: "scheduled", choices: CHOICES, arrivalOffsetDays: 1, version: 1 }} />);
+  const ships = () => screen.getByLabelText("Ships *") as HTMLInputElement;
+  const price = () => screen.getByLabelText(/Price .* for box 1/) as HTMLInputElement;
+
+  it("locks the form from the moment a confirmation opens, and frees it on cancel", () => {
+    mount();
+    expect(fieldset().disabled).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "Open now" }));
+    expect(fieldset().disabled).toBe(true);
+    expect(ships().matches(":disabled")).toBe(true);
+    expect(price().matches(":disabled")).toBe(true);
+    expect((screen.getByRole("button", { name: "Save drop" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText(/A lifecycle action is under way/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(fieldset().disabled).toBe(false);
+  });
+
+  it("keeps the form locked while the request is in flight, until the refresh", async () => {
+    let settle!: (v: unknown) => void;
+    actions.transitionDropAction.mockReturnValue(new Promise((r) => { settle = r; }));
+    mount();
+    fireEvent.click(screen.getByRole("button", { name: "Open now" }));
+    fireEvent.click(screen.getByRole("button", { name: "Yes, open now" }));
+    expect(fieldset().disabled).toBe(true);
+    await act(async () => { settle({ ok: true, state: "open" }); });
+    expect(fieldset().disabled).toBe(false);
+    expect(actions.transitionDropAction).toHaveBeenCalledWith("drop-05", "open", {});
   });
 });
