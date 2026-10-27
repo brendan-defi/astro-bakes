@@ -11,7 +11,10 @@
 .stepsTop { display: none; }
 .headerLink { display: none; }
 /* A header action that has no icon-button stand-in on phones (the account page's Sign out): a compact pill at every width. */
-.headerBtn { flex: none; display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 16px; background: var(--white); border: var(--border); border-radius: var(--radius-pill); font: inherit; font-size: 14px; font-weight: 900; color: var(--ink); text-decoration: none; cursor: pointer; }
+/* The account header may wrap on the narrowest phones (ログアウト at 320px), the action dropping under the logo rather than off the edge. */
+.headerRowWrap { flex-wrap: wrap; }
+.headerEnd { margin-left: auto; }
+.headerBtn { flex: none; display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 14px; background: var(--white); border: var(--border); border-radius: var(--radius-pill); font: inherit; font-size: 14px; font-weight: 900; color: var(--ink); text-decoration: none; cursor: pointer; white-space: nowrap; }
 @media (min-width: 900px) {
   .header { padding: 16px var(--gutter); }
   .headerRow { flex-wrap: wrap; gap: 16px 28px; }

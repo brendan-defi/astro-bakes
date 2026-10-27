@@ -37,11 +37,11 @@ export default async function AccountPage({ params }: { params: Promise<{ locale
   return (
     <div className={s.page}>
       <header className={s.header}>
-        <div className={`container ${s.headerRow}`}>
+        <div className={`container ${s.headerRow} ${s.headerRowWrap}`}>
           <Link href={home} aria-label={t.backToShop} className={s.iconBtn}><ArrowLeftIcon /></Link>
           <Logo href={home} label={t.home} size="sm" />
-          <span className={s.spacer} />
-          <form action={signOut}><button type="submit" className={s.headerBtn}>{t.signOut}</button></form>
+          {/* No spacer: Sign out is the right-hand action, and the row has to fit a 320px phone. */}
+          <form action={signOut} className={s.headerEnd}><button type="submit" className={s.headerBtn}>{t.signOut}</button></form>
         </div>
       </header>
       <div className={s.body}>
