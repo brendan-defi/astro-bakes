@@ -28,6 +28,8 @@ docker run -d --name astro-test-pg -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=
 TEST_DATABASE_URL=postgres://postgres:postgres@localhost:5433/astro_test pnpm test
 ```
 
+The seeded drops are pinned relative to the clock when a suite resets its database (`reseed` in `src/test/db.ts`), so tests must derive dates from the loaded drop rather than from the calendar. `TEST_CLOCK=<ISO date-time>` runs the suite as if it were then (JS `Date` only; timers and Postgres's own `now()` stay real) to catch a test that leans on the calendar; the sign-in rate-limit and subscriber welcome suites compare JS time with Postgres-stamped rows and are the two that read wrongly under it.
+
 Each suite drops and recreates the database's `public` schema, so give every worktree its own database (`docker exec astro-test-pg psql -U postgres -c "create database astro_test_<topic>"`). The shared setup in `src/test/db.ts` (`testDb`, `resetDatabase`, `clearTestData`, `captureEmail`, `closeTestDb`) refuses any host other than this machine (the host node-postgres will actually connect to, so a `?host=` override counts) unless `TEST_DATABASE_ALLOW_REMOTE=1`. That catches a production URL pasted by mistake; it can't tell that a local port is a tunnel to somewhere else, so don't point it at one. New integration suites should start from it.
 
 CI runs type-check and all tests against a Postgres service on every pull request (`.github/workflows/ci.yml`).

@@ -56,10 +56,12 @@ describe.skipIf(!TEST_DATABASE_URL)("drop editor", () => {
   });
 
   it("edits everything before the drop opens: dates, boxes in and out, prices", async () => {
-    const r = await saveDropAction(await formFor("drop-04", { closeAt: "2026-11-16T21:00", boxes: [{ boxSlug: "sampler-box", cap: "12", price: "950", maxPerCustomer: "2" }, { boxSlug: "cookie-box", cap: "25", price: "1100", maxPerCustomer: "5" }] }), "drop-04");
+    // A day later than the fixture's close (which reseed() pins to the clock), still before its bake and ship dates.
+    const closeAt = toJstLocal(new Date((await dropForForm("drop-04"))!.closeAt.getTime() + DAY));
+    const r = await saveDropAction(await formFor("drop-04", { closeAt, boxes: [{ boxSlug: "sampler-box", cap: "12", price: "950", maxPerCustomer: "2" }, { boxSlug: "cookie-box", cap: "25", price: "1100", maxPerCustomer: "5" }] }), "drop-04");
     expect(r).toEqual({ ok: true, slug: "drop-04" });
     const d = (await dropForForm("drop-04"))!;
-    expect(toJstLocal(d.closeAt)).toBe("2026-11-16T21:00");
+    expect(toJstLocal(d.closeAt)).toBe(closeAt);
     expect(d.boxes.map((b) => [b.boxSlug, b.cap, b.price])).toEqual([["sampler-box", 12, 950], ["cookie-box", 25, 1100]]);
   });
 
