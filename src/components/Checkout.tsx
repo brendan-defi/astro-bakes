@@ -9,7 +9,7 @@ import { placeOrderAction, startCheckoutAction } from "@/app/[locale]/checkout/a
 import { useSignInFlow } from "@/lib/use-sign-in";
 import { demoEnabled } from "@/lib/demo";
 import { fmtCountdown, fmtDate, fmtDateTime, yen } from "@/lib/format";
-import { getStrings, type Strings } from "@/lib/i18n";
+import { getStrings, jaLang, type Strings } from "@/lib/i18n";
 import { useCart, type CartLine } from "@/lib/cart";
 import { cleanPhoneInput, normalisePhone } from "@/lib/phone";
 import { cleanPostalInput, lookupPostal, normalisePostal, outsideWards, type PostalHit } from "@/lib/postal";
@@ -430,7 +430,7 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
             <>
               {/* ---- Cart ---- */}
               {isCart && (
-                <CartStep t={t} cart={cart} changes={changes} maxFor={maxFor} shipLinePost={shipLinePost} feeLabel={feeLabel} totalLabel={totalLabel} onCheckout={onCheckout} home={home} demo={demo} closed={!drop} notice={notice} busy={busy} />
+                <CartStep t={t} locale={locale} cart={cart} changes={changes} maxFor={maxFor} shipLinePost={shipLinePost} feeLabel={feeLabel} totalLabel={totalLabel} onCheckout={onCheckout} home={home} demo={demo} closed={!drop} notice={notice} busy={busy} />
               )}
 
               {/* ---- Sign in ---- */}
@@ -589,7 +589,7 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
                       ))}
                       <div className={`${s.tr}`} style={{ borderTop: "2px dashed var(--ink)", paddingTop: 8, marginTop: 2 }}><span>{t.subtotal}</span><span className={s.v}>{yen(buying.subtotal)}</span></div>
                       {!feeIncluded && <div className={s.tr}><span>{t.shipping}</span><span className={s.v}>{feeLabel}</span></div>}
-                      <div className={`${s.tr} ${s.trTotal}`} style={{ borderTop: 0, paddingTop: 0, marginTop: 0 }}><span className={s.k}>{t.total} <span className={s.sub12}>{t.taxIncl}</span></span><span className={s.v}>{totalLabel}</span></div>
+                      <div className={`${s.tr} ${s.trTotal}`} style={{ borderTop: 0, paddingTop: 0, marginTop: 0 }}><span className={s.k}>{t.total} <span className={s.sub12} lang={jaLang(locale)}>{t.taxIncl}</span></span><span className={s.v}>{totalLabel}</span></div>
                     </section>
                   </div>
 
@@ -690,7 +690,7 @@ export function Checkout({ locale, drop: dropIn, lineUrl, held, customer }: { lo
             )}
             <div className={`${s.tr} ${s.trSub}`}><span>{t.subtotal} · {t.boxCount(summaryCount)}</span><span className={s.v}>{yen(summarySubtotal)}</span></div>
             {!feeIncluded && <div className={s.tr}><span>{t.shipping} <span className={s.sub13}>{t.shippingFlatShort}</span></span><span className={s.v}>{feeLabel}</span></div>}
-            <div className={`${s.tr} ${s.trTotal}`}><span className={s.k}>{t.total} <span className={s.sub12}>{t.taxIncl}</span></span><span className={s.v}>{totalLabel}</span></div>
+            <div className={`${s.tr} ${s.trTotal}`}><span className={s.k}>{t.total} <span className={s.sub12} lang={jaLang(locale)}>{t.taxIncl}</span></span><span className={s.v}>{totalLabel}</span></div>
             <div className={s.summaryStrip}><TruckIcon size={20} />{step === "delivery" || step === "pay" || step === "done" ? shipLineSlot : shipLine}</div>
           </section>
 
@@ -730,8 +730,8 @@ function Thumb({ box }: { box: Box }) {
 }
 
 /* ---------------- Cart step ---------------- */
-function CartStep({ t, cart, changes, maxFor, shipLinePost, feeLabel, totalLabel, onCheckout, home, demo, closed, notice, busy }: {
-  t: Strings; cart: ReturnType<typeof useCart>; changes: Change[] | null; maxFor: (b: Box) => number;
+function CartStep({ t, locale, cart, changes, maxFor, shipLinePost, feeLabel, totalLabel, onCheckout, home, demo, closed, notice, busy }: {
+  t: Strings; locale: Locale; cart: ReturnType<typeof useCart>; changes: Change[] | null; maxFor: (b: Box) => number;
   shipLinePost: string; feeLabel: string; totalLabel: string; onCheckout: () => void; home: string; demo: string | null;
   closed: boolean; notice: string | null; busy: boolean;
 }) {
@@ -792,7 +792,7 @@ function CartStep({ t, cart, changes, maxFor, shipLinePost, feeLabel, totalLabel
                   <div className={s.rowLine}>{yen(l.lineTotal)}</div>
                 </div>
                 <div className={s.rowBottom}>
-                  <span className={s.rowUnit}>{yen(l.box.price)} {t.each} <span className={s.sub12}>{t.taxIncl}</span></span>
+                  <span className={s.rowUnit}>{yen(l.box.price)} {t.each} <span className={s.sub12} lang={jaLang(locale)}>{t.taxIncl}</span></span>
                   <span className={s.mobileOnly}>
                     <Stepper size="sm" qty={l.qty} max={maxFor(l.box)} onInc={() => cart.set(l.box.id, Math.min(maxFor(l.box), l.qty + 1))} onDec={() => cart.dec(l.box.id)} labels={{ inc: t.addOne, dec: t.removeOne }} />
                   </span>
@@ -826,7 +826,7 @@ function CartStep({ t, cart, changes, maxFor, shipLinePost, feeLabel, totalLabel
         <div className={s.totals}>
           <div className={s.tr}><span>{t.subtotal}</span><span className={s.v}>{yen(cart.subtotal)}</span></div>
           {cart.shippingFee !== 0 && <div className={s.tr}><span>{t.shipping} <span className={s.sub13}>{t.shippingFlat}</span></span><span className={s.v}>{feeLabel}</span></div>}
-          <div className={`${s.tr} ${s.trTotal}`}><span className={s.k}>{t.total} <span className={s.sub12}>{t.taxIncl}</span></span><span className={s.v}>{totalLabel}</span></div>
+          <div className={`${s.tr} ${s.trTotal}`}><span className={s.k}>{t.total} <span className={s.sub12} lang={jaLang(locale)}>{t.taxIncl}</span></span><span className={s.v}>{totalLabel}</span></div>
         </div>
         <InfoStrip><span>{shipLinePost}</span></InfoStrip>
         <button type="button" onClick={onCheckout} disabled={cart.count === 0 || busy} className="btn btn-primary btn-block" style={{ minHeight: 62, fontSize: 21 }}>{t.checkout}</button>

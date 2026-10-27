@@ -81,6 +81,7 @@ const en = {
   story1: "We started Astro Bakes because that nostalgic, comforting feeling of real American home baking is nearly impossible to find in Tokyo. We missed the treats you'd find cooling on an American kitchen counter—thick, hefty cookies with golden edges and soft centers, rich banana loaves, and honest, comforting sweets.",
   story2: "Everything is baked by hand in small batches right here in Sangenjaya. We bake strictly to order, one drop at a time, so nothing ever sits on a shelf waiting for you.",
   followOnInstagram: "Follow our bake days on Instagram",
+  opensNewTab: "(opens in a new tab)",
   capQC: "Head of QC",
   capSoft: "Soft middles",
   capMatcha: "Matcha + white choc",
@@ -493,6 +494,7 @@ const ja: Strings = {
   story1: "Astro Bakesを始めたのは、アメリカの家庭で焼くお菓子の、あの懐かしくてほっとする味が東京ではほとんど見つからなかったから。アメリカの家のキッチンカウンターで冷ましているような、ふちはこんがり、真ん中はやわらかい、ずっしり厚いクッキー。しっとり濃厚なバナナブレッド。飾らない、ほっとする焼き菓子。そんなお菓子が恋しかったんです。",
   story2: "すべて三軒茶屋で、ひとつひとつ手作業で、少量ずつ焼いています。焼くのはご注文いただいた分だけ。ドロップごとに焼き上げるので、作り置きは一切ありません。",
   followOnInstagram: "Instagramで焼き上げの日をフォロー",
+  opensNewTab: "（新しいタブで開きます）",
   capQC: "品質管理担当",
   capSoft: "やわらかな真ん中",
   capMatcha: "抹茶×ホワイトチョコ",
@@ -832,6 +834,9 @@ const ja: Strings = {
 export function getStrings(locale: Locale): Strings {
   return locale === "ja" ? ja : en;
 }
+
+/** The lang attribute for a Japanese string that stays Japanese on the English site (税込, the legal pages' names), so it's read as Japanese (WCAG 3.1.2). */
+export const jaLang = (locale: Locale): "ja" | undefined => (locale === "en" ? "ja" : undefined);
 
 export const locales: Locale[] = ["en", "ja"];
 export function isLocale(x: string): x is Locale {

@@ -14,6 +14,8 @@
   --lilac-soft: #f1e8ff;
   --lilac-tint: #e7ddfb;
   --purple-logo: #b14fe0;
+  /* The logo purple is 4.1:1 on white, fine for the wordmark but not for running text; this is the same hue at 5.7:1. */
+  --purple-text: #9638c8;
   --line-green: #0a7a3b;
   --ok-green: #075c2c;
   --ok-green-bg: #ddf7e8;

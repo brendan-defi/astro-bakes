@@ -17,8 +17,9 @@ export function Nav({ locale, showCart = false, viewer = anonymousViewer }: { lo
   const { count, hydrated } = useCart();
   const pathname = usePathname();
   const demoQuery = useDemoQuery();
-  const other: Locale = locale === "en" ? "ja" : "en";
   const swap = (to: Locale) => pathname.replace(/^\/(en|ja)/, `/${to}`);
+  // The badge shows the count; the name says it too, so it isn't lost behind an icon-only label.
+  const cartLabel = hydrated && count > 0 ? `${t.cart} · ${t.boxCount(count)}` : t.cart;
   return (
     <header className={styles.nav}>
       <div className={`container ${styles.row}`}>
@@ -27,7 +28,7 @@ export function Nav({ locale, showCart = false, viewer = anonymousViewer }: { lo
         <div className={styles.right}>
           <LangToggle locale={locale} hrefFor={swap} />
           {showCart && (
-            <Link href={`/${locale}/checkout${demoQuery}`} aria-label={t.cart} className={styles.cart} data-cart-target>
+            <Link href={`/${locale}/checkout${demoQuery}`} aria-label={cartLabel} className={styles.cart} data-cart-target>
               <CartIcon />
               {hydrated && count > 0 && <span key={count} className={styles.badge}>{count}</span>}
             </Link>
@@ -39,7 +40,6 @@ export function Nav({ locale, showCart = false, viewer = anonymousViewer }: { lo
           )}
         </div>
       </div>
-      <span className="sr-only">{other}</span>
     </header>
   );
 }

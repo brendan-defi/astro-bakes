@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { cancelOrderAction } from "@/app/[locale]/account/actions";
 import { addToSavedCart, type Quantities } from "@/lib/cart";
@@ -15,6 +15,15 @@ export function CancelOrderButton({ locale, number }: { locale: Locale; number: 
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  // Each swap removes the button that had focus: focus goes to the question, and back to Cancel order when it closes.
+  const cancelRef = useRef<HTMLButtonElement>(null);
+  const questionRef = useRef<HTMLDivElement>(null);
+  const returnFocus = useRef(false);
+  useEffect(() => {
+    if (confirming) questionRef.current?.focus();
+    else if (returnFocus.current) { returnFocus.current = false; cancelRef.current?.focus(); }
+  }, [confirming]);
+  const close = () => { returnFocus.current = true; setConfirming(false); };
   async function cancel() {
     setBusy(true);
     setNotice(null);
@@ -22,14 +31,14 @@ export function CancelOrderButton({ locale, number }: { locale: Locale; number: 
       const r = await cancelOrderAction(number);
       if (!r.ok) {
         setNotice(r.error === "closed" ? t.cancelClosed : t.orderFailedGeneric);
-        setConfirming(false);
+        close();
       }
       // Success or not, the page re-reads the order so what's shown is what the server has.
       router.refresh();
     } catch {
       // The request itself failed: the outcome is unknown, so show the server's view of the order.
       setNotice(t.requestFailed);
-      setConfirming(false);
+      close();
       router.refresh();
     } finally {
       setBusy(false);
@@ -38,18 +47,18 @@ export function CancelOrderButton({ locale, number }: { locale: Locale; number: 
   if (!confirming) {
     return (
       <div className={a.actions}>
-        <button type="button" className={`btn btn-secondary raised ${a.danger}`} onClick={() => setConfirming(true)}>{t.cancelOrder}</button>
+        <button ref={cancelRef} type="button" className={`btn btn-secondary raised ${a.danger}`} onClick={() => setConfirming(true)}>{t.cancelOrder}</button>
         {notice && <span className={a.status} role="alert">{notice}</span>}
       </div>
     );
   }
   return (
     <div className={a.card}>
-      <div className="w9">{t.cancelConfirmTitle}</div>
+      <div ref={questionRef} tabIndex={-1} className="w9">{t.cancelConfirmTitle}</div>
       <p className="small w7">{t.cancelConfirmBody}</p>
       <div className={a.actions}>
         <button type="button" className={`btn btn-secondary raised ${a.danger}`} disabled={busy} onClick={() => void cancel()}>{t.cancelConfirmYes}</button>
-        <button type="button" className="btn-text" disabled={busy} onClick={() => setConfirming(false)}>{t.keepOrder}</button>
+        <button type="button" className="btn-text" disabled={busy} onClick={close}>{t.keepOrder}</button>
       </div>
     </div>
   );

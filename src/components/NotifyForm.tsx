@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { subscribeAction } from "@/app/[locale]/actions";
 import type { Locale } from "@/lib/data";
 import { getStrings } from "@/lib/i18n";
@@ -29,7 +29,10 @@ export function NotifyForm({ locale, id, label, button, consent, variant, extra 
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
+  const doneRef = useRef<HTMLDivElement>(null);
   const hero = variant === "hero";
+  // The success state replaces the form, button and all, so focus moves onto it instead of falling to the top of the page.
+  useEffect(() => { if (done) doneRef.current?.focus(); }, [done]);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -52,7 +55,7 @@ export function NotifyForm({ locale, id, label, button, consent, variant, extra 
 
   if (done) {
     return (
-      <div className={s.notifyDone} role="status">
+      <div ref={doneRef} tabIndex={-1} className={s.notifyDone} role="status">
         <span className={s.ok}><CheckIcon strokeWidth={3} /></span>
         <div>
           <div className="w9">{t.notifyDone}</div>
@@ -65,7 +68,8 @@ export function NotifyForm({ locale, id, label, button, consent, variant, extra 
     <form className={hero ? s.heroForm : s.notifyForm} onSubmit={submit}>
       <label htmlFor={id} className="label">{label}</label>
       <div className={hero ? s.heroFormRow : s.notifyRow}>
-        <input id={id} type="email" required autoComplete="email" placeholder="you@example.com" className="input" value={email} onChange={(e) => setEmail(e.target.value)} aria-invalid={error === t.notifyInvalid || undefined} />
+        <input id={id} type="email" required autoComplete="email" placeholder="you@example.com" className="input" value={email} onChange={(e) => setEmail(e.target.value)}
+          aria-invalid={error === t.notifyInvalid || undefined} aria-describedby={error ? `${id}-error` : undefined} />
         <button ref={buttonRef} type="submit" disabled={busy} aria-busy={busy || undefined} className={`btn btn-primary ${hero ? `sheen ${s.heroBtn}` : s.notifyBtn}`}>{button}</button>
       </div>
       {/* Honeypot: hidden from people and screen readers; bots that fill it get a quiet success. */}
@@ -73,7 +77,7 @@ export function NotifyForm({ locale, id, label, button, consent, variant, extra 
         <label htmlFor={`${id}-website`}>Website</label>
         <input id={`${id}-website`} type="text" tabIndex={-1} autoComplete="off" value={website} onChange={(e) => setWebsite(e.target.value)} />
       </div>
-      {error && <p className={`small w9 ${s.notifyError}`} role="alert">{error}</p>}
+      {error && <p id={`${id}-error`} className={`small w9 ${s.notifyError}`} role="alert">{error}</p>}
       {hero ? (
         <div className={s.heroFine}><span>{consent}</span>{extra}</div>
       ) : (

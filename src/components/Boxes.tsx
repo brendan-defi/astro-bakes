@@ -1,7 +1,7 @@
 import type { CSSProperties } from "react";
 import type { Box, Drop, HomeData, Locale } from "@/lib/data";
 import { fmtDateTime, yen } from "@/lib/format";
-import { getStrings, type Strings } from "@/lib/i18n";
+import { getStrings, jaLang, type Strings } from "@/lib/i18n";
 import { ClockIcon } from "./icons";
 import { AllergenChips } from "./AllergenChips";
 import { BoxCard } from "./BoxCard";
@@ -42,7 +42,7 @@ function MenuCard({ box, upcoming, locale, t }: { box: Box; upcoming: Drop | nul
       <div className={s.boxBody}>
         <div className={s.boxTitleRow}>
           <h3 className={`display ${s.boxName}`}>{box.name}</h3>
-          <div className={s.boxPrice}>{yen(box.price)} <span className={s.tax}>{t.taxIncl}</span></div>
+          <div className={s.boxPrice}>{yen(box.price)} <span className={s.tax} lang={jaLang(locale)}>{t.taxIncl}</span></div>
         </div>
         <p className={s.boxDesc}>{box.desc}</p>
         <p className={s.boxContents}>{box.contents}</p>
