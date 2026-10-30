@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { boxes, effectiveState, getHome, mockSource, settings, type Drop } from "./data";
+import { boxes, effectiveState, getHome, mockSource, orderShipDates, settings, type Drop } from "./data";
 
 const JST = (iso: string) => new Date(iso + "+09:00");
 const [drop03, drop04] = mockSource.drops;
@@ -110,5 +110,23 @@ describe("getHome with the next drop open while the last one is still in the kit
     expect(getHome({ now }, { ...mockSource, drops: [drop03, early] })).toMatchObject({ state: "open", drop: { id: "drop-04" }, soldOut: false });
     // Once Drop 04 closes too, the earliest unfinished drop is current again.
     expect(getHome({ now: JST("2026-10-23T12:00:00") }, { ...mockSource, drops: [drop03, { ...early, closeAt: JST("2026-10-22T21:00:00") }] })).toMatchObject({ state: "closed", drop: { id: "drop-03" } });
+  });
+});
+
+describe("orderShipDates (D21)", () => {
+  const at = (iso: string) => new Date(`${iso}+09:00`);
+  const planned = at("2026-11-05T00:00:00");
+
+  it("is the drop's plan until the order ships, and when it ships on the planned day in Japan", () => {
+    expect(orderShipDates(planned, null, 1)).toEqual({ shipAt: planned, arriveAt: at("2026-11-06T00:00:00"), late: false });
+    expect(orderShipDates(planned, at("2026-11-05T23:59:00"), 1)).toEqual({ shipAt: planned, arriveAt: at("2026-11-06T00:00:00"), late: false });
+    // Shipped early: still the plan.
+    expect(orderShipDates(planned, at("2026-11-04T18:00:00"), 1).late).toBe(false);
+  });
+
+  it("counts from the day it actually went once that's a later day in Japan", () => {
+    const sent = at("2026-11-06T00:30:00");
+    expect(orderShipDates(planned, sent, 1)).toEqual({ shipAt: sent, arriveAt: at("2026-11-07T00:30:00"), late: true });
+    expect(orderShipDates(planned, sent, 2).arriveAt).toEqual(at("2026-11-08T00:30:00"));
   });
 });

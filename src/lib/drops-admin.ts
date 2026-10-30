@@ -301,7 +301,7 @@ export async function transitionDrop(slug: string, action: DropAction, input: { 
     const [d] = await tx.select().from(drops).where(eq(drops.id, found.id)).for("update");
     if (!d) return { ok: false, error: "That drop no longer exists." };
     const others = await otherWindows(tx, d.id, offset, now);
-    const r = transition({ ...d, arriveAt: arrivalDate(d.shipAt, offset) }, action, { now, others, closeAt: input.closeAt });
+    const r = transition({ ...d, arriveAt: arrivalDate(d.shipAt, offset) }, action, { now, others, closeAt: input.closeAt, undelivered: shipped.length });
     if (!r.ok) return r;
     if (action === "reopen") {
       // A reopened drop lets customers cancel again, but not an order that's been packed or sent. Packing shares this
@@ -400,6 +400,15 @@ export async function cancelDrop(slug: string, adminId: string, expectVersion: s
   if (!r.ok) return r;
   const sent = await sendDropCancellationEmails(r.dropId, opts.gapMs);
   return { ok: true, cancelled: r.cancelled, refund: r.refund, ...sent };
+}
+
+/**
+ * How many of the drop's orders have shipped but not been delivered. On a drop stored complete these shipped after
+ * Mark complete ran (a late parcel), and Mark complete is offered again to deliver them (actionsFor).
+ */
+export async function undeliveredCount(slug: string): Promise<number> {
+  const [r] = await getDb().select({ n: count() }).from(orders).innerJoin(drops, eq(drops.id, orders.dropId)).where(and(eq(drops.slug, slug), eq(orders.state, "shipped")));
+  return r?.n ?? 0;
 }
 
 /** How many of a cancelled drop's customers are still owed their cancellation email (a failed send, or an interrupted one). */

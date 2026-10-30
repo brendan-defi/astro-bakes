@@ -2,7 +2,7 @@ import "server-only";
 import { eq } from "drizzle-orm";
 import { getDb, type Db } from "@/db";
 import { orderEvents, orders } from "@/db/schema";
-import { arrivalDate } from "./data";
+import { orderShipDates } from "./data";
 import { sendEmail } from "./email";
 import { orderShippedEmail } from "./email-templates";
 import { fmtDate } from "./format";
@@ -37,10 +37,8 @@ export async function sendShippedEmail(orderId: string, opts: { corrected?: bool
     const o = await getDb().query.orders.findFirst({ where: eq(orders.id, orderId), with: { drop: { columns: { shipAt: true } }, customer: { columns: { email: true } } } });
     if (!o?.trackingNumber) return false;
     const offset = await arrivalOffsetDays();
-    // The drop's planned arrival, unless it shipped late: then a day (the offset) after it actually went.
-    const planned = arrivalDate(o.drop.shipAt, offset);
-    const late = arrivalDate(o.shippedAt ?? new Date(), offset);
-    const arrive = late > planned && fmtDate(late) !== fmtDate(planned) ? late : planned;
+    // The drop's planned arrival, unless it shipped late (the same dates the order pages show).
+    const arrive = orderShipDates(o.drop.shipAt, o.shippedAt, offset).arriveAt;
     const email = orderShippedEmail({
       locale: o.locale,
       order: { number: o.number, tracking: formatTracking(o.trackingNumber), trackingUrl: trackingUrl(o.trackingNumber, o.locale), arriveDate: fmtDate(arrive, o.locale), timeSlot: o.deliveryTimeSlot, corrected: opts.corrected },

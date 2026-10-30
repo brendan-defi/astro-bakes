@@ -6,7 +6,7 @@ import { customers, drops, notificationLog, orderEvents, orderItems, orders, ref
 import { sendOrderConfirmation } from "./account";
 import { addressLine } from "./address";
 import { validateDelivery } from "./checkout-rules";
-import { arrivalDate, effectiveState, type DropState } from "./data";
+import { arrivalDate, effectiveState, orderShipDates, type DropState } from "./data";
 import { isDeliverySlot, type DeliverySlot } from "./delivery-slots";
 import { canPack, packRefusal } from "./fulfilment-rules";
 import { getStrings } from "./i18n";
@@ -144,8 +144,10 @@ export interface OrderDetail {
   /** Whether the shop can cancel it now (adminCanCancel()). */
   canCancel: boolean;
   payment: { method: "card" | "paypay" | null; paidAt: Date | null; intent: string | null };
-  /** `state` as the shop sees it now: cancelled boxes go back on sale while it's open. */
+  /** `state` as the shop sees it now: cancelled boxes go back on sale while it's open. shipAt and arriveAt are the drop's plan. */
   drop: { slug: string; number: number; name: string; state: DropState; shipAt: Date; arriveAt: Date };
+  /** This order's dates: the drop's plan, or the real ones after a late shipment (`late`), as the customer is told. */
+  dates: { shipAt: Date; arriveAt: Date; late: boolean };
   /** Digits, as stored (formatTracking to show). */
   trackingNumber: string | null;
   /** Shipping: whether it can be marked shipped now, why not if it's only the drop holding it back, and whether it has gone. */
@@ -195,6 +197,7 @@ export async function orderDetail(number: string): Promise<OrderDetail | null> {
     canCancel: adminCanCancel(o.state),
     payment: { method: o.paymentMethodType, paidAt: o.paidAt, intent: o.stripePaymentIntentId },
     drop: { slug: o.drop.slug, number: o.drop.number, name: o.drop.nameEn, state: dropState, shipAt: o.drop.shipAt, arriveAt },
+    dates: orderShipDates(o.drop.shipAt, o.shippedAt, offset),
     trackingNumber: o.trackingNumber,
     shipping: { canShip: canShip(o.state) && canPack(dropState), blocked: canShip(o.state) && !canPack(dropState) ? packRefusal(dropState, "ship") : null, shipped: hasShipped(o.state) },
     delivery: {
@@ -327,7 +330,8 @@ export async function adminCorrectTracking(number: string, adminId: string, inpu
   return { ok: true, emailed: input.notify ? await sendShippedEmail(r.orderId, { corrected: true }) : null };
 }
 
-export type DeliveryResult = { ok: true; changed: boolean } | { ok: false; error?: string; errors?: DeliveryErrors };
+/** `stale`: the details changed since the form was opened; the page should fetch them again. */
+export type DeliveryResult = { ok: true; changed: boolean } | { ok: false; error?: string; errors?: DeliveryErrors; stale?: true };
 
 /**
  * Change the recipient, phone, address or time slot until the order ships (PRD 4.4), for a customer who writes in.
@@ -352,7 +356,7 @@ export async function adminUpdateDelivery(number: string, adminId: string, input
     const [o] = await tx.select().from(orders).where(eq(orders.number, number)).for("update");
     if (!o) return { ok: false as const, error: "That order no longer exists." };
     if (!canEditDelivery(o.state)) return { ok: false as const, error: deliveryRefusal(o.state) };
-    if (deliveryVersion(o) !== expectVersion) return { ok: false as const, error: "The delivery details changed since this page loaded (the customer may have changed their time slot). Reload to see them, then try again." };
+    if (deliveryVersion(o) !== expectVersion) return { ok: false as const, stale: true as const, error: "The delivery details changed after you started editing (the customer may have changed their time slot). Start again from the current details." };
     const next = { shipToName: raw.name.trim(), phone: v.phone, postalCode: v.postal, prefecture: hit.prefecture, city: hit.city, town: hit.town, line1: raw.line1.trim(), line2: raw.line2.trim() || null, wardCode: hit.wardCode, deliveryTimeSlot: slot };
     const slots = getStrings("en").deliverySlots;
     const before = { name: o.shipToName, phone: o.phone, address: addressLine(o), slot: slots[o.deliveryTimeSlot] };
@@ -379,7 +383,8 @@ export async function adminResendEmail(number: string, adminId: string, kind: "c
   if (!o) return { ok: false, error: "That order no longer exists." };
   if (kind === "confirmation" && (!o.paidAt || o.state === "cancelled")) return { ok: false, error: o.paidAt ? "It was cancelled, so there's no confirmation to send." : "It hasn't been paid, so there's no confirmation to send." };
   if (kind === "shipped" && (!hasShipped(o.state) || !o.trackingNumber)) return { ok: false, error: "It hasn't shipped yet." };
-  await db.insert(orderEvents).values({ orderId: o.id, kind: "email_resent", actorId: adminId, body: kind === "confirmation" ? "Confirmation sent again" : "Shipping email sent again", data: { email: kind } });
+  // Recorded before the send, so it says who asked; whether it went is the email's own entry (notification_log).
+  await db.insert(orderEvents).values({ orderId: o.id, kind: "email_resent", actorId: adminId, body: kind === "confirmation" ? "Confirmation resend requested" : "Shipping email resend requested", data: { email: kind } });
   const emailed = kind === "confirmation" ? await sendOrderConfirmation(o.id, { resend: true }).catch(() => false) : await sendShippedEmail(o.id, { resend: true });
   return { ok: true, emailed };
 }

@@ -13,6 +13,8 @@ export interface OrderShippingProps {
   /** Why not, when it's only the drop holding it back. */
   blocked: string | null;
   shipped: boolean;
+  /** Shipped and delivered (complete). */
+  delivered?: boolean;
   /** Digits, as stored. */
   tracking: string | null;
   /** Where the shipping email goes. */
@@ -23,7 +25,7 @@ export interface OrderShippingProps {
  * Shipping one order (PRD 4.4, 4.6 manual fallback): add the Japan Post tracking number and mark it shipped, which
  * emails the customer the number and Japan Post's link. Once shipped, the number can be corrected.
  */
-export function OrderShipping({ number, canShip, blocked, shipped, tracking, email }: OrderShippingProps) {
+export function OrderShipping({ number, canShip, blocked, shipped, delivered = false, tracking, email }: OrderShippingProps) {
   const router = useRouter();
   const [correcting, setCorrecting] = useState(false);
   const [value, setValue] = useState("");
@@ -97,7 +99,12 @@ export function OrderShipping({ number, canShip, blocked, shipped, tracking, ema
         </p>
       )}
       {shipped ? (
-        correcting ? form : <div className={s.lifecycleRow}><button type="button" className={`btn btn-secondary ${s.btnSm}`} onClick={() => reset(true)}>Correct the tracking number…</button></div>
+        correcting ? form : (
+          <div className={s.lifecycleRow}>
+            <button type="button" className={`btn btn-secondary ${s.btnSm}`} onClick={() => reset(true)}>Correct the tracking number…</button>
+            <span className={s.help}>{delivered ? "Delivered." : "It shows as delivered when you press Mark complete on its drop, once the parcels have arrived."}</span>
+          </div>
+        )
       ) : canShip ? (
         form
       ) : (

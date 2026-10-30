@@ -2,10 +2,11 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import * as schema from "@/db/schema";
+import { transitionDropAction } from "@/app/admin/(app)/drops/actions";
 import { resendOrderEmailAction, shipOrderAction, updateDeliveryAction } from "@/app/admin/(app)/orders/actions";
 import { cancelOrder, changeTimeSlot, loadOrder } from "@/lib/account";
 import { placeOrder, startCheckout } from "@/lib/checkout";
-import { transitionDrop } from "@/lib/drops-admin";
+import { transitionDrop, undeliveredCount } from "@/lib/drops-admin";
 import { setPacked } from "@/lib/fulfilment";
 import { fmtDate } from "@/lib/format";
 import { orderDetail } from "@/lib/orders-admin";
@@ -103,12 +104,46 @@ describe.skipIf(!TEST_DATABASE_URL)("shipping, delivery edits and resends", { ti
     expect(await ship("AB-999-999", "111122225555")).toEqual({ ok: false, error: "That order no longer exists." });
   });
 
-  it("dates a late shipment from when it actually went", async () => {
-    const n = await order(buyer, "en", "none");
-    // The ship date was three days ago; it goes out now.
-    await db.update(schema.drops).set({ state: "baking", closeAt: new Date(Date.now() - 5 * DAY), shipAt: new Date(Date.now() - 3 * DAY) }).where(eq(schema.drops.slug, DROP));
+  it("dates a late shipment from when it actually went, the same in the email and on both order pages", async () => {
+    const n = await order(buyer, "ja", "none");
+    const onTime = await order(buyer, "en", "none");
+    // The ship date was three days ago; they go out now.
+    const plannedShip = new Date(Date.now() - 3 * DAY);
+    await db.update(schema.drops).set({ state: "baking", closeAt: new Date(Date.now() - 5 * DAY), shipAt: plannedShip }).where(eq(schema.drops.slug, DROP));
     expect(await ship(n, "123456789012")).toMatchObject({ ok: true, emailed: true });
-    expect(shipped()[0].text).toContain(`It should arrive ${fmtDate(new Date(Date.now() + DAY))}.\n`);
+    const tomorrow = new Date(Date.now() + DAY);
+    expect(shipped()[0].text).toContain(`お届け予定: ${fmtDate(tomorrow, "ja")}\n`);
+    const customer = (await loadOrder(buyer, n, "ja"))!;
+    expect(fmtDate(customer.shipAt, "ja")).toBe(fmtDate(new Date(), "ja"));
+    expect(fmtDate(customer.arriveAt, "ja")).toBe(fmtDate(tomorrow, "ja"));
+    const adminView = (await orderDetail(n))!;
+    expect(adminView.dates).toMatchObject({ late: true });
+    expect(fmtDate(adminView.dates.arriveAt)).toBe(fmtDate(tomorrow));
+    expect(adminView.drop.shipAt).toEqual(plannedShip); // the plan stays for the admin, beside it
+    // Not shipped yet: both still show the drop's plan.
+    expect((await orderDetail(onTime))!.dates).toEqual({ shipAt: plannedShip, arriveAt: new Date(plannedShip.getTime() + DAY), late: false });
+    expect((await loadOrder(buyer, onTime, "en"))!.arriveAt).toEqual(new Date(plannedShip.getTime() + DAY));
+  });
+
+  it("ships an order after its drop was marked complete, and Mark complete runs again to deliver it", async () => {
+    const a = await order(buyer);
+    const b = await order(buyer);
+    await closeDrop();
+    await ship(a, "111122223333");
+    expect(await transitionDrop(DROP, "baking")).toMatchObject({ ok: true });
+    expect(await transitionDrop(DROP, "shipped")).toMatchObject({ ok: true });
+    expect(await transitionDrop(DROP, "complete")).toMatchObject({ ok: true, state: "complete" });
+    expect([(await row(a)).state, (await row(b)).state]).toEqual(["complete", "paid"]);
+    expect(await undeliveredCount(DROP)).toBe(0);
+    expect(await transitionDrop(DROP, "complete")).toMatchObject({ ok: false, error: expect.stringMatching(/isn't available/) });
+    // B was late: it ships after the drop was completed, and isn't delivered by shipping.
+    expect(await ship(b, "111122224444")).toMatchObject({ ok: true });
+    expect((await row(b)).state).toBe("shipped");
+    expect(await undeliveredCount(DROP)).toBe(1);
+    expect(await transitionDropAction(DROP, "complete")).toEqual({ ok: true, state: "complete" });
+    expect((await row(b)).state).toBe("complete");
+    expect(await undeliveredCount(DROP)).toBe(0);
+    expect(await transitionDrop(DROP, "complete")).toMatchObject({ ok: false });
   });
 
   it("corrects a shipped order's tracking number and emails the right one under a key of its own", async () => {
@@ -147,14 +182,14 @@ describe.skipIf(!TEST_DATABASE_URL)("shipping, delivery edits and resends", { ti
     expect(step).toMatchObject({ by: "Owner" });
     expect(step!.detail).toBe(`Recipient: Test Person → 山田花子. Address: 〒153-0061 東京都目黒区中目黒1-2-3 → 〒150-0001 東京都渋谷区神宮前4-5-6 Room 7. Time slot: 14:00–16:00 → 18:00–20:00`);
     // The form had the old details: refused rather than overwriting.
-    expect(await edit({ name: "Someone else" }, v1)).toEqual({ ok: false, error: expect.stringMatching(/changed since this page loaded/) });
+    expect(await edit({ name: "Someone else" }, v1)).toEqual({ ok: false, stale: true, error: expect.stringMatching(/changed after you started editing/) });
   });
 
   it("refuses an edit made from details the customer has changed since, and any edit once shipped", async () => {
     const n = await order(buyer);
     const v = (await orderDetail(n))!.delivery.version;
     expect(await changeTimeSlot(buyer, n, "18_20")).toMatchObject({ ok: true, changed: true });
-    expect(await updateDeliveryAction(n, { name: "X", phone: "090-0000-0000", postal: "153-0061", line1: "1", line2: "", slot: "14_16" }, v)).toEqual({ ok: false, error: expect.stringMatching(/the customer may have changed their time slot/) });
+    expect(await updateDeliveryAction(n, { name: "X", phone: "090-0000-0000", postal: "153-0061", line1: "1", line2: "", slot: "14_16" }, v)).toEqual({ ok: false, stale: true, error: expect.stringMatching(/the customer may have changed their time slot/) });
     expect((await row(n)).deliveryTimeSlot).toBe("18_20");
     await closeDrop();
     await ship(n, "123456789012");
@@ -176,7 +211,7 @@ describe.skipIf(!TEST_DATABASE_URL)("shipping, delivery edits and resends", { ti
     expect(confirmations).toHaveLength(2);
     expect(confirmations[0].text).toContain("9-9-9");
     expect(confirmations[0].idempotencyKey).toMatch(new RegExp(`^order-confirmation/${id}/resend-\\d+$`));
-    expect(await titles(n)).toContain("Confirmation sent again");
+    expect(await titles(n)).toContain("Confirmation resend requested");
 
     await closeDrop();
     await ship(n, "123456789012");

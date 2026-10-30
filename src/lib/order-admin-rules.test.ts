@@ -100,10 +100,10 @@ describe("buildTimeline", () => {
         { kind: "delivery_changed", body: "Delivery details changed", data: { detail: "Time slot: none → 18_20" }, createdAt: at(0), by: "Owner" },
         { kind: "shipped", body: "Shipped", data: { tracking: "123456789012" }, createdAt: at(1), by: "Owner" },
         { kind: "tracking_changed", body: "Tracking number corrected", data: { detail: "1234-5678-9012 → 1234-5678-9099" }, createdAt: at(2), by: "Owner" },
-        { kind: "email_resent", body: "Shipping email sent again", data: { email: "shipped" }, createdAt: at(3), by: "Owner" },
+        { kind: "email_resent", body: "Shipping email resend requested", data: { email: "shipped" }, createdAt: at(3), by: "Owner" },
       ],
     });
-    expect(tl.map((e) => e.title)).toEqual(["Order placed", "Paid", "Delivery details changed", "Shipped", "Tracking number corrected", "Shipping email sent again"]);
+    expect(tl.map((e) => e.title)).toEqual(["Order placed", "Paid", "Delivery details changed", "Shipped", "Tracking number corrected", "Shipping email resend requested"]);
     expect(tl[2]).toMatchObject({ kind: "step", detail: "Time slot: none → 18_20", by: "Owner" });
     expect(tl[3]).toMatchObject({ detail: "Tracking 1234-5678-9099", by: "Owner" });
     expect(tl[4]).toMatchObject({ detail: "1234-5678-9012 → 1234-5678-9099", by: "Owner" });

@@ -27,6 +27,8 @@ describe("actionsFor", () => {
   it("keeps Mark complete on a drop the clock has moved to complete, until it is stored that way", () => {
     expect(actionsFor("complete", "shipped")).toEqual(["complete"]);
     expect(actionsFor("complete", "complete")).toEqual([]);
+    // …and again on a completed drop with orders shipped after it was marked (a late parcel), to deliver them.
+    expect(actionsFor("complete", "complete", 1)).toEqual(["complete"]);
   });
 });
 
@@ -55,6 +57,7 @@ describe("transition", () => {
     // Stored "scheduled" but the clock has opened it.
     expect(err(run(drop("scheduled"), "unschedule"))).toBe("Back to draft isn't available: the drop is open (stored as scheduled).");
     expect(err(run(drop("complete"), "complete"))).toMatch(/isn't available/);
+    expect(transition(drop("complete"), "complete", { now: NOW, others: [], undelivered: 2 })).toEqual({ ok: true, patch: { state: "complete" } });
   });
 
   describe("schedule", () => {

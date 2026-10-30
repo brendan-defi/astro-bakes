@@ -29,18 +29,23 @@ function area(postal: string): string | null {
 
 /**
  * Edit an order's recipient, phone, address and time slot until it ships (PRD 4.4), with the checkout's own rules.
- * `version` is what the form started from; the save is refused if the details changed meanwhile.
+ * Opening the form takes the stored details and their `version` together, and the save sends that version, so the
+ * server refuses it if the details changed since. A refresh while the form is open (a note added, an email resent)
+ * brings new props but never moves the draft's version on: it says the details changed and offers to start again.
  */
 export function OrderDeliveryEdit({ number, initial, version }: { number: string; initial: DeliveryEdit; version: string }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState<DeliveryEdit>(initial);
+  // The version the draft was started from; only starting again moves it on.
+  const [base, setBase] = useState(version);
   const [errors, setErrors] = useState<DeliveryErrors>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
 
-  const start = () => { setDraft(initial); setErrors({}); setError(null); setDone(null); setOpen(true); };
+  const start = () => { setDraft(initial); setBase(version); setErrors({}); setError(null); setDone(null); setOpen(true); };
+  const outdated = open && base !== version;
   const set = (key: keyof DeliveryEdit, v: string) => { setDraft((d) => ({ ...d, [key]: v })); setErrors(({ [key]: _gone, ...rest }) => rest); setError(null); };
 
   async function submit(e: FormEvent) {
@@ -49,10 +54,12 @@ export function OrderDeliveryEdit({ number, initial, version }: { number: string
     setBusy(true);
     setError(null);
     try {
-      const r = await updateDeliveryAction(number, { ...draft }, version);
+      const r = await updateDeliveryAction(number, { ...draft }, base);
       if (!r.ok) {
         setErrors(r.errors ?? {});
         setError(r.error ?? (r.errors ? "Some fields need fixing; they're marked above." : null));
+        // Fetch the details as they are now, so starting again begins from them.
+        if (r.stale) router.refresh();
         return;
       }
       setOpen(false);
@@ -85,6 +92,12 @@ export function OrderDeliveryEdit({ number, initial, version }: { number: string
   }
   return (
     <form className={`${s.moneyForm} ${s.deliveryEdit}`} onSubmit={submit} noValidate aria-label="Edit delivery details">
+      {outdated && (
+        <div className={s.confirmBox} role="alert">
+          <p className={s.confirmText}>The delivery details changed after you started editing (the customer may have changed their time slot). Saving this would overwrite that, so start again from the current details.</p>
+          <button type="button" className={`btn btn-secondary ${s.btnSm}`} disabled={busy} onClick={start}>Start again</button>
+        </div>
+      )}
       {FIELDS.map(({ key, label, help }) => (
         <div key={key} className="field">
           <label htmlFor={`delivery-${key}`} className="label">{label}</label>
@@ -102,11 +115,11 @@ export function OrderDeliveryEdit({ number, initial, version }: { number: string
         {errors.slot && <p id="delivery-slot-err" className={s.fieldError}>{errors.slot}</p>}
       </div>
       <div className={s.confirmActions}>
-        <button type="submit" className={`btn btn-primary ${s.btnSm}`} disabled={busy}>{busy ? "Saving…" : "Save delivery details"}</button>
+        <button type="submit" className={`btn btn-primary ${s.btnSm}`} disabled={busy || outdated}>{busy ? "Saving…" : "Save delivery details"}</button>
         <button type="button" className={s.linkBtn} disabled={busy} onClick={() => { setOpen(false); setError(null); }}>Cancel</button>
       </div>
       <p className={s.help}>Only this order changes, not the customer&apos;s saved address. They aren&apos;t emailed.</p>
-      {error && <p role="alert" className={s.statusError}>{error}</p>}
+      {error && !outdated && <p role="alert" className={s.statusError}>{error}</p>}
     </form>
   );
 }

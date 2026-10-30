@@ -84,6 +84,20 @@ export function arrivalDate(shipAt: Date, offsetDays = DEFAULT_ARRIVAL_OFFSET_DA
   return new Date(shipAt.getTime() + offsetDays * DAY);
 }
 
+/** The calendar day in Japan, as a number to compare. */
+const jstDay = (d: Date) => Math.floor((d.getTime() + 9 * 3_600_000) / DAY);
+
+/**
+ * When one order ships and is expected to arrive (D21): the drop's plan, unless the order actually went out on a later
+ * day in Japan, in which case it arrives the offset after that. `late` says which, so the admin can show the plan too.
+ * The shipping email, the customer's order page and the admin's all use this, so they never give different dates.
+ */
+export function orderShipDates(plannedShipAt: Date, shippedAt: Date | null, offsetDays = DEFAULT_ARRIVAL_OFFSET_DAYS): { shipAt: Date; arriveAt: Date; late: boolean } {
+  const late = !!shippedAt && jstDay(shippedAt) > jstDay(plannedShipAt);
+  const shipAt = late && shippedAt ? shippedAt : plannedShipAt;
+  return { shipAt, arriveAt: arrivalDate(shipAt, offsetDays), late };
+}
+
 export const settings: Settings = {
   shippingFee: 0, // shipping is included in the box price (D19, 2026-10-20)
   shippingArea: "Tokyo 23 wards",

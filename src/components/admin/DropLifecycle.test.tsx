@@ -25,6 +25,16 @@ describe("DropLifecycle", () => {
     expect(screen.getByText("Nothing to do: the drop is complete.")).toBeTruthy();
   });
 
+  it("offers Mark complete again on a completed drop with an order shipped after it was marked, and says why", async () => {
+    actions.transitionDropAction.mockResolvedValue({ ok: true, state: "complete" });
+    render(<DropLifecycle slug="drop-05" number={5} state="complete" storedState="complete" reopenDefault="2026-11-11T21:00" undelivered={1} />);
+    expect(screen.getAllByRole("button").map((b) => b.textContent)).toEqual(["Mark complete"]);
+    expect(screen.getByText("One order shipped after the drop was marked complete; once it has arrived, Mark complete shows it as delivered too.")).toBeTruthy();
+    fireEvent.click(button("Mark complete"));
+    await waitFor(() => expect(router.refresh).toHaveBeenCalled());
+    expect(actions.transitionDropAction).toHaveBeenCalledWith("drop-05", "complete", {});
+  });
+
   it("runs a quiet action at once and refreshes the page with the result", async () => {
     actions.transitionDropAction.mockResolvedValue({ ok: true, state: "scheduled" });
     mount("draft");

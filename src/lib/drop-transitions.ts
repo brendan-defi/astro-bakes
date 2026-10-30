@@ -37,17 +37,19 @@ export const ACTIONS: Record<DropAction, ActionInfo> = {
 };
 
 /**
- * The actions a drop offers: by its effective state, except that a drop the clock has already moved to complete
- * (a few days after arrival) still offers Mark complete until it is stored that way, since that is what delivers
- * the orders.
+ * The actions a drop offers: by its effective state, except for Mark complete, which is what delivers the orders. A
+ * drop the clock has already moved to complete (a few days after arrival) still offers it until it is stored that
+ * way; and a drop stored complete offers it again while it has `undelivered` orders, ones shipped after it was marked
+ * complete (a late parcel), so they can be delivered too.
  */
-export function actionsFor(effective: DropState, stored: DropState): DropAction[] {
-  return DROP_ACTIONS.filter((a) => ACTIONS[a].from.includes(effective) && !(a === "complete" && stored === "complete"));
+export function actionsFor(effective: DropState, stored: DropState, undelivered = 0): DropAction[] {
+  return DROP_ACTIONS.filter((a) => ACTIONS[a].from.includes(effective) && !(a === "complete" && stored === "complete" && !undelivered));
 }
 
 /** Another drop's selling window, for the one-open-drop rule. `state` is its effective state. */
 export interface OtherDrop { number: number; state: DropState; openAt: Date; closeAt: Date }
-export interface TransitionInput { now: Date; others: OtherDrop[]; closeAt?: Date | null }
+/** `undelivered`: the drop's shipped orders, which let Mark complete run again on a drop stored complete (actionsFor). */
+export interface TransitionInput { now: Date; others: OtherDrop[]; closeAt?: Date | null; undelivered?: number }
 export interface Patch { state: DropState; openAt?: Date; closeAt?: Date }
 export type TransitionResult = { ok: true; patch: Patch } | { ok: false; error: string };
 
@@ -74,7 +76,7 @@ export function clashMessage(o: OtherDrop, now: Date): string {
 export function transition(drop: DropTimeline & { number: number }, action: DropAction, input: TransitionInput): TransitionResult {
   const state = effectiveState(drop, input.now);
   const info = ACTIONS[action];
-  if (!info.from.includes(state) || (action === "complete" && drop.state === "complete")) {
+  if (!info.from.includes(state) || (action === "complete" && drop.state === "complete" && !input.undelivered)) {
     return { ok: false, error: `${info.label} isn't available: the drop is ${state === drop.state ? state : `${state} (stored as ${drop.state})`}.` };
   }
   /** The window the drop would end up with has to be clear of every other scheduled or open drop's. */

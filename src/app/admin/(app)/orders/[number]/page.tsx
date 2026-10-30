@@ -77,7 +77,11 @@ export default async function OrderPage({ params }: { params: Promise<{ number: 
               <dt>Recipient</dt><dd>{o.shipTo.name}</dd>
               <dt>Phone</dt><dd>{o.shipTo.phone}</dd>
               <dt>Address</dt><dd>{o.shipTo.address}</dd>
-              <dt>Ships</dt><dd>{fmtDate(o.drop.shipAt)}, arrives {fmtDate(o.drop.arriveAt)}</dd>
+              {o.dates.late ? (
+                <><dt>Shipped</dt><dd>{fmtDate(o.dates.shipAt)}, arrives {fmtDate(o.dates.arriveAt)}<span className={s.sub}>Late: the drop was to ship {fmtDate(o.drop.shipAt)}</span></dd></>
+              ) : (
+                <><dt>Ships</dt><dd>{fmtDate(o.dates.shipAt)}, arrives {fmtDate(o.dates.arriveAt)}</dd></>
+              )}
               <dt>Time slot</dt><dd>{en.deliverySlots[o.slot]}</dd>
               {o.trackingNumber && (<><dt>Tracking</dt><dd><a href={trackingUrl(o.trackingNumber, "en")} target="_blank" rel="noreferrer">{formatTracking(o.trackingNumber)}</a></dd></>)}
             </dl>
@@ -87,7 +91,7 @@ export default async function OrderPage({ params }: { params: Promise<{ number: 
           {o.payment.paidAt && o.storedState !== "cancelled" && (
             <section aria-labelledby="o-shipping" className={`panel ${s.formSection}`}>
               <h2 id="o-shipping" className={s.sectionTitle}>Shipping</h2>
-              <OrderShipping number={o.number} canShip={o.shipping.canShip} blocked={o.shipping.blocked} shipped={o.shipping.shipped} tracking={o.trackingNumber} email={o.customer.email} />
+              <OrderShipping number={o.number} canShip={o.shipping.canShip} blocked={o.shipping.blocked} shipped={o.shipping.shipped} delivered={o.storedState === "complete"} tracking={o.trackingNumber} email={o.customer.email} />
             </section>
           )}
 
