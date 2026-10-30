@@ -84,6 +84,72 @@ export function validateNote(raw: unknown): { ok: true; body: string } | { ok: f
   return { ok: true, body };
 }
 
+/** A note that may be left empty, like the reason given when cancelling. */
+export function validateOptionalNote(raw: unknown): { ok: true; body: string } | { ok: false; error: string } {
+  const body = typeof raw === "string" ? raw.trim() : "";
+  return body ? validateNote(body) : { ok: true, body };
+}
+
+// ---------------------------------------------------------------- money: cancel and refund
+
+const yen = (n: number) => `¥${n.toLocaleString("en-US")}`;
+
+/**
+ * Orders the shop can cancel (PRD 4.4, 5.2b: "admin anytime"): paid and not shipped yet. A shipped or delivered order
+ * can't be unsent, so it gets a refund instead; one still awaiting payment is a checkout in progress.
+ */
+export const adminCanCancel = (state: OrderState) => state === "paid" || state === "packed";
+
+/** Why an order can't be cancelled by the shop, in the admin's words. */
+export function cancelRefusal(state: OrderState): string {
+  if (state === "cancelled") return "This order is already cancelled.";
+  if (state === "shipped" || state === "complete") return "It has shipped, so it can't be cancelled. Record a refund instead.";
+  return "It was never paid, so there's nothing to cancel or refund.";
+}
+
+/** What's left to refund: what the customer paid, less what's been refunded already. Nothing for an unpaid order. */
+export const refundable = (o: { paidAt: Date | null; total: number; refunded: number }) => (o.paidAt ? Math.max(0, o.total - o.refunded) : 0);
+
+/** Why the shop refunds part or all of an order without cancelling it: our failures, handled by hand (D22). */
+export const REFUND_REASONS = ["damage", "non_delivery", "other"] as const;
+export type RefundReason = (typeof REFUND_REASONS)[number];
+
+/** Every refund reason, including the ones cancelling records. */
+export const REFUND_REASON_LABEL: Record<string, string> = {
+  customer_cancelled: "Customer cancelled",
+  admin_cancelled: "Cancelled by the shop",
+  drop_cancelled: "Drop cancelled",
+  damage: "Damage",
+  non_delivery: "Non-delivery",
+  other: "Other",
+};
+
+/** Yen typed however people type it: 1500, 1,500, ¥1,500, 1500円 or full-width １５００. Null unless it's a whole number. */
+export function parseYen(raw: unknown): number | null {
+  if (typeof raw === "number") return Number.isSafeInteger(raw) ? raw : null;
+  if (typeof raw !== "string") return null;
+  const s = raw.normalize("NFKC").replace(/[¥,\s円]/g, "");
+  return /^\d{1,9}$/.test(s) ? Number(s) : null;
+}
+
+export type RefundErrors = Partial<Record<"amount" | "reason" | "note", string>>;
+export interface RefundValue { amount: number; reason: RefundReason; note: string }
+
+/** A refund the admin asked for, against what's left to refund. */
+export function validateRefund(raw: { amount?: unknown; reason?: unknown; note?: unknown }, left: number): { ok: true; value: RefundValue } | { ok: false; errors: RefundErrors } {
+  const errors: RefundErrors = {};
+  const amount = parseYen(raw.amount);
+  if (amount === null || amount < 1) errors.amount = "Enter an amount in yen, like 1500.";
+  else if (amount > left) errors.amount = left ? `At most ${yen(left)} is left to refund.` : "Nothing is left to refund.";
+  const reason = REFUND_REASONS.find((r) => r === raw.reason);
+  if (!reason) errors.reason = "Pick a reason.";
+  const note = validateOptionalNote(raw.note);
+  if (!note.ok) errors.note = note.error;
+  else if (reason === "other" && !note.body) errors.note = "Say what it's for. Only the shop sees this.";
+  if (amount === null || !reason || !note.ok || Object.keys(errors).length) return { ok: false, errors };
+  return { ok: true, value: { amount, reason, note: note.body } };
+}
+
 // ---------------------------------------------------------------- timeline
 
 export interface TimelineEntry {
@@ -106,9 +172,13 @@ export interface TimelineSource {
   state: OrderState;
   /** A note the system left on the order itself (the mock payment writes one). */
   systemNote: string | null;
-  refunds: { amount: number; reason: string; createdAt: Date; issuedAt: Date | null }[];
+  refunds: { id: string; amount: number; reason: string; createdAt: Date; issuedAt: Date | null }[];
   emails: { type: string; to: string; sentAt: Date; error: string | null }[];
-  events: { kind: string; body: string; createdAt: Date; by: string | null }[];
+  /**
+   * order_events. A "cancelled" event says who cancelled and why, and a "refund" event who refunded and why
+   * (`data.refundId`); they're told on the Cancelled step and the refund's own entry rather than twice.
+   */
+  events: { kind: string; body: string; data: unknown; createdAt: Date; by: string | null }[];
 }
 
 const EMAIL_LABEL: Record<string, string> = {
@@ -117,29 +187,39 @@ const EMAIL_LABEL: Record<string, string> = {
   shipped: "Shipping email sent",
   internal: "New-order email to the owner",
 };
-const REFUND_REASON: Record<string, string> = {
-  customer_cancelled: "customer cancelled",
-  admin_cancelled: "cancelled by the shop",
-  damage: "damage",
-  non_delivery: "non-delivery",
+const CANCELLED_BY: Record<string, string> = {
+  customer: "By the customer, from their order page",
+  admin: "By the shop",
+  drop: "The whole drop was cancelled",
 };
-const yen = (n: number) => `¥${n.toLocaleString("en-US")}`;
+const field = (data: unknown, key: string): string | undefined => {
+  const v = data && typeof data === "object" ? (data as Record<string, unknown>)[key] : undefined;
+  return typeof v === "string" ? v : undefined;
+};
+const joined = (...parts: (string | undefined)[]) => parts.filter(Boolean).join(". ") || undefined;
 
 /** Everything that happened to an order, oldest first, from its timestamps, refunds, emails and admin events. */
 export function buildTimeline(o: TimelineSource): TimelineEntry[] {
+  const cancelled = o.events.find((e) => e.kind === "cancelled");
+  const refundEvents = new Map(o.events.filter((e) => e.kind === "refund").map((e) => [field(e.data, "refundId"), e]));
   const out: TimelineEntry[] = [{ at: o.createdAt, kind: "step", title: "Order placed", detail: o.systemNote ?? undefined }];
   if (o.paidAt) out.push({ at: o.paidAt, kind: "step", title: "Paid" });
   if (o.packedAt) out.push({ at: o.packedAt, kind: "step", title: "Packed" });
   if (o.shippedAt) out.push({ at: o.shippedAt, kind: "step", title: "Shipped", detail: o.trackingNumber ? `Tracking ${o.trackingNumber}` : undefined });
-  if (o.cancelledAt) out.push({ at: o.cancelledAt, kind: "step", title: "Cancelled" });
+  if (o.cancelledAt) {
+    const source = field(cancelled?.data, "source");
+    out.push({ at: o.cancelledAt, kind: "step", title: "Cancelled", detail: joined(source && CANCELLED_BY[source], cancelled?.body), by: cancelled?.by ?? undefined });
+  }
   for (const r of o.refunds) {
-    out.push({ at: r.createdAt, kind: "money", title: `Refund of ${yen(r.amount)} recorded`, detail: `${REFUND_REASON[r.reason] ?? r.reason}; ${r.issuedAt ? "issued" : "owed until payments are connected"}` });
+    const ev = refundEvents.get(r.id);
+    out.push({ at: r.createdAt, kind: "money", title: `Refund of ${yen(r.amount)} recorded`, detail: joined(REFUND_REASON_LABEL[r.reason] ?? r.reason, r.issuedAt ? "Issued" : "Owed until payments are connected", ev?.body), by: ev?.by ?? undefined });
     if (r.issuedAt) out.push({ at: r.issuedAt, kind: "money", title: `Refund of ${yen(r.amount)} issued` });
   }
   for (const e of o.emails) {
     out.push({ at: e.sentAt, kind: "email", title: EMAIL_LABEL[e.type] ?? `Email: ${e.type}`, detail: e.error ? `Failed to ${e.to}: ${e.error}` : `To ${e.to}` });
   }
   for (const e of o.events) {
+    if (e === cancelled || e.kind === "refund") continue;
     out.push({ at: e.createdAt, kind: e.kind === "note" ? "note" : "step", title: e.kind === "note" ? "Note" : e.body, detail: e.kind === "note" ? e.body : undefined, by: e.by ?? undefined });
   }
   // Stable: things recorded at the same moment keep the order above (placed before its email).

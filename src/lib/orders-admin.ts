@@ -3,15 +3,20 @@ import { and, asc, count, desc, eq, ilike, inArray, or, sql, type SQL } from "dr
 import { getDb } from "@/db";
 import { customers, drops, notificationLog, orderEvents, orderItems, orders, refunds } from "@/db/schema";
 import { addressLine } from "./address";
-import { arrivalDate } from "./data";
+import { arrivalDate, effectiveState, type DropState } from "./data";
 import type { DeliverySlot } from "./delivery-slots";
-import { buildTimeline, displayState, likeAnywhere, PAGE_SIZE, textCell, type CsvValue, type DisplayState, type OrderFilters, type TimelineEntry } from "./order-admin-rules";
+import {
+  adminCanCancel, buildTimeline, cancelRefusal, displayState, likeAnywhere, PAGE_SIZE, refundable, textCell, validateRefund,
+  type CsvValue, type DisplayState, type OrderFilters, type RefundErrors, type TimelineEntry,
+} from "./order-admin-rules";
+import { cancelOrderCore, recordRefund, refundedSoFar, sendCancellationEmail } from "./order-money";
 import { arrivalOffsetDays } from "./settings";
 
 /**
  * The admin's order pages (PRD 4.4): the filtered list, one order with its
- * timeline, internal notes, and the CSV export. Read-only apart from notes;
- * cancelling, refunds and shipping come in later PRs.
+ * timeline, internal notes, the CSV export, and the money actions: cancel &
+ * refund, and refunds without cancelling. Shipping and address edits come with
+ * fulfilment.
  */
 
 /**
@@ -126,8 +131,13 @@ export interface OrderDetail {
   shippingFee: number;
   total: number;
   refunded: number;
+  /** What's left to refund (refundable()). */
+  refundable: number;
+  /** Whether the shop can cancel it now (adminCanCancel()). */
+  canCancel: boolean;
   payment: { method: "card" | "paypay" | null; paidAt: Date | null; intent: string | null };
-  drop: { slug: string; number: number; name: string; shipAt: Date; arriveAt: Date };
+  /** `state` as the shop sees it now: cancelled boxes go back on sale while it's open. */
+  drop: { slug: string; number: number; name: string; state: DropState; shipAt: Date; arriveAt: Date };
   trackingNumber: string | null;
   timeline: TimelineEntry[];
 }
@@ -143,6 +153,8 @@ export async function orderDetail(number: string): Promise<OrderDetail | null> {
     arrivalOffsetDays(),
   ]);
   if (!o) return null;
+  const refunded = o.refunds.reduce((n, r) => n + r.amount, 0);
+  const arriveAt = arrivalDate(o.drop.shipAt, offset);
   return {
     number: o.number,
     state: displayState(o.state, row.liveHold),
@@ -157,9 +169,11 @@ export async function orderDetail(number: string): Promise<OrderDetail | null> {
     subtotal: o.subtotal,
     shippingFee: o.shippingFee,
     total: o.total,
-    refunded: o.refunds.reduce((n, r) => n + r.amount, 0),
+    refunded,
+    refundable: refundable({ paidAt: o.paidAt, total: o.total, refunded }),
+    canCancel: adminCanCancel(o.state),
     payment: { method: o.paymentMethodType, paidAt: o.paidAt, intent: o.stripePaymentIntentId },
-    drop: { slug: o.drop.slug, number: o.drop.number, name: o.drop.nameEn, shipAt: o.drop.shipAt, arriveAt: arrivalDate(o.drop.shipAt, offset) },
+    drop: { slug: o.drop.slug, number: o.drop.number, name: o.drop.nameEn, state: effectiveState({ ...o.drop, arriveAt }, new Date()), shipAt: o.drop.shipAt, arriveAt },
     trackingNumber: o.trackingNumber,
     timeline: buildTimeline({
       createdAt: o.createdAt,
@@ -172,7 +186,7 @@ export async function orderDetail(number: string): Promise<OrderDetail | null> {
       systemNote: o.notes,
       refunds: o.refunds,
       emails: emails.map((e) => ({ type: e.type, to: e.to, sentAt: e.sentAt, error: e.error })),
-      events: events.map((e) => ({ kind: e.kind, body: e.body, createdAt: e.createdAt, by: e.actor?.name || e.actor?.email || null })),
+      events: events.map((e) => ({ kind: e.kind, body: e.body, data: e.data, createdAt: e.createdAt, by: e.actor?.name || e.actor?.email || null })),
     }),
   };
 }
@@ -184,6 +198,57 @@ export async function addOrderNote(number: string, adminId: string, body: string
   if (!o) return { ok: false, error: "not_found" };
   await db.insert(orderEvents).values({ orderId: o.id, kind: "note", actorId: adminId, body });
   return { ok: true };
+}
+
+// ---------------------------------------------------------------- money (PRD 4.4)
+
+export type AdminCancelResult =
+  | { ok: true; refund: number | null; backOnSale: boolean; emailed: boolean | null }
+  | { ok: false; error: string };
+
+/**
+ * Cancel & refund as the shop, at any time before the order ships (PRD 4.4, 5.2b). The rest of the payment is
+ * refunded (owed until Stripe), and the boxes stop counting as sold, so they're back on sale if the drop is open.
+ * `notify` emails the customer once it's done; leave it off for, say, an order placed to test the shop.
+ */
+export async function adminCancelOrder(number: string, adminId: string, opts: { note: string; notify: boolean }, now = new Date()): Promise<AdminCancelResult> {
+  const offset = await arrivalOffsetDays();
+  const r = await getDb().transaction(async (tx) => {
+    // Order, then drop: the order a customer's own cancel locks them in.
+    const [o] = await tx.select().from(orders).where(eq(orders.number, number)).for("update");
+    if (!o) return { ok: false as const, error: "That order no longer exists." };
+    const [d] = await tx.select().from(drops).where(eq(drops.id, o.dropId)).for("update");
+    if (!adminCanCancel(o.state)) return { ok: false as const, error: cancelRefusal(o.state) };
+    const { refund } = await cancelOrderCore(tx, o, { source: "admin", actorId: adminId, note: opts.note }, now);
+    const backOnSale = effectiveState({ ...d, arriveAt: arrivalDate(d.shipAt, offset) }, now) === "open";
+    return { ok: true as const, orderId: o.id, refund, backOnSale };
+  });
+  if (!r.ok) return r;
+  const emailed = opts.notify ? await sendCancellationEmail(r.orderId) : null;
+  return { ok: true, refund: r.refund, backOnSale: r.backOnSale, emailed };
+}
+
+export type AdminRefundResult = { ok: true; amount: number } | { ok: false; error?: string; errors?: RefundErrors };
+
+/**
+ * A refund without cancelling (PRD 4.4 "partial refund", D22: our failures, such as damage or non-delivery), up to
+ * what's left of the payment. Stock and the order's state stay as they are. `expectRefunded` is what the page showed
+ * as refunded already: if another refund has been recorded since (a second click, another tab), this one is refused
+ * rather than refunding twice.
+ */
+export async function adminRefund(number: string, adminId: string, input: { amount?: unknown; reason?: unknown; note?: unknown }, expectRefunded: number): Promise<AdminRefundResult> {
+  return getDb().transaction(async (tx) => {
+    const [o] = await tx.select().from(orders).where(eq(orders.number, number)).for("update");
+    if (!o) return { ok: false as const, error: "That order no longer exists." };
+    const refunded = await refundedSoFar(tx, o.id);
+    if (refunded !== expectRefunded) return { ok: false as const, error: "Another refund was recorded since this page loaded. Check the timeline, then try again." };
+    const left = refundable({ paidAt: o.paidAt, total: o.total, refunded });
+    if (!left) return { ok: false as const, error: o.paidAt ? "It has been refunded in full already." : "It was never paid, so there's nothing to refund." };
+    const v = validateRefund(input, left);
+    if (!v.ok) return { ok: false as const, errors: v.errors };
+    await recordRefund(tx, { orderId: o.id, amount: v.value.amount, reason: v.value.reason, actorId: adminId, note: v.value.note });
+    return { ok: true as const, amount: v.value.amount };
+  });
 }
 
 /** The CSV export (PRD 4.4, for the accounts): every matching order, oldest first, one row each. */

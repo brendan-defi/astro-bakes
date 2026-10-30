@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { buildTimeline, csvCell, displayState, filterQuery, likeAnywhere, parseOrderFilters, textCell, toCsv, validateNote, type TimelineSource } from "./order-admin-rules";
+import {
+  adminCanCancel, buildTimeline, cancelRefusal, csvCell, displayState, filterQuery, likeAnywhere, parseOrderFilters, parseYen, refundable, textCell, toCsv, validateNote, validateOptionalNote,
+  validateRefund, type TimelineSource,
+} from "./order-admin-rules";
 
 describe("displayState", () => {
   it("shows an unpaid order as expired once its checkout no longer holds the boxes", () => {
@@ -48,21 +51,96 @@ describe("buildTimeline", () => {
     const tl = buildTimeline({
       ...base,
       emails: [{ type: "order_confirmation", to: "a@b.c", sentAt: t("2026-11-08T01:00:01Z"), error: null }, { type: "internal", to: "owner@x", sentAt: t("2026-11-08T01:00:01Z"), error: "RESEND_API_KEY is not set" }],
-      events: [{ kind: "note", body: "Asked for a 14–16 slot.", createdAt: t("2026-11-09T03:00:00Z"), by: "Brendan" }],
-      refunds: [{ amount: 1000, reason: "customer_cancelled", createdAt: t("2026-11-10T00:00:00Z"), issuedAt: null }],
+      events: [{ kind: "note", body: "Asked for a 14–16 slot.", data: {}, createdAt: t("2026-11-09T03:00:00Z"), by: "Brendan" }],
+      refunds: [{ id: "r1", amount: 1000, reason: "customer_cancelled", createdAt: t("2026-11-10T00:00:00Z"), issuedAt: null }],
       cancelledAt: t("2026-11-10T00:00:00Z"),
     });
     expect(tl.map((e) => e.title)).toEqual(["Order placed", "Paid", "Order confirmation emailed", "New-order email to the owner", "Note", "Cancelled", "Refund of ¥1,000 recorded"]);
     expect(tl[0].detail).toBe("Mock payment: Stripe not wired yet");
     expect(tl[3].detail).toBe("Failed to owner@x: RESEND_API_KEY is not set");
     expect(tl[4]).toMatchObject({ kind: "note", detail: "Asked for a 14–16 slot.", by: "Brendan" });
-    expect(tl[6].detail).toBe("customer cancelled; owed until payments are connected");
+    expect(tl[6].detail).toBe("Customer cancelled. Owed until payments are connected");
   });
 
   it("shows shipping with its tracking number, and an issued refund twice (recorded, then issued)", () => {
-    const tl = buildTimeline({ ...base, shippedAt: t("2026-11-21T00:00:00Z"), trackingNumber: "1234-5678-9012", refunds: [{ amount: 500, reason: "damage", createdAt: t("2026-11-23T00:00:00Z"), issuedAt: t("2026-11-23T01:00:00Z") }] });
+    const tl = buildTimeline({ ...base, shippedAt: t("2026-11-21T00:00:00Z"), trackingNumber: "1234-5678-9012", refunds: [{ id: "r1", amount: 500, reason: "damage", createdAt: t("2026-11-23T00:00:00Z"), issuedAt: t("2026-11-23T01:00:00Z") }] });
     expect(tl.find((e) => e.title === "Shipped")?.detail).toBe("Tracking 1234-5678-9012");
     expect(tl.filter((e) => e.kind === "money").map((e) => e.title)).toEqual(["Refund of ¥500 recorded", "Refund of ¥500 issued"]);
+  });
+
+  it("tells who cancelled and why on the Cancelled step, and who refunded and why on the refund, not as separate entries", () => {
+    const tl = buildTimeline({
+      ...base,
+      state: "cancelled",
+      cancelledAt: t("2026-11-12T00:00:00Z"),
+      refunds: [
+        { id: "r1", amount: 500, reason: "damage", createdAt: t("2026-11-11T00:00:00Z"), issuedAt: null },
+        { id: "r2", amount: 1500, reason: "admin_cancelled", createdAt: t("2026-11-12T00:00:00Z"), issuedAt: null },
+      ],
+      events: [
+        { kind: "refund", body: "Lid crushed in the photo.", data: { refundId: "r1" }, createdAt: t("2026-11-11T00:00:00Z"), by: "Owner" },
+        { kind: "cancelled", body: "Customer asked by phone.", data: { source: "admin" }, createdAt: t("2026-11-12T00:00:00Z"), by: "Owner" },
+      ],
+    });
+    expect(tl.map((e) => e.title)).toEqual(["Order placed", "Paid", "Refund of ¥500 recorded", "Cancelled", "Refund of ¥1,500 recorded"]);
+    expect(tl[2]).toMatchObject({ detail: "Damage. Owed until payments are connected. Lid crushed in the photo.", by: "Owner" });
+    expect(tl[3]).toMatchObject({ detail: "By the shop. Customer asked by phone.", by: "Owner" });
+    expect(tl[4]).toMatchObject({ detail: "Cancelled by the shop. Owed until payments are connected" });
+    expect(tl[4].by).toBeUndefined();
+  });
+
+  it("says a customer's own cancellation and a cancelled drop apart", () => {
+    const at = t("2026-11-12T00:00:00Z");
+    const step = (source: string) => buildTimeline({ ...base, state: "cancelled", cancelledAt: at, events: [{ kind: "cancelled", body: "", data: { source }, createdAt: at, by: null }] }).find((e) => e.title === "Cancelled");
+    expect(step("customer")).toMatchObject({ detail: "By the customer, from their order page" });
+    expect(step("drop")).toMatchObject({ detail: "The whole drop was cancelled" });
+    // Cancelled before events were recorded: just the step.
+    expect(buildTimeline({ ...base, state: "cancelled", cancelledAt: at }).find((e) => e.title === "Cancelled")?.detail).toBeUndefined();
+  });
+});
+
+describe("cancel and refund rules", () => {
+  it("lets the shop cancel a paid order until it ships, and says why not otherwise", () => {
+    expect(adminCanCancel("paid")).toBe(true);
+    expect(adminCanCancel("packed")).toBe(true);
+    for (const s of ["pending_payment", "shipped", "complete", "expired", "cancelled"] as const) expect(adminCanCancel(s)).toBe(false);
+    expect(cancelRefusal("shipped")).toBe("It has shipped, so it can't be cancelled. Record a refund instead.");
+    expect(cancelRefusal("cancelled")).toBe("This order is already cancelled.");
+    expect(cancelRefusal("pending_payment")).toBe("It was never paid, so there's nothing to cancel or refund.");
+  });
+
+  it("refunds at most what was paid and isn't refunded yet", () => {
+    const paidAt = new Date();
+    expect(refundable({ paidAt, total: 2000, refunded: 0 })).toBe(2000);
+    expect(refundable({ paidAt, total: 2000, refunded: 500 })).toBe(1500);
+    expect(refundable({ paidAt, total: 2000, refunded: 2500 })).toBe(0);
+    expect(refundable({ paidAt: null, total: 2000, refunded: 0 })).toBe(0);
+  });
+
+  it("reads yen however it's typed", () => {
+    expect(parseYen("1500")).toBe(1500);
+    expect(parseYen(" ¥1,500 ")).toBe(1500);
+    expect(parseYen("１，５００円")).toBe(1500);
+    expect(parseYen("￥800")).toBe(800);
+    expect(parseYen(1500)).toBe(1500);
+    for (const bad of ["", "15.5", "-100", "1e3", "abc", 1.5, null]) expect(parseYen(bad)).toBeNull();
+  });
+
+  it("validates a refund against what's left, and wants a note for Other", () => {
+    expect(validateRefund({ amount: "500", reason: "damage", note: "  Lid crushed. " }, 2000)).toEqual({ ok: true, value: { amount: 500, reason: "damage", note: "Lid crushed." } });
+    expect(validateRefund({ amount: "2000", reason: "non_delivery" }, 2000)).toEqual({ ok: true, value: { amount: 2000, reason: "non_delivery", note: "" } });
+    expect(validateRefund({ amount: "2001", reason: "damage" }, 2000)).toEqual({ ok: false, errors: { amount: "At most ¥2,000 is left to refund." } });
+    expect(validateRefund({ amount: "0", reason: "nope" }, 2000)).toEqual({ ok: false, errors: { amount: "Enter an amount in yen, like 1500.", reason: "Pick a reason." } });
+    expect(validateRefund({ amount: "100", reason: "other", note: " " }, 2000)).toEqual({ ok: false, errors: { note: "Say what it's for. Only the shop sees this." } });
+    expect(validateRefund({ amount: "100", reason: "damage", note: "x".repeat(2001) }, 2000)).toEqual({ ok: false, errors: { note: "At most 2,000 characters (this is 2,001)." } });
+    expect(validateRefund({ amount: "100", reason: "damage" }, 0)).toEqual({ ok: false, errors: { amount: "Nothing is left to refund." } });
+  });
+
+  it("allows an empty optional note but not an overlong one", () => {
+    expect(validateOptionalNote("  ")).toEqual({ ok: true, body: "" });
+    expect(validateOptionalNote(undefined)).toEqual({ ok: true, body: "" });
+    expect(validateOptionalNote(" why ")).toEqual({ ok: true, body: "why" });
+    expect(validateOptionalNote("x".repeat(2001)).ok).toBe(false);
   });
 });
 

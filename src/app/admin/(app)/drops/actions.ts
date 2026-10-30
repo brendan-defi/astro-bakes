@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireAdmin } from "@/lib/admin";
 import type { DropState } from "@/lib/data";
-import { dropContext, duplicateDrop, saveDrop, transitionDrop } from "@/lib/drops-admin";
+import { cancelDrop, dropContext, duplicateDrop, resendDropEmails, saveDrop, transitionDrop, type CancelDropResult, type ResendDropEmailsResult } from "@/lib/drops-admin";
 import { fromJstLocal, isDropState, validateDrop, type Errors } from "@/lib/drop-rules";
 import { isDropAction } from "@/lib/drop-transitions";
 
@@ -40,6 +40,27 @@ export async function transitionDropAction(slug: string, action: unknown, input:
   if (action === "reopen" && !closeAt) return { ok: false, error: "Pick a new closing time." };
   const r = await transitionDrop(slug, action, { closeAt });
   if (r.ok) revalidatePath("/", "layout");
+  return r;
+}
+
+/**
+ * Cancel drop (PRD 4.2): cancels and refunds every order on it and emails each customer, which can take a while
+ * with many orders (the emails are spaced out). `expectVersion` is the version of the impact the confirmation showed.
+ */
+export async function cancelDropAction(slug: string, expectVersion: unknown): Promise<CancelDropResult> {
+  const admin = await requireAdmin();
+  if (typeof expectVersion !== "string" || !expectVersion) return { ok: false, error: "Reload the page and try again." };
+  const r = await cancelDrop(slug, admin.id, expectVersion);
+  if (r.ok) revalidatePath("/", "layout");
+  else if (r.stale) revalidatePath(`/admin/drops/${slug}`);
+  return r;
+}
+
+/** Send a cancelled drop's cancellation emails that haven't gone out (a failed send, or an interrupted Cancel drop). */
+export async function resendDropEmailsAction(slug: string): Promise<ResendDropEmailsResult> {
+  await requireAdmin();
+  const r = await resendDropEmails(slug);
+  revalidatePath(`/admin/drops/${slug}`);
   return r;
 }
 

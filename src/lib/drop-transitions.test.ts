@@ -16,10 +16,10 @@ const err = (r: ReturnType<typeof transition>) => (r.ok ? expect.fail("expected 
 
 describe("actionsFor", () => {
   it("offers each state its moves (PRD 5.2a), by the effective state", () => {
-    expect(actionsFor("draft", "draft")).toEqual(["schedule", "open"]);
-    expect(actionsFor("scheduled", "scheduled")).toEqual(["unschedule", "open"]);
-    expect(actionsFor("open", "open")).toEqual(["close"]);
-    expect(actionsFor("closed", "closed")).toEqual(["reopen", "baking"]);
+    expect(actionsFor("draft", "draft")).toEqual(["schedule", "open", "cancel"]);
+    expect(actionsFor("scheduled", "scheduled")).toEqual(["unschedule", "open", "cancel"]);
+    expect(actionsFor("open", "open")).toEqual(["close", "cancel"]);
+    expect(actionsFor("closed", "closed")).toEqual(["reopen", "baking", "cancel"]);
     expect(actionsFor("baking", "baking")).toEqual(["shipped"]);
     expect(actionsFor("shipped", "shipped")).toEqual(["complete"]);
     expect(actionsFor("cancelled", "cancelled")).toEqual([]);
@@ -114,12 +114,20 @@ describe("transition", () => {
     });
   });
 
+  it("cancel takes a drop that hasn't started baking off the shop for good", () => {
+    for (const s of ["draft", "closed"] as const) expect(ok(run(drop(s), "cancel"))).toEqual({ state: "cancelled" });
+    expect(ok(run(drop("scheduled", { openAt: JST("2026-11-12T10:00:00") }), "cancel"))).toEqual({ state: "cancelled" });
+    expect(ok(run(drop("open"), "cancel"))).toEqual({ state: "cancelled" });
+    expect(err(run(drop("baking"), "cancel"))).toBe("Cancel drop isn't available: the drop is baking.");
+    expect(err(run(drop("cancelled"), "cancel"))).toBe("Cancel drop isn't available: the drop is cancelled.");
+  });
+
   it("every action is listed with a label, an effect and the states it comes from", () => {
     for (const a of DROP_ACTIONS) {
       expect(ACTIONS[a].label.length).toBeGreaterThan(0);
       expect(ACTIONS[a].effect.length).toBeGreaterThan(10);
       expect(ACTIONS[a].from.length).toBeGreaterThan(0);
     }
-    expect(DROP_ACTIONS.filter((a) => ACTIONS[a].confirm)).toEqual(["open", "close", "reopen"]);
+    expect(DROP_ACTIONS.filter((a) => ACTIONS[a].confirm)).toEqual(["open", "close", "reopen", "cancel"]);
   });
 });

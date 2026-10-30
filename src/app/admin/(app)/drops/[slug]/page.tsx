@@ -4,7 +4,7 @@ import { DropEditor } from "@/components/admin/DropEditor";
 import { DropStatePill } from "@/components/admin/DropStatePill";
 import { requireAdmin } from "@/lib/admin";
 import { fromJstLocal, toJstLocal } from "@/lib/drop-rules";
-import { boxChoices, dropForForm } from "@/lib/drops-admin";
+import { boxChoices, cancelImpact, dropEmailsOwedCount, dropForForm } from "@/lib/drops-admin";
 import { arrivalOffsetDays } from "@/lib/settings";
 import { duplicateDropAction } from "../actions";
 import s from "../../../admin.module.css";
@@ -21,7 +21,7 @@ function reopenDefault(shipAt: Date, now = new Date()): string {
 export default async function EditDropPage({ params, searchParams }: { params: Promise<{ slug: string }>; searchParams: Promise<{ created?: string; duplicated?: string }> }) {
   await requireAdmin();
   const [{ slug }, q] = await Promise.all([params, searchParams]);
-  const [drop, choices, offset] = await Promise.all([dropForForm(slug), boxChoices(), arrivalOffsetDays()]);
+  const [drop, choices, offset, impact, emailsOwed] = await Promise.all([dropForForm(slug), boxChoices(), arrivalOffsetDays(), cancelImpact(slug), dropEmailsOwedCount(slug)]);
   if (!drop) notFound();
   const notice = q.created === "1" ? "Created as a draft. It isn't on the shop until it's scheduled." : q.duplicated === "1" ? "Duplicated: a new draft, every date a month later. Check the dates and names." : undefined;
   return (
@@ -36,7 +36,7 @@ export default async function EditDropPage({ params, searchParams }: { params: P
         </div>
       </div>
       <DropEditor
-        lifecycle={{ slug: drop.slug, number: drop.number, state: drop.state, storedState: drop.storedState, reopenDefault: reopenDefault(drop.shipAt) }}
+        lifecycle={{ slug: drop.slug, number: drop.number, state: drop.state, storedState: drop.storedState, reopenDefault: reopenDefault(drop.shipAt), cancelImpact: impact, emailsOwed }}
         form={{ slug: drop.slug, initial: drop, number: drop.number, state: drop.state, choices, arrivalOffsetDays: offset, notice, version: drop.updatedAt.getTime() }}
       />
     </>
