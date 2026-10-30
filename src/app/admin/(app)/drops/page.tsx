@@ -39,7 +39,7 @@ export default async function DropsPage() {
                 <td>{fmtDateTime(d.closeAt)}</td>
                 <td>{fmtDate(d.shipAt)}</td>
                 <td className={s.num}>{d.sold} / {d.cap}</td>
-                <td className={s.num}>{d.orders}</td>
+                <td className={s.num}>{d.orders > 0 ? <Link href={`/admin/orders?drop=${d.slug}`}>{d.orders}</Link> : 0}</td>
                 <td className={s.num}>{yen(d.revenue)}</td>
               </tr>
             ))}

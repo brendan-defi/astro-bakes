@@ -410,6 +410,31 @@ export const orders = pgTable(
   ],
 );
 
+/**
+ * What happened to an order and who did it (PRD 4.4): the admin's internal notes now; admin actions (cancel,
+ * refund, address edits, tracking) as they're built. Customers never see these. The order's own timestamps,
+ * refunds and notification_log fill in the rest of the timeline, so nothing here duplicates them.
+ */
+export const orderEvents = pgTable(
+  "order_events",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    orderId: uuid()
+      .notNull()
+      .references(() => orders.id, { onDelete: "cascade" }),
+    /** "note" for now; later kinds name the action ("cancelled", "refunded", "shipped", "address_changed" …). */
+    kind: text().notNull(),
+    /** The admin who did it; null for the system. Kept if the account goes. */
+    actorId: uuid().references(() => customers.id, { onDelete: "set null" }),
+    /** The note's text, or a one-line summary of the action. */
+    body: text().notNull(),
+    /** Details an action wants to keep (old and new values, amounts). */
+    data: jsonb().notNull().default({}),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("order_events_order_idx").on(t.orderId, t.createdAt)],
+);
+
 /** A line on an order, with the box name and price as they were at the time. */
 export const orderItems = pgTable(
   "order_items",
@@ -499,6 +524,11 @@ export const ordersRelations = relations(orders, ({ one, many }) => ({
   customer: one(customers, { fields: [orders.customerId], references: [customers.id] }),
   items: many(orderItems),
   refunds: many(refunds),
+  events: many(orderEvents),
+}));
+export const orderEventsRelations = relations(orderEvents, ({ one }) => ({
+  order: one(orders, { fields: [orderEvents.orderId], references: [orders.id] }),
+  actor: one(customers, { fields: [orderEvents.actorId], references: [customers.id] }),
 }));
 export const refundsRelations = relations(refunds, ({ one }) => ({
   order: one(orders, { fields: [refunds.orderId], references: [orders.id] }),
@@ -529,4 +559,5 @@ export type InventoryHoldRow = typeof inventoryHolds.$inferSelect;
 export type OrderRow = typeof orders.$inferSelect;
 export type OrderItemRow = typeof orderItems.$inferSelect;
 export type RefundRow = typeof refunds.$inferSelect;
+export type OrderEventRow = typeof orderEvents.$inferSelect;
 export type CustomOrderRequestRow = typeof customOrderRequests.$inferSelect;
