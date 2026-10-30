@@ -12,6 +12,7 @@ export const ADMIN_SECTIONS: { href: string; label: string; also?: string[] }[] 
   { href: "/admin", label: "Dashboard" },
   { href: "/admin/drops", label: "Drops" },
   { href: "/admin/boxes", label: "Boxes & items", also: ["/admin/items"] },
+  { href: "/admin/orders", label: "Orders" },
   { href: "/admin/settings", label: "Settings" },
 ];
 

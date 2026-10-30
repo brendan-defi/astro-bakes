@@ -2,6 +2,7 @@ import "server-only";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { addresses, customers, dropBoxes, drops, inventoryHolds, orders, refunds } from "@/db/schema";
+import { addressLine } from "./address";
 import { arrivalDate, effectiveState, type Box, type Locale } from "./data";
 import { validateDelivery, type DeliveryInput } from "./checkout-rules";
 import { sendEmail } from "./email";
@@ -65,8 +66,6 @@ export interface OrderDetail extends OrderSummary {
   reorder: { dropId: string; items: Record<string, number>; boxes: Box[] } | null;
 }
 
-const addressLine = (o: { postalCode: string; prefecture: string; city: string; town: string | null; line1: string; line2: string | null }) =>
-  `〒${o.postalCode.slice(0, 3)}-${o.postalCode.slice(3)} ${o.prefecture}${o.city}${o.town ?? ""}${o.line1}${o.line2 ? ` ${o.line2}` : ""}`;
 
 function toSummary(o: typeof orders.$inferSelect & { drop: Drops; items: { nameEn: string; nameJa: string | null; qty: number; unitPrice: number; box: { slug: string } }[] }, locale: Locale, now: Date): OrderSummary {
   const dropState = liveState(o.drop, now);
