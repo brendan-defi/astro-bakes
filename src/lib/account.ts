@@ -140,7 +140,7 @@ export async function cancelOrder(customerId: string, number: string): Promise<C
     return { ok: true as const, refund, orderId: o.id };
   });
   if (!result.ok) return result;
-  await sendCancellationEmail(result.orderId, { refund: result.refund, byShop: false });
+  await sendCancellationEmail(result.orderId);
   return { ok: true, refunded: result.refund !== null };
 }
 

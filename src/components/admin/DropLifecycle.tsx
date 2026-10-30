@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { cancelDropAction, transitionDropAction } from "@/app/admin/(app)/drops/actions";
+import { cancelDropAction, resendDropEmailsAction, transitionDropAction } from "@/app/admin/(app)/drops/actions";
 import type { DropState } from "@/lib/data";
 import { ACTIONS, actionsFor, type DropAction } from "@/lib/drop-transitions";
 import s from "@/app/admin/admin.module.css";
@@ -11,12 +11,15 @@ import s from "@/app/admin/admin.module.css";
  * The lifecycle buttons for a drop (PRD 4.2, 5.2a): the moves its state allows now, each explained. The ones
  * customers see at once (open, close, reopen, cancel) ask twice; Reopen also takes the new closing time, Japan time.
  * `reopenDefault` is a datetime-local value the page works out (tomorrow evening, before the ship date). Cancel drop
- * says what it will cancel and refund (`cancelImpact`), and has to be typed out, since it can't be undone.
+ * says what it will cancel and refund (`cancelImpact`), and has to be typed out, since it can't be undone. A cancelled
+ * drop whose cancellation emails didn't all go out offers to send the rest (`emailsOwed`).
  */
 export interface DropLifecycleProps {
   slug: string; number: number; state: DropState; storedState: DropState; reopenDefault: string;
-  /** The orders Cancel drop would cancel and what it would refund; the server refuses if the count has changed. */
-  cancelImpact?: { orders: number; refund: number };
+  /** The orders Cancel drop would cancel and what it would refund; the server refuses unless `version` still matches. */
+  cancelImpact?: { orders: number; refund: number; version: string };
+  /** Customers of this cancelled drop still owed their cancellation email. */
+  emailsOwed?: number;
   /** Why the buttons are held back right now (the form beside them has unsaved changes). */
   blocked?: string;
   /** Told while an action is under way, from its confirmation opening to the request settling (DropEditor locks the form meanwhile). */
@@ -26,7 +29,7 @@ export interface DropLifecycleProps {
 const CONFIRM_WORD = "cancel";
 const yen = (n: number) => `¥${n.toLocaleString("en-US")}`;
 
-export function DropLifecycle({ slug, number, state, storedState, reopenDefault, cancelImpact = { orders: 0, refund: 0 }, blocked, onActiveChange }: DropLifecycleProps) {
+export function DropLifecycle({ slug, number, state, storedState, reopenDefault, cancelImpact = { orders: 0, refund: 0, version: "" }, emailsOwed = 0, blocked, onActiveChange }: DropLifecycleProps) {
   const router = useRouter();
   const actions = actionsFor(state, storedState);
   const [pending, setPending] = useState<DropAction | null>(null);
@@ -56,8 +59,13 @@ export function DropLifecycle({ slug, number, state, storedState, reopenDefault,
     setError(null);
     try {
       if (action === "cancel") {
-        const r = await cancelDropAction(slug, cancelImpact.orders);
-        if (!r.ok) { setError(r.error); return; }
+        const r = await cancelDropAction(slug, cancelImpact.version);
+        if (!r.ok) {
+          setError(r.error);
+          // The confirmation stays open and redraws with the orders as they are now.
+          if (r.stale) router.refresh();
+          return;
+        }
         setPending(null);
         setDone(cancelledMessage(name, r));
         router.refresh();
@@ -75,7 +83,24 @@ export function DropLifecycle({ slug, number, state, storedState, reopenDefault,
     }
   }
 
-  if (actions.length === 0 && !done) return <p className={s.help}>Nothing to do: the drop is {state}.</p>;
+  async function resend() {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    setDone(null);
+    try {
+      const r = await resendDropEmailsAction(slug);
+      if (!r.ok) { setError(r.error); return; }
+      setDone(`${plural(r.emailed, "cancellation email")} sent${r.emailFailed ? `; ${plural(r.emailFailed, "email")} still didn't go out (each order's timeline has the error).` : "."}`);
+      router.refresh();
+    } catch {
+      setError("Couldn't do that. Check your connection and try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (actions.length === 0 && !done && !error && !emailsOwed) return <p className={s.help}>Nothing to do: the drop is {state}.</p>;
   return (
     <div className={s.lifecycle}>
       {pending ? (
@@ -110,6 +135,12 @@ export function DropLifecycle({ slug, number, state, storedState, reopenDefault,
           {actions.length > 0 && <span className={s.help}>{blocked ?? actions.map((a) => `${ACTIONS[a].label}: ${ACTIONS[a].effect}`).join(" ")}</span>}
         </div>
       )}
+      {emailsOwed > 0 && !pending && (
+        <div className={s.lifecycleRow}>
+          <button type="button" className={`btn btn-secondary ${s.btnSm}`} disabled={busy} onClick={() => void resend()}>{busy ? "Sending…" : "Send them now"}</button>
+          <span className={s.help}>{plural(emailsOwed, "customer")} {emailsOwed === 1 ? "hasn't" : "haven't"} had their cancellation email yet: a send failed, or it was interrupted.</span>
+        </div>
+      )}
       {error && <p role="alert" className={s.statusError}>{error}</p>}
       {done && !error && <p role="status" className={s.statusOk}>{done}</p>}
     </div>
@@ -124,10 +155,11 @@ function impactText({ orders, refund }: { orders: number; refund: number }): str
   return `That's ${money}. Each customer is emailed, which can take a minute.`;
 }
 
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
 function cancelledMessage(name: string, r: { cancelled: number; refund: number; emailed: number; emailFailed: number }): string {
   if (!r.cancelled) return `${name} is cancelled. It had no orders.`;
-  const orders = `${r.cancelled} order${r.cancelled === 1 ? "" : "s"} cancelled`;
   const refund = r.refund ? `, ${yen(r.refund)} of refunds recorded as owed` : "";
-  const mail = r.emailFailed ? `${r.emailed} customer${r.emailed === 1 ? "" : "s"} emailed; ${r.emailFailed} email${r.emailFailed === 1 ? "" : "s"} failed (see each order's timeline).` : `every customer emailed.`;
-  return `${name} is cancelled: ${orders}${refund}, ${mail}`;
+  const mail = r.emailFailed ? `${plural(r.emailed, "customer")} emailed; ${plural(r.emailFailed, "email")} didn't go out (send them again below).` : "every customer emailed.";
+  return `${name} is cancelled: ${plural(r.cancelled, "order")} cancelled${refund}, ${mail}`;
 }

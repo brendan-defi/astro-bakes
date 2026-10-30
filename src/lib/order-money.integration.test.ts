@@ -2,11 +2,11 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import * as schema from "@/db/schema";
-import { cancelDropAction, transitionDropAction } from "@/app/admin/(app)/drops/actions";
+import { cancelDropAction, resendDropEmailsAction, transitionDropAction } from "@/app/admin/(app)/drops/actions";
 import { cancelOrderAction, refundOrderAction } from "@/app/admin/(app)/orders/actions";
 import { cancelOrder, loadOrder } from "@/lib/account";
 import { placeOrder, startCheckout } from "@/lib/checkout";
-import { cancelDrop, cancelImpact } from "@/lib/drops-admin";
+import { cancelDrop, cancelImpact, dropEmailsOwedCount } from "@/lib/drops-admin";
 import { orderDetail } from "@/lib/orders-admin";
 import { captureEmail, clearTestData, closeTestDb, resetDatabase, reseed, testDb, TEST_DATABASE_URL } from "@/test/db";
 
@@ -55,6 +55,17 @@ async function refundsOf(number: string) {
   return db.select({ amount: schema.refunds.amount, reason: schema.refunds.reason, issuedAt: schema.refunds.issuedAt }).from(schema.refunds).innerJoin(schema.orders, eq(schema.orders.id, schema.refunds.orderId)).where(eq(schema.orders.number, number)).orderBy(schema.refunds.createdAt);
 }
 const cancelEmails = () => mail.sent.filter((e) => e.type === "order_cancelled");
+const dropState = async (slug = DROP) => (await db.select({ state: schema.drops.state }).from(schema.drops).where(eq(schema.drops.slug, slug)))[0].state;
+const version = async (slug = DROP) => (await cancelImpact(slug)).version;
+/** Wait until this many sessions are blocked on a lock (a row lock someone else holds). */
+async function waitingOnLocks(n: number) {
+  for (let i = 0; i < 200; i++) {
+    const [{ waiting }] = (await db.execute(sql`select count(*)::int as waiting from pg_stat_activity where datname = current_database() and wait_event_type = 'Lock'`)).rows as { waiting: number }[];
+    if (waiting >= n) return;
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  throw new Error(`expected ${n} sessions waiting on a lock`);
+}
 
 describe.skipIf(!TEST_DATABASE_URL)("cancel and refund", () => {
   let c: string;
@@ -185,6 +196,28 @@ describe.skipIf(!TEST_DATABASE_URL)("cancel and refund", () => {
     expect((await orderDetail(number))!.timeline.find((e) => e.title === "Cancelled")).toMatchObject({ detail: "By the customer, from their order page" });
   });
 
+  describe("the cancellation email tells an owed refund from an issued one", () => {
+    it("an earlier full refund still owed is on its way; issued, it's done; part issued, part owed, still on its way", async () => {
+      await openDrop();
+      const owed = await order(c);
+      await refundOrderAction(owed, { amount: "2500", reason: "damage" }, 0);
+      const issued = await order(c);
+      await refundOrderAction(issued, { amount: "2500", reason: "damage" }, 0);
+      const mixed = await order(await customer("taro@test.invalid"), "ja"); // a second customer: five of a box each, at most
+      await refundOrderAction(mixed, { amount: "1000", reason: "damage" }, 0);
+      await refundOrderAction(mixed, { amount: "1500", reason: "non_delivery" }, 1000);
+      await db.execute(sql`update refunds r set issued_at = now() from orders o where o.id = r.order_id and (o.number = ${issued} or (o.number = ${mixed} and r.amount = 1000))`);
+      mail.reset();
+      for (const n of [owed, issued, mixed]) expect(await cancelOrderAction(n, { notify: true })).toMatchObject({ ok: true, refund: 0 });
+      const text = (n: string) => cancelEmails().find((e) => e.subject.includes(n))!.text;
+      expect(text(owed)).toContain("A full refund of your payment is already on its way.");
+      expect(text(owed)).not.toContain("already been refunded");
+      expect(text(issued)).toContain("Your payment has already been refunded in full.");
+      expect(text(mixed)).toContain("お支払いの全額返金は、すでに手続き中です。");
+      expect(text(mixed)).not.toContain("返金済み");
+    });
+  });
+
   describe("Cancel drop", () => {
     it("cancels an open drop: every order cancelled and refunded, the drop off the shop, each customer emailed", async () => {
       await openDrop();
@@ -194,13 +227,14 @@ describe.skipIf(!TEST_DATABASE_URL)("cancel and refund", () => {
       const unpaid = await order(taro);
       await unpay(unpaid);
       await refundOrderAction(a, { amount: "500", reason: "damage" }, 0);
-      expect(await cancelImpact(DROP)).toEqual({ orders: 3, refund: 2000 + 2500 });
-      expect(await cancelDropAction(DROP, 2)).toEqual({ ok: false, error: "The drop has 3 orders to cancel now, not the 2 shown. Check them, then try again." });
-      expect((await db.select({ state: schema.drops.state }).from(schema.drops).where(eq(schema.drops.slug, DROP)))[0].state).toBe("open");
+      const impact = await cancelImpact(DROP);
+      expect(impact).toEqual({ orders: 3, refund: 2000 + 2500, version: expect.stringMatching(/^[0-9a-f]{32}$/) });
+      expect(await cancelDropAction(DROP, "a-version-from-another-time")).toMatchObject({ ok: false, stale: true, error: expect.stringMatching(/^The orders on this drop have changed since this page loaded/) });
+      expect(await dropState()).toBe("open");
 
       mail.reset();
-      expect(await cancelDropAction(DROP, 3)).toEqual({ ok: true, cancelled: 3, refund: 4500, emailed: 3, emailFailed: 0 });
-      expect((await db.select({ state: schema.drops.state }).from(schema.drops).where(eq(schema.drops.slug, DROP)))[0].state).toBe("cancelled");
+      expect(await cancelDropAction(DROP, impact.version)).toEqual({ ok: true, cancelled: 3, refund: 4500, emailed: 3, emailFailed: 0 });
+      expect(await dropState()).toBe("cancelled");
       const states = await db.select({ number: schema.orders.number, state: schema.orders.state }).from(schema.orders);
       expect(states.every((o) => o.state === "cancelled")).toBe(true);
       expect(await refundsOf(b)).toEqual([{ amount: 2500, reason: "drop_cancelled", issuedAt: null }]);
@@ -210,27 +244,103 @@ describe.skipIf(!TEST_DATABASE_URL)("cancel and refund", () => {
       expect(emails.map((e) => e.to).sort()).toEqual(["hanako@test.invalid", "taro@test.invalid", "taro@test.invalid"]);
       expect(emails.every((e) => e.text.includes("申し訳") || e.text.includes("We're sorry"))).toBe(true);
       expect(emails.find((e) => e.subject.includes(unpaid))!.text).toContain("Nothing was charged.");
+      expect(emails.find((e) => e.subject.includes(a))!.text).toContain("¥2,000 is being refunded to the payment method");
       expect((await orderDetail(b))!.timeline.find((e) => e.title === "Cancelled")).toMatchObject({ detail: "The whole drop was cancelled", by: "Owner" });
-      expect(await cancelImpact(DROP)).toEqual({ orders: 0, refund: 0 });
-      expect(await cancelDropAction(DROP, 0)).toEqual({ ok: false, error: "Cancel drop isn't available: the drop is cancelled." });
+      expect(await cancelImpact(DROP)).toMatchObject({ orders: 0, refund: 0 });
+      expect(await dropEmailsOwedCount(DROP)).toBe(0);
+      expect(await cancelDropAction(DROP, await version())).toEqual({ ok: false, error: "Cancel drop isn't available: the drop is cancelled." });
     });
 
-    it("cancels a drop with no orders, and says when an email fails", async () => {
-      expect(await cancelDrop("drop-04", admin.id, 0, { gapMs: 0 })).toEqual({ ok: true, cancelled: 0, refund: 0, emailed: 0, emailFailed: 0 });
+    it("refuses a confirmation whose orders changed, even with the same count and total", async () => {
+      await openDrop();
+      const taro = await customer("taro@test.invalid");
+      const first = await order(c);
+      const shown = await cancelImpact(DROP);
+      expect(shown).toMatchObject({ orders: 1, refund: 2500 });
+      // That customer cancels, and someone else places the same order: one order, ¥2,500, but not the one shown.
+      await cancelOrder(c, first);
+      const second = await order(taro);
+      expect(await cancelImpact(DROP)).toMatchObject({ orders: 1, refund: 2500 });
+      expect(await cancelDropAction(DROP, shown.version)).toMatchObject({ ok: false, stale: true });
+      expect(await dropState()).toBe("open");
+      expect(await refundsOf(second)).toEqual([]);
+      // A refund changes it too.
+      const before = await version();
+      await refundOrderAction(second, { amount: "500", reason: "damage" }, 0);
+      expect(await cancelDropAction(DROP, before)).toMatchObject({ ok: false, stale: true });
+      expect(await refundsOf(second)).toHaveLength(1);
+      expect(await cancelDrop(DROP, admin.id, await version(), { gapMs: 0 })).toMatchObject({ ok: true, cancelled: 1, refund: 2000 });
+    });
+
+    it("an order appearing between its reads, whose customer is cancelling it: both settle, no deadlock", async () => {
+      await openDrop();
+      await order(c);
+      // Placed now but parked as expired, so it isn't in the confirmation or Cancel drop's first read; it "appears" later.
+      const late = await order(c);
+      await setOrder(late, { state: "expired" });
+      const shown = await version();
+      const holder = await pool!.connect();
+      try {
+        // Hold the drop, so Cancel drop locks its one order and then waits for the drop.
+        await holder.query("begin");
+        await holder.query("select id from drops where slug = $1 for update", [DROP]);
+        const dropping = cancelDrop(DROP, admin.id, shown, { gapMs: 0 });
+        await waitingOnLocks(1);
+        // A checkout finishes in that gap, and its customer cancels at once: they lock the new order, then wait for the drop.
+        await setOrder(late, { state: "paid" });
+        const cancelling = cancelOrder(c, late);
+        await waitingOnLocks(2);
+        await holder.query("commit");
+        const [dropped, cancelled] = await Promise.all([dropping, cancelling]);
+        // Neither throws (Postgres would abort one with 40P01 on a deadlock). Cancel drop got the drop first and
+        // found an order it hadn't seen, so it refused as stale; or the customer got there first and it went ahead.
+        expect(dropped.ok ? dropped.cancelled : dropped.stale).toBeTruthy();
+        expect(cancelled).toEqual({ ok: true, refunded: true });
+      } finally {
+        holder.release();
+      }
+    });
+
+    it("finishes an interrupted or failed run's emails later, without cancelling or refunding anything again", async () => {
+      await openDrop();
+      const taro = await customer("taro@test.invalid");
+      const numbers = [await order(c), await order(taro), await order(c)];
+      expect(await cancelDrop(DROP, admin.id, await version(), { gapMs: 0 })).toMatchObject({ ok: true, cancelled: 3, emailed: 3 });
+      const refundRows = (await db.select({ n: sql<number>`count(*)::int` }).from(schema.refunds))[0].n;
+      // As if the request died after the first email: the other two never went out, so they have no log rows.
+      await db.execute(sql`delete from notification_log n using orders o where o.id = n.order_id and o.number in (${numbers[1]}, ${numbers[2]})`);
+      expect(await dropEmailsOwedCount(DROP)).toBe(2);
+      mail.reset();
+      expect(await resendDropEmailsAction(DROP)).toEqual({ ok: true, emailed: 2, emailFailed: 0 });
+      expect(cancelEmails().map((e) => e.subject.match(/AB-\d{3}-\d{3}/)![0]).sort()).toEqual([numbers[1], numbers[2]].sort());
+      expect(cancelEmails().every((e) => e.idempotencyKey.startsWith("order-cancelled/"))).toBe(true);
+      expect((await db.select({ n: sql<number>`count(*)::int` }).from(schema.refunds))[0].n).toBe(refundRows);
+      expect(await dropState()).toBe("cancelled");
+      expect(await dropEmailsOwedCount(DROP)).toBe(0);
+      expect(await resendDropEmailsAction(DROP)).toEqual({ ok: false, error: "Every customer has had their cancellation email." });
+    });
+
+    it("cancels a drop with no orders, and leaves failed emails to send again", async () => {
+      expect(await cancelDrop("drop-04", admin.id, await version("drop-04"), { gapMs: 0 })).toEqual({ ok: true, cancelled: 0, refund: 0, emailed: 0, emailFailed: 0 });
+      expect(await resendDropEmailsAction(DROP)).toEqual({ ok: false, error: "Only a cancelled drop has cancellation emails to send." });
       const number = await order(c);
       mail.failing = "Resend is down";
-      expect(await cancelDrop(DROP, admin.id, 1, { gapMs: 0 })).toEqual({ ok: true, cancelled: 1, refund: 2500, emailed: 0, emailFailed: 1 });
+      expect(await cancelDrop(DROP, admin.id, await version(), { gapMs: 0 })).toEqual({ ok: true, cancelled: 1, refund: 2500, emailed: 0, emailFailed: 1 });
       expect((await orderDetail(number))!.timeline.find((e) => e.title === "Cancellation emailed")?.detail).toContain("Failed to hanako@test.invalid: Resend is down");
+      expect(await dropEmailsOwedCount(DROP)).toBe(1);
+      mail.failing = null;
+      expect(await resendDropEmailsAction(DROP)).toEqual({ ok: true, emailed: 1, emailFailed: 0 });
+      expect(await dropEmailsOwedCount(DROP)).toBe(0);
     });
 
     it("refuses once baking has started, or when an order has already shipped; and isn't a plain lifecycle action", async () => {
       await order(c);
       await setDrop("baking");
-      expect(await cancelDrop(DROP, admin.id, 1, { gapMs: 0 })).toEqual({ ok: false, error: "Cancel drop isn't available: the drop is baking." });
+      expect(await cancelDrop(DROP, admin.id, await version(), { gapMs: 0 })).toEqual({ ok: false, error: "Cancel drop isn't available: the drop is baking." });
       await setDrop("closed");
       const shipped = await order(c);
       await setOrder(shipped, { state: "shipped", shippedAt: new Date() });
-      expect(await cancelDrop(DROP, admin.id, 1, { gapMs: 0 })).toEqual({ ok: false, error: "One of its orders has shipped, so the drop can't be cancelled. Refund orders one by one instead." });
+      expect(await cancelDrop(DROP, admin.id, await version(), { gapMs: 0 })).toEqual({ ok: false, error: "One of its orders has shipped, so the drop can't be cancelled. Refund orders one by one instead." });
       expect(await transitionDropAction(DROP, "cancel")).toEqual({ ok: false, error: "Cancelling a drop cancels its orders too. Use Cancel drop." });
       expect((await db.select({ n: sql<number>`count(*)::int` }).from(schema.orders).where(eq(schema.orders.state, "cancelled")))[0].n).toBe(0);
     });
@@ -240,7 +350,8 @@ describe.skipIf(!TEST_DATABASE_URL)("cancel and refund", () => {
       await order(c);
       for (let i = 0; i < 4; i++) {
         const held = await checkout();
-        await Promise.all([place(held, c), cancelDrop(DROP, admin.id, 1, { gapMs: 0 })]);
+        const shown = await version();
+        await Promise.all([place(held, c), cancelDrop(DROP, admin.id, shown, { gapMs: 0 })]);
         const live = await db
           .select({ n: sql<number>`count(*)::int` })
           .from(schema.orders)

@@ -100,22 +100,32 @@ describe("orderConfirmationEmail", () => {
 
 describe("orderCancelledEmail", () => {
   const base = { number: "AB-005-001", total: 2500 };
-  it("tells a customer who cancelled what comes back: all of it, the rest, nothing more, or nothing paid", () => {
-    expect(orderCancelledEmail({ ...base, locale: "en", refund: 2500, byShop: false }).text).toBe("Order AB-005-001 is cancelled.\n¥2,500 is being refunded in full to the payment method you used. It can take a few days to show up.\nHope to see you at the next drop.");
-    expect(orderCancelledEmail({ ...base, locale: "en", refund: 2000, byShop: false }).text).toContain("¥2,000 is being refunded to the payment method you used.");
-    expect(orderCancelledEmail({ ...base, locale: "en", refund: 0, byShop: false }).text).toContain("Your payment has already been refunded in full.");
-    expect(orderCancelledEmail({ ...base, locale: "en", refund: null, byShop: false }).text).toContain("Nothing was charged.");
-    expect(orderCancelledEmail({ ...base, locale: "ja", refund: 2500, byShop: false }).text).toBe("ご注文 AB-005-001 をキャンセルしました。\n¥2,500 はお支払い方法へ全額返金されます。反映まで数日かかる場合があります。\nまたのご注文をお待ちしています。");
-    expect(orderCancelledEmail({ ...base, locale: "ja", refund: 2000, byShop: false }).text).toContain("¥2,000 はお支払い方法へ返金されます。");
+  const now = (amount: number) => ({ kind: "now", amount }) as const;
+  it("tells a customer who cancelled what comes back: all of it, the rest, or nothing paid", () => {
+    expect(orderCancelledEmail({ ...base, locale: "en", refund: now(2500), byShop: false }).text).toBe("Order AB-005-001 is cancelled.\n¥2,500 is being refunded in full to the payment method you used. It can take a few days to show up.\nHope to see you at the next drop.");
+    expect(orderCancelledEmail({ ...base, locale: "en", refund: now(2000), byShop: false }).text).toContain("¥2,000 is being refunded to the payment method you used.");
+    expect(orderCancelledEmail({ ...base, locale: "en", refund: { kind: "none" }, byShop: false }).text).toContain("Nothing was charged.");
+    expect(orderCancelledEmail({ ...base, locale: "ja", refund: now(2500), byShop: false }).text).toBe("ご注文 AB-005-001 をキャンセルしました。\n¥2,500 はお支払い方法へ全額返金されます。反映まで数日かかる場合があります。\nまたのご注文をお待ちしています。");
+    expect(orderCancelledEmail({ ...base, locale: "ja", refund: now(2000), byShop: false }).text).toContain("¥2,000 はお支払い方法へ返金されます。");
+  });
+
+  it("only calls an earlier full refund done once it has been issued; an owed one is on its way", () => {
+    const covered = (issued: boolean, locale: "en" | "ja") => orderCancelledEmail({ ...base, locale, refund: { kind: "covered", issued }, byShop: true }).text;
+    expect(covered(true, "en")).toContain("Your payment has already been refunded in full.");
+    expect(covered(false, "en")).toContain("A full refund of your payment is already on its way. It can take a few days to show up.");
+    expect(covered(false, "en")).not.toContain("already been refunded");
+    expect(covered(true, "ja")).toContain("お支払いはすでに全額返金済みです。");
+    expect(covered(false, "ja")).toContain("お支払いの全額返金は、すでに手続き中です。");
+    expect(covered(false, "ja")).not.toContain("返金済み");
   });
 
   it("apologises when the shop cancelled, and invites a reply, in both languages", () => {
-    const en = orderCancelledEmail({ ...base, locale: "en", refund: 2500, byShop: true });
+    const en = orderCancelledEmail({ ...base, locale: "en", refund: now(2500), byShop: true });
     expect(en.subject).toBe("Order AB-005-001 is cancelled");
     expect(en.text).toMatch(/^We're sorry: we've had to cancel order AB-005-001\./);
     expect(en.text).toContain("If you have any questions, just reply to this email.");
     expect(en.html).toContain("cancel order <strong>AB-005-001</strong>.");
-    const ja = orderCancelledEmail({ ...base, locale: "ja", refund: null, byShop: true });
+    const ja = orderCancelledEmail({ ...base, locale: "ja", refund: { kind: "none" }, byShop: true });
     expect(ja.text).toBe("申し訳ございません。ご注文 AB-005-001 をキャンセルさせていただきました。\nお支払いは発生していません。\nご不明な点は、このメールにご返信ください。");
     expect(ja.html).toContain("ご注文 <strong>AB-005-001</strong> をキャンセルさせていただきました。");
   });

@@ -155,11 +155,17 @@ ${gift}
 }
 
 /**
- * Sent when an order is cancelled (PRD 5.3, D22). `refund` is what this cancellation refunds: null when nothing was
- * paid, 0 when earlier refunds already returned it all. `byShop` when the shop cancelled it (the order, or its whole
- * drop): it apologises and invites a reply, which reaches the store's contact email.
+ * What a cancellation means for the customer's money: nothing was paid; this cancellation refunds an amount; or
+ * earlier refunds already cover the whole payment, either all issued or with some still on their way (owed until
+ * payments are connected). Only an issued refund may be called done.
  */
-export function orderCancelledEmail(opts: { locale: Locale; number: string; total: number; refund: number | null; byShop: boolean }): Email {
+export type CancelledRefund = { kind: "none" } | { kind: "now"; amount: number } | { kind: "covered"; issued: boolean };
+
+/**
+ * Sent when an order is cancelled (PRD 5.3, D22). `byShop` when the shop cancelled it (the order, or its whole drop):
+ * it apologises and invites a reply, which reaches the store's contact email.
+ */
+export function orderCancelledEmail(opts: { locale: Locale; number: string; total: number; refund: CancelledRefund; byShop: boolean }): Email {
   const { locale, number, total, refund, byShop } = opts;
   const n = `<strong>${esc(number)}</strong>`;
   if (locale === "ja") {
@@ -168,9 +174,9 @@ export function orderCancelledEmail(opts: { locale: Locale; number: string; tota
       ? [`申し訳ございません。ご注文 ${number} をキャンセルさせていただきました。`, `申し訳ございません。ご注文 ${n} をキャンセルさせていただきました。`]
       : [`ご注文 ${number} をキャンセルしました。`, `ご注文 ${n} をキャンセルしました。`];
     const refundLine =
-      refund === null ? "お支払いは発生していません。"
-      : refund === 0 ? "お支払いはすでに全額返金済みです。"
-      : `${yen(refund)} はお支払い方法へ${refund === total ? "全額" : ""}返金されます。反映まで数日かかる場合があります。`;
+      refund.kind === "none" ? "お支払いは発生していません。"
+      : refund.kind === "covered" ? (refund.issued ? "お支払いはすでに全額返金済みです。" : "お支払いの全額返金は、すでに手続き中です。反映まで数日かかる場合があります。")
+      : `${yen(refund.amount)} はお支払い方法へ${refund.amount === total ? "全額" : ""}返金されます。反映まで数日かかる場合があります。`;
     const closing = byShop ? "ご不明な点は、このメールにご返信ください。" : "またのご注文をお待ちしています。";
     const body = `<p style="margin:0 0 14px">${openingHtml}</p><p style="margin:0 0 14px">${refundLine}</p><p style="margin:0;font-size:14px">${closing}</p>`;
     return { subject, html: layout("ja", subject, body), text: `${opening}\n${refundLine}\n${closing}` };
@@ -180,9 +186,9 @@ export function orderCancelledEmail(opts: { locale: Locale; number: string; tota
     ? [`We're sorry: we've had to cancel order ${number}.`, `We're sorry: we've had to cancel order ${n}.`]
     : [`Order ${number} is cancelled.`, `Order ${n} is cancelled.`];
   const refundLine =
-    refund === null ? "Nothing was charged."
-    : refund === 0 ? "Your payment has already been refunded in full."
-    : `${yen(refund)} is being refunded${refund === total ? " in full" : ""} to the payment method you used. It can take a few days to show up.`;
+    refund.kind === "none" ? "Nothing was charged."
+    : refund.kind === "covered" ? (refund.issued ? "Your payment has already been refunded in full." : "A full refund of your payment is already on its way. It can take a few days to show up.")
+    : `${yen(refund.amount)} is being refunded${refund.amount === total ? " in full" : ""} to the payment method you used. It can take a few days to show up.`;
   const closing = byShop ? "If you have any questions, just reply to this email." : "Hope to see you at the next drop.";
   const body = `<p style="margin:0 0 14px">${openingHtml}</p><p style="margin:0 0 14px">${refundLine}</p><p style="margin:0;font-size:14px">${closing}</p>`;
   return { subject, html: layout("en", subject, body), text: `${opening}\n${refundLine}\n${closing}` };

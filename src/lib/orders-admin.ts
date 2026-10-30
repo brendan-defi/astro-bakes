@@ -224,7 +224,7 @@ export async function adminCancelOrder(number: string, adminId: string, opts: { 
     return { ok: true as const, orderId: o.id, refund, backOnSale };
   });
   if (!r.ok) return r;
-  const emailed = opts.notify ? await sendCancellationEmail(r.orderId, { refund: r.refund, byShop: true }) : null;
+  const emailed = opts.notify ? await sendCancellationEmail(r.orderId) : null;
   return { ok: true, refund: r.refund, backOnSale: r.backOnSale, emailed };
 }
 
