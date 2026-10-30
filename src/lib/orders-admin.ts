@@ -5,7 +5,7 @@ import { customers, drops, notificationLog, orderEvents, orderItems, orders, ref
 import { addressLine } from "./address";
 import { arrivalDate } from "./data";
 import type { DeliverySlot } from "./delivery-slots";
-import { buildTimeline, displayState, likeAnywhere, PAGE_SIZE, type DisplayState, type OrderFilters, type TimelineEntry } from "./order-admin-rules";
+import { buildTimeline, displayState, likeAnywhere, PAGE_SIZE, textCell, type CsvValue, type DisplayState, type OrderFilters, type TimelineEntry } from "./order-admin-rules";
 import { arrivalOffsetDays } from "./settings";
 
 /**
@@ -187,7 +187,7 @@ export async function addOrderNote(number: string, adminId: string, body: string
 }
 
 /** The CSV export (PRD 4.4, for the accounts): every matching order, oldest first, one row each. */
-export async function ordersForCsv(f: OrderFilters): Promise<(string | number | null)[][]> {
+export async function ordersForCsv(f: OrderFilters): Promise<CsvValue[][]> {
   const db = getDb();
   const rows = await db
     .select({
@@ -228,7 +228,7 @@ export async function ordersForCsv(f: OrderFilters): Promise<(string | number | 
       r.customerName ?? "",
       r.email,
       r.shipToName,
-      r.phone,
+      textCell(r.phone),
       addressLine(r),
       r.slot,
       lines.get(r.id)?.text ?? "",
@@ -241,7 +241,7 @@ export async function ordersForCsv(f: OrderFilters): Promise<(string | number | 
       r.total - r.refunded,
       r.paymentMethod ?? "",
       jst(r.shippedAt),
-      r.trackingNumber ?? "",
+      textCell(r.trackingNumber),
     ]),
   ];
 }

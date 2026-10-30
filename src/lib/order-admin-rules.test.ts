@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildTimeline, csvCell, displayState, filterQuery, likeAnywhere, parseOrderFilters, toCsv, validateNote, type TimelineSource } from "./order-admin-rules";
+import { buildTimeline, csvCell, displayState, filterQuery, likeAnywhere, parseOrderFilters, textCell, toCsv, validateNote, type TimelineSource } from "./order-admin-rules";
 
 describe("displayState", () => {
   it("shows an unpaid order as expired once its checkout no longer holds the boxes", () => {
@@ -81,6 +81,15 @@ describe("CSV", () => {
     expect(csvCell("-1")).toBe("'-1");
     expect(csvCell("@sum")).toBe("'@sum");
     expect(csvCell(-1)).toBe("-1"); // a real number stays a number
+  });
+
+  it("keeps an all-digit phone or tracking number as text, so the leading 0 survives Excel and Numbers", () => {
+    expect(csvCell(textCell("09012345678"))).toBe('"=""09012345678"""');
+    expect(csvCell(textCell("001234567890"))).toBe('"=""001234567890"""');
+    expect(csvCell(textCell("090-1234-5678"))).toBe("090-1234-5678"); // hyphens already make it text
+    expect(csvCell(textCell(null))).toBe("");
+    expect(csvCell(textCell("=1+1"))).toBe("'=1+1"); // anything but digits goes through the formula guard
+    expect(csvCell(textCell('1"),HYPERLINK("x'))).toBe('"1""),HYPERLINK(""x"');
   });
 
   it("starts with a byte-order mark and ends lines with CRLF, so Excel reads Japanese correctly", () => {

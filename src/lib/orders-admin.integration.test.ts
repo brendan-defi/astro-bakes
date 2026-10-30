@@ -4,15 +4,18 @@ import { eq } from "drizzle-orm";
 import * as schema from "@/db/schema";
 import { addOrderNoteAction } from "@/app/admin/(app)/orders/actions";
 import { GET as exportCsv } from "@/app/admin/(app)/orders/export/route";
+import OrdersPage from "@/app/admin/(app)/orders/page";
 import { placeOrder, startCheckout } from "@/lib/checkout";
 import { parseOrderFilters } from "@/lib/order-admin-rules";
 import { listOrders, orderDetail } from "@/lib/orders-admin";
 import { captureEmail, closeTestDb, resetDatabase, testDb, TEST_DATABASE_URL } from "@/test/db";
 
-// The real action and route, with only the admin check and Next's cache stubbed. The admin is a real row, since notes point at it.
+// The real action, route and page, with only the admin check and Next's cache stubbed; redirect() throws as Next's does.
+// The admin is a real row, since notes point at it.
 const admin = vi.hoisted(() => ({ id: "", email: "owner@test.invalid", name: "Owner" }));
 vi.mock("@/lib/admin", () => ({ requireAdmin: async () => admin }));
 vi.mock("next/cache", () => ({ revalidatePath: () => {} }));
+vi.mock("next/navigation", () => ({ redirect: (to: string) => { throw Object.assign(new Error("NEXT_REDIRECT"), { to }); } }));
 
 /** The admin's order pages (PRD 4.4) against a real Postgres, with orders placed through the real checkout. */
 const { pool, db } = testDb();
@@ -115,6 +118,8 @@ describe.skipIf(!TEST_DATABASE_URL)("admin orders", () => {
   it("exports the filtered orders as CSV, oldest first, with refunds netted and formula-looking cells defused", async () => {
     const [o] = await db.select({ id: schema.orders.id }).from(schema.orders).where(eq(schema.orders.number, third));
     await db.insert(schema.refunds).values({ orderId: o.id, amount: 500, reason: "damage" });
+    // A phone typed without hyphens and a tracking number with a leading 0: both would lose the 0 as bare digits.
+    await db.update(schema.orders).set({ phone: "09012345678", trackingNumber: "001234567890" }).where(eq(schema.orders.number, second));
     const res = await exportCsv(new Request("https://admin.astrobakes.xyz/admin/orders/export?drop=drop-03"));
     expect(res.headers.get("content-type")).toBe("text/csv; charset=utf-8");
     expect(res.headers.get("content-disposition")).toMatch(/^attachment; filename="astro-bakes-orders-drop-03-\d{4}-\d{2}-\d{2}\.csv"$/);
@@ -125,9 +130,19 @@ describe.skipIf(!TEST_DATABASE_URL)("admin orders", () => {
     expect(lines).toHaveLength(4);
     expect(lines[0]).toBe("Order,Drop,Placed (JST),Paid (JST),Status,Customer,Email,Recipient,Phone,Address,Time slot,Boxes,Box count,Gift message,Subtotal,Shipping,Total,Refunded,Net,Payment,Shipped (JST),Tracking");
     expect(lines[1].startsWith(`${first},Drop 03,`)).toBe(true);
+    expect(lines[1]).toContain(",090-1234-5678,");
     expect(lines[2]).toContain(",'=SUM(A1),"); // a recipient that looks like a formula
+    expect(lines[2]).toContain(',"=""09012345678""",');
+    expect(lines[2].endsWith(',"=""001234567890"""')).toBe(true);
     expect(lines[3]).toMatch(new RegExp(`^${third},.*,1500,0,1500,500,1000,card,,$`));
     const none = await (await exportCsv(new Request("https://admin.astrobakes.xyz/admin/orders/export?state=cancelled"))).text();
     expect(none.trimEnd().split("\r\n")).toHaveLength(1);
+  });
+
+  it("sends a page that has run out (its orders changed state) to the last page there is, keeping the filters", async () => {
+    const visit = (sp: Record<string, string>) => OrdersPage({ searchParams: Promise.resolve(sp) }).then(() => null, (e: { to?: string }) => e.to ?? Promise.reject(e));
+    expect(await visit({ state: "paid", page: "2" })).toBe("/admin/orders?state=paid");
+    expect(await visit({ drop: "drop-04", q: "hanako", page: "3" })).toBe("/admin/orders?drop=drop-04&q=hanako");
+    expect(await visit({ state: "paid" })).toBeNull();
   });
 });

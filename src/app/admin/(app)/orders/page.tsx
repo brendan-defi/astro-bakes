@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { OrderStatePill } from "@/components/admin/OrderStatePill";
 import { requireAdmin } from "@/lib/admin";
 import { fmtDateTime } from "@/lib/format";
@@ -18,6 +19,8 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
   const filters = parseOrderFilters(await searchParams);
   const [{ rows, total }, dropOptions] = await Promise.all([listOrders(filters), dropFilterOptions()]);
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  // A page that existed when its link was made runs out as orders change state; show the last one there is.
+  if (filters.page > pages) redirect(`/admin/orders${filterQuery(filters, { page: pages })}`);
   const filtered = !!(filters.drop || filters.state || filters.q);
   return (
     <>
@@ -25,7 +28,8 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
         <h1 className={`display ${s.pageTitle}`}>Orders</h1>
         <a href={`/admin/orders/export${filterQuery(filters, { page: 1 })}`} className={`btn btn-secondary ${s.btnSm}`} download>Export CSV</a>
       </div>
-      <form method="get" className={s.filterBar} role="search" aria-label="Filter orders">
+      {/* Keyed by the applied filters: Clear and Back are client navigations, and React would otherwise keep the old choices in the fields. */}
+      <form key={filterQuery(filters, { page: 1 })} method="get" className={s.filterBar} role="search" aria-label="Filter orders">
         <label>
           <span className="label">Drop</span>
           <select name="drop" className="input" defaultValue={filters.drop ?? ""}>

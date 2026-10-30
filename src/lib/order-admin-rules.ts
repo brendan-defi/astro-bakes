@@ -148,18 +148,34 @@ export function buildTimeline(o: TimelineSource): TimelineEntry[] {
 
 // ---------------------------------------------------------------- CSV
 
+/** An identifier that must stay text, like a phone or tracking number, however much it looks like a number. */
+export interface TextCell {
+  text: string;
+}
+export const textCell = (text: string | null | undefined): TextCell => ({ text: text ?? "" });
+
+export type CsvValue = string | number | TextCell | null | undefined;
+
 /**
  * One CSV cell. Quoted when it holds a comma, quote or line break; and a cell a spreadsheet would read as a formula
  * (starting =, +, -, @, tab or carriage return) gets a leading apostrophe, so a customer's name can't run in Excel.
+ *
+ * Excel and Numbers turn a cell of digits into a number, so 09012345678 opens as 9012345678 (checked in both). A text
+ * cell made only of digits is written as ="09012345678", the one form both keep as text. Only digits go inside it, so
+ * nothing else can run; other CSV readers see the formula as written.
  */
-export function csvCell(v: string | number | null | undefined): string {
+export function csvCell(v: CsvValue): string {
   if (v === null || v === undefined) return "";
+  if (typeof v === "object") {
+    if (/^\d+$/.test(v.text)) return `"=""${v.text}"""`;
+    v = v.text;
+  }
   let s = String(v);
   if (typeof v === "string" && /^[=+\-@\t\r]/.test(s)) s = `'${s}`;
   return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
 /** A whole CSV file: a UTF-8 byte-order mark (so Excel in Japan reads the kana and kanji right), CRLF line ends. */
-export function toCsv(rows: (string | number | null | undefined)[][]): string {
+export function toCsv(rows: CsvValue[][]): string {
   return "﻿" + rows.map((r) => r.map(csvCell).join(",")).join("\r\n") + "\r\n";
 }
