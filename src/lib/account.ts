@@ -166,10 +166,14 @@ export async function changeTimeSlot(customerId: string, number: string, slot: u
 
 // ---------------------------------------------------------------- confirmation email (PRD 3.6)
 
-/** Sent once an order is paid; called after the placing transaction commits (and from the Stripe webhook later). */
-export async function sendOrderConfirmation(orderId: string): Promise<void> {
+/**
+ * Sent once an order is paid; called after the placing transaction commits (and from the Stripe webhook later). The
+ * admin can send it again (`resend`), with the order's details as they are now: that one gets a key of its own, since
+ * Resend would quietly drop a repeat of the first key within a day. False if it couldn't be sent.
+ */
+export async function sendOrderConfirmation(orderId: string, opts: { resend?: boolean } = {}): Promise<boolean> {
   const o = await getDb().query.orders.findFirst({ where: eq(orders.id, orderId), with: { ...withItems, customer: { columns: { email: true } } } });
-  if (!o) return;
+  if (!o) return false;
   const locale = o.locale;
   const offset = await arrivalOffsetDays();
   const data: OrderEmailData = {
@@ -186,7 +190,9 @@ export async function sendOrderConfirmation(orderId: string): Promise<void> {
     giftMessage: o.giftMessage,
     timeSlot: o.deliveryTimeSlot,
   };
-  await sendEmail({ ...orderConfirmationEmail({ locale, order: data }), to: o.customer.email, type: "order_confirmation", idempotencyKey: `order-confirmation/${o.id}`, customerId: o.customerId, orderId: o.id });
+  const idempotencyKey = opts.resend ? `order-confirmation/${o.id}/resend-${Date.now()}` : `order-confirmation/${o.id}`;
+  const r = await sendEmail({ ...orderConfirmationEmail({ locale, order: data }), to: o.customer.email, type: "order_confirmation", idempotencyKey, customerId: o.customerId, orderId: o.id });
+  return r.ok;
 }
 
 // ---------------------------------------------------------------- profile (PRD 2.3, 2.4, 2.6)

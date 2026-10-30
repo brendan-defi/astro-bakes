@@ -133,14 +133,14 @@ export function sheetStanding(d: { state: DropState; closeAt: Date }, open: Open
 // ---------------------------------------------------------------- packing (PRD 4.6)
 
 /**
- * Orders are packed once the drop has closed. Before that a customer may still cancel or change their delivery
+ * Orders are packed (and shipped) once the drop has closed. Before that a customer may still cancel or change their delivery
  * time, and both stop once an order is packed, so packing early would quietly take those away (D21, D22).
  */
 export const canPack = (dropState: DropState) => dropState === "closed" || dropState === "baking" || dropState === "shipped" || dropState === "complete";
 
-/** Why packing isn't available on a drop in this state, in the admin's words. */
-export function packRefusal(dropState: DropState): string {
-  if (dropState === "open") return "The drop is still open: customers can cancel or change their delivery time until it closes, so pack once it has closed.";
+/** Why packing (or shipping, which ends the same chances) isn't available on a drop in this state, in the admin's words. */
+export function packRefusal(dropState: DropState, doing: "pack" | "ship" = "pack"): string {
+  if (dropState === "open") return `The drop is still open: customers can cancel or change their delivery time until it closes, so ${doing} once it has closed.`;
   if (dropState === "cancelled") return "The drop is cancelled.";
   return "The drop hasn't opened yet.";
 }

@@ -194,6 +194,56 @@ export function orderCancelledEmail(opts: { locale: Locale; number: string; tota
   return { subject, html: layout("en", subject, body), text: `${opening}\n${refundLine}\n${closing}` };
 }
 
+export interface ShippedEmailData {
+  number: string;
+  /** As Japan Post prints it: 1234-5678-9012. */
+  tracking: string;
+  trackingUrl: string;
+  /** The expected arrival, formatted in the customer's locale. */
+  arriveDate: string;
+  timeSlot: DeliverySlot;
+  /** A correction: the number sent before was wrong. */
+  corrected?: boolean;
+}
+
+/** Sent when the shop marks an order shipped (PRD 3.7, 5.3): the tracking number and Japan Post's link. */
+export function orderShippedEmail(opts: { locale: Locale; order: ShippedEmailData }): Email {
+  const { locale, order: o } = opts;
+  // "No preference" isn't a time, so the arrival is just the day.
+  const slot = o.timeSlot === "none" ? null : getStrings(locale).deliverySlots[o.timeSlot];
+  const orderUrl = `${SITE}/${locale}/account/orders/${encodeURIComponent(o.number)}`;
+  const button = (label: string) => `<p style="margin:0 0 18px"><a href="${esc(o.trackingUrl)}" style="display:inline-block;padding:14px 22px;background:#FF9CCB;color:#2A1B5E;border:2px solid #2A1B5E;border-radius:999px;font-weight:700;text-decoration:none">${label}</a></p>`;
+  const number = `<p style="margin:0 0 14px;font-size:20px;font-weight:900;letter-spacing:0.04em">${esc(o.tracking)}</p>`;
+  if (locale === "ja") {
+    const subject = o.corrected ? `【訂正】お問い合わせ番号のお知らせ（${o.number}）` : `ご注文の品を発送しました（${o.number}）`;
+    const opening = o.corrected ? `ご注文 ${o.number} のお問い合わせ番号に誤りがありました。申し訳ございません。正しい番号は次のとおりです。` : `ご注文 ${o.number} を日本郵便で発送しました。`;
+    const when = `${o.arriveDate}${slot ? `（${slot}）` : ""}`;
+    const arrive = `お届け予定は <strong>${esc(when)}</strong> です。`;
+    const arriveText = `お届け予定: ${when}`;
+    const body = `<p style="margin:0 0 14px">${esc(opening)}</p>
+<p style="margin:0 0 4px;font-size:14px">お問い合わせ番号</p>
+${number}
+${button("配送状況を確認する")}
+<p style="margin:0 0 14px">${arrive}</p>
+<p style="margin:0"><a href="${esc(orderUrl)}" style="font-weight:700">注文を見る</a></p>`;
+    const text = `${opening}\n\nお問い合わせ番号: ${o.tracking}\n配送状況: ${o.trackingUrl}\n\n${arriveText}\n\n注文を見る: ${orderUrl}`;
+    return { subject, html: layout("ja", subject, body), text };
+  }
+  const subject = o.corrected ? `Corrected tracking number for order ${o.number}` : `Your Astro Bakes box is on its way (${o.number})`;
+  const opening = o.corrected ? `Sorry: the tracking number we sent for order ${o.number} was wrong. Here's the right one.` : `Order ${o.number} has left the kitchen and is on its way with Japan Post.`;
+  const when = `${o.arriveDate}${slot ? `, ${slot}` : ""}`;
+  const arrive = `It should arrive <strong>${esc(when)}</strong>.`;
+  const arriveText = `It should arrive ${when}.`;
+  const body = `<p style="margin:0 0 14px">${esc(opening)}</p>
+<p style="margin:0 0 4px;font-size:14px">Tracking number</p>
+${number}
+${button("Track it with Japan Post")}
+<p style="margin:0 0 14px">${arrive}</p>
+<p style="margin:0"><a href="${esc(orderUrl)}" style="font-weight:700">View your order</a></p>`;
+  const text = `${opening}\n\nTracking number: ${o.tracking}\nTrack it: ${o.trackingUrl}\n\n${arriveText}\n\nView your order: ${orderUrl}`;
+  return { subject, html: layout("en", subject, body), text };
+}
+
 /**
  * To the owner when someone sends the custom-orders form. Always English (it's
  * for the owner, and it says which language the customer wrote in); the send sets
