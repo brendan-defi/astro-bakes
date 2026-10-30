@@ -63,7 +63,12 @@ export interface ItemValue {
   nameJa: string;
   productionUnit: string;
   unitsPerProductionUnit: number;
+  /** Spare production units the production sheet adds when the item is needed (PRD 4.5). */
+  bakeBuffer: number;
 }
+
+/** The most spare units an item can ask for: more than this is a typo, not a buffer. */
+export const BAKE_BUFFER_MAX = 20;
 
 export function validateItem(raw: Raw, { creating }: { creating: boolean }): Validation<ItemValue> {
   const errors: Errors = {};
@@ -73,6 +78,8 @@ export function validateItem(raw: Raw, { creating }: { creating: boolean }): Val
     nameJa: text(errors, raw, "nameJa", { max: 80, required: true }),
     productionUnit: text(errors, raw, "productionUnit", { max: 30, required: true }),
     unitsPerProductionUnit: int(errors, raw, "unitsPerProductionUnit", 1, 100),
+    // Left out (an older form, a script), it's no spare rather than an error.
+    bakeBuffer: raw.bakeBuffer === undefined || raw.bakeBuffer === "" ? 0 : int(errors, raw, "bakeBuffer", 0, BAKE_BUFFER_MAX),
   };
   return Object.keys(errors).length ? { ok: false, errors } : { ok: true, value };
 }

@@ -182,3 +182,34 @@
 .order_shipped, .order_complete { background: var(--lilac-soft); }
 .order_expired, .order_cancelled { background: var(--white); color: var(--link-hover); border-color: var(--link-hover); }
 .order_cancelled { text-decoration: line-through; }
+
+/* ---------- Fulfilment: production sheet, pack list ---------- */
+.printSub { margin-top: 4px; font-size: 15px; font-weight: 700; color: var(--link-hover); }
+.bannerWarn { margin-top: 12px; background: var(--butter-soft); font-weight: 700; }
+.sheetFacts { grid-template-columns: 110px minmax(0, 1fr) 110px minmax(0, 1fr); margin: 16px 0 24px; }
+.sheetSection { display: flex; flex-direction: column; gap: 10px; margin-top: 24px; }
+.sheetNarrow { max-width: 480px; }
+.toBake { font-size: 17px; font-weight: 900; white-space: nowrap; }
+.packCell { width: 1%; white-space: nowrap; }
+.packBox { width: 24px; height: 24px; margin: 0; accent-color: var(--ink); cursor: pointer; }
+.packBox:disabled { cursor: not-allowed; }
+.packDone td { background: var(--ground); }
+.packLines { margin: 0; padding: 0; list-style: none; }
+.packGift { background: var(--butter-soft); font-weight: 700; white-space: pre-wrap; }
+.packTable td:last-child { max-width: 320px; }
+
+/* Printing a sheet or the list: the page only, on plain paper. */
+@media print {
+  .shell { display: block; min-width: 0; }
+  .side, .noPrint { display: none !important; }
+  .main { padding: 0; max-width: none; }
+  .pageHead { margin-bottom: 12px; }
+  .banner { padding: 6px 0; border: 0; }
+  .table { border: 1px solid #000; border-radius: 0; font-size: 12px; }
+  .table th { background: none; }
+  .table th, .table td { border-bottom: 1px solid #999; }
+  .table tbody tr { break-inside: avoid; }
+  .table tbody tr:hover td { background: none; }
+  .packDone td { background: none; }
+  .packGift { background: none; outline: 2px solid #000; outline-offset: -2px; }
+}

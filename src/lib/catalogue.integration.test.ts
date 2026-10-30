@@ -43,7 +43,11 @@ describe.skipIf(!TEST_DATABASE_URL)("catalogue editor", () => {
     expect(await saveItemAction({ slug: "brownie", nameEn: "Brownie 2", nameJa: "ブラウニー2", productionUnit: "tray", unitsPerProductionUnit: "16" }, null)).toEqual({ ok: false, errors: { slug: "Another item already has this slug." } });
     const edit = await saveItemAction({ slug: "ignored", nameEn: "Fudge brownie", nameJa: "ファッジブラウニー", productionUnit: "tray", unitsPerProductionUnit: "12" }, "brownie");
     expect(edit).toMatchObject({ ok: true, slug: "brownie", value: { slug: "brownie", unitsPerProductionUnit: 12 } });
-    expect(await itemBySlug("brownie")).toMatchObject({ nameEn: "Fudge brownie", unitsPerProductionUnit: 12 });
+    expect(await itemBySlug("brownie")).toMatchObject({ nameEn: "Fudge brownie", unitsPerProductionUnit: 12, bakeBuffer: 0 });
+    // The spare to bake (PRD 4.5) is saved, read back and shown in the list.
+    expect(await saveItemAction({ nameEn: "Fudge brownie", nameJa: "ファッジブラウニー", productionUnit: "tray", unitsPerProductionUnit: "12", bakeBuffer: "1" }, "brownie")).toMatchObject({ ok: true, value: { bakeBuffer: 1 } });
+    expect(await itemBySlug("brownie")).toMatchObject({ bakeBuffer: 1 });
+    expect((await listItems()).find((i) => i.slug === "brownie")).toMatchObject({ bakeBuffer: 1 });
     expect(await itemBySlug("ignored")).toBeNull();
   });
 

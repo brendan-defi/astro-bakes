@@ -13,10 +13,11 @@ interface Draft {
   nameJa: string;
   productionUnit: string;
   unitsPerProductionUnit: string;
+  bakeBuffer: string;
 }
-const ORDER: (keyof Draft)[] = ["slug", "nameEn", "nameJa", "productionUnit", "unitsPerProductionUnit"];
-const toDraft = (v: { slug: string; nameEn: string; nameJa: string; productionUnit: string; unitsPerProductionUnit: number }): Draft => ({ ...v, unitsPerProductionUnit: String(v.unitsPerProductionUnit) });
-const EMPTY: Draft = { slug: "", nameEn: "", nameJa: "", productionUnit: "", unitsPerProductionUnit: "1" };
+const ORDER: (keyof Draft)[] = ["slug", "nameEn", "nameJa", "productionUnit", "unitsPerProductionUnit", "bakeBuffer"];
+const toDraft = (v: { slug: string; nameEn: string; nameJa: string; productionUnit: string; unitsPerProductionUnit: number; bakeBuffer: number }): Draft => ({ ...v, unitsPerProductionUnit: String(v.unitsPerProductionUnit), bakeBuffer: String(v.bakeBuffer) });
+const EMPTY: Draft = { slug: "", nameEn: "", nameJa: "", productionUnit: "", unitsPerProductionUnit: "1", bakeBuffer: "0" };
 
 /**
  * Create or edit an item (PRD 4.3): what the kitchen bakes, and how it's counted. `slug` is null when creating; a new
@@ -85,6 +86,7 @@ export function ItemForm({ slug, initial, created = false }: { slug: string | nu
     ...extra,
   });
   const unitsHelp = "How many go into one of what you bake: 12 slices per cake, 1 cookie per cookie.";
+  const bufferHelp = "Extra to bake on top of what the orders need, in what you bake: 1 more cake so every slice is a clean one. The production sheet adds it only when the item is needed.";
   const slugHelp = creating ? "Used in links and carts; it can't change once the item is saved." : "Fixed: carts and links use it.";
 
   return (
@@ -106,6 +108,12 @@ export function ItemForm({ slug, initial, created = false }: { slug: string | nu
             </FieldRow>
             <FieldRow id="item-unitsPerProductionUnit" label="Per baked unit *" help={unitsHelp} error={errors.unitsPerProductionUnit}>
               <input {...input("unitsPerProductionUnit", { inputMode: "numeric" }, unitsHelp)} className={`input ${s.numInput}`} />
+            </FieldRow>
+            <FieldRow id="item-bakeBuffer" label="Spare to bake" help={bufferHelp} error={errors.bakeBuffer}>
+              <span className={s.withUnit}>
+                <input {...input("bakeBuffer", { inputMode: "numeric" }, bufferHelp)} className={`input ${s.numInput}`} />
+                {draft.productionUnit.trim() || "baked units"}
+              </span>
             </FieldRow>
           </div>
         </section>

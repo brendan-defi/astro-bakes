@@ -22,6 +22,7 @@ export interface ItemSummary {
   nameJa: string | null;
   productionUnit: string;
   unitsPerProductionUnit: number;
+  bakeBuffer: number;
   /** How many boxes use it. */
   boxes: number;
 }
@@ -33,18 +34,18 @@ export async function listItems(): Promise<ItemSummary[]> {
     db.select({ itemId: boxItems.itemId, n: count() }).from(boxItems).groupBy(boxItems.itemId),
   ]);
   const uses = new Map(used.map((u) => [u.itemId, u.n]));
-  return rows.map((r) => ({ slug: r.slug, nameEn: r.nameEn, nameJa: r.nameJa, productionUnit: r.productionUnit, unitsPerProductionUnit: r.unitsPerProductionUnit, boxes: uses.get(r.id) ?? 0 }));
+  return rows.map((r) => ({ slug: r.slug, nameEn: r.nameEn, nameJa: r.nameJa, productionUnit: r.productionUnit, unitsPerProductionUnit: r.unitsPerProductionUnit, bakeBuffer: r.bakeBuffer, boxes: uses.get(r.id) ?? 0 }));
 }
 
 export async function itemBySlug(slug: string): Promise<Omit<ItemValue, "slug"> & { slug: string } | null> {
   const r = await getDb().query.items.findFirst({ where: eq(items.slug, slug) });
-  return r ? { slug: r.slug, nameEn: r.nameEn, nameJa: r.nameJa ?? "", productionUnit: r.productionUnit, unitsPerProductionUnit: r.unitsPerProductionUnit } : null;
+  return r ? { slug: r.slug, nameEn: r.nameEn, nameJa: r.nameJa ?? "", productionUnit: r.productionUnit, unitsPerProductionUnit: r.unitsPerProductionUnit, bakeBuffer: r.bakeBuffer } : null;
 }
 
 /** Create (no `slug`) or update the item with that slug; a slug never changes once created. */
 export async function saveItem(value: ItemValue, slug: string | null): Promise<Saved> {
   const db = getDb();
-  const fields = { nameEn: value.nameEn, nameJa: value.nameJa, productionUnit: value.productionUnit, unitsPerProductionUnit: value.unitsPerProductionUnit };
+  const fields = { nameEn: value.nameEn, nameJa: value.nameJa, productionUnit: value.productionUnit, unitsPerProductionUnit: value.unitsPerProductionUnit, bakeBuffer: value.bakeBuffer };
   if (slug === null) {
     try {
       await db.insert(items).values({ slug: value.slug, ...fields });

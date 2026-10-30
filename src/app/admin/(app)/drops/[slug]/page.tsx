@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { DropEditor } from "@/components/admin/DropEditor";
 import { DropStatePill } from "@/components/admin/DropStatePill";
@@ -30,6 +31,8 @@ export default async function EditDropPage({ params, searchParams }: { params: P
         <h1 className={`display ${s.pageTitle}`}>{drop.nameEn}</h1>
         <div className={s.headActions}>
           <DropStatePill state={drop.state} />
+          <Link href={`/admin/drops/${drop.slug}/production`} className={`btn btn-secondary ${s.btnSm}`}>Production sheet</Link>
+          <Link href={`/admin/drops/${drop.slug}/packing`} className={`btn btn-secondary ${s.btnSm}`}>Pack list</Link>
           <form action={duplicateDropAction.bind(null, drop.slug)}>
             <button type="submit" className={`btn btn-secondary ${s.btnSm}`}>Duplicate</button>
           </form>
