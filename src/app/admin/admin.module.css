@@ -167,6 +167,15 @@
 .tlNote { padding: 6px 10px; border-radius: 10px; background: var(--pink-soft); white-space: pre-wrap; }
 .noteForm { display: flex; flex-direction: column; gap: 6px; border-top: 1.5px solid var(--lilac-tint); padding-top: 14px; }
 .noteForm button { align-self: flex-start; }
+
+/* Order money actions: cancel & refund, refund without cancelling */
+.moneyActions { display: flex; flex-direction: column; gap: 10px; }
+.moneyForm { display: flex; flex-direction: column; gap: 12px; padding: 14px 16px; border: var(--border-thin); border-radius: var(--radius-input); background: var(--butter-soft); }
+.moneyForm .confirmText { flex: none; }
+.moneyForm .checkRow { padding-top: 0; }
+.moneyRow { display: flex; flex-wrap: wrap; gap: 12px 16px; }
+.moneyRow > .field { flex: 1 1 180px; }
+.moneyForm textarea { resize: vertical; }
 .order_pending_payment { background: var(--butter-soft); }
 .order_paid { background: var(--ok-green-bg); color: var(--ok-green); border-color: var(--ok-green); }
 .order_packed { background: var(--aqua-soft); }

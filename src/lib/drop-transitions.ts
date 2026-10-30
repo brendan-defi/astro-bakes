@@ -7,10 +7,10 @@ import { effectiveState, type DropState, type DropTimeline } from "./data";
  * reads back as the target state under the same clock, so the shop and the admin never disagree.
  *
  * D9 (2026-10-23): a sold-out drop stays open until its closing time; there is no automatic early close.
- * Cancel drop comes with the orders-money PR, since it refunds every order.
+ * Cancel drop also cancels and refunds every order, so it runs through cancelDrop rather than transitionDrop.
  */
-export type DropAction = "schedule" | "unschedule" | "open" | "close" | "reopen" | "baking" | "shipped" | "complete";
-export const DROP_ACTIONS = ["schedule", "unschedule", "open", "close", "reopen", "baking", "shipped", "complete"] as const satisfies readonly DropAction[];
+export type DropAction = "schedule" | "unschedule" | "open" | "close" | "reopen" | "baking" | "shipped" | "complete" | "cancel";
+export const DROP_ACTIONS = ["schedule", "unschedule", "open", "close", "reopen", "baking", "shipped", "complete", "cancel"] as const satisfies readonly DropAction[];
 export const isDropAction = (s: unknown): s is DropAction => typeof s === "string" && (DROP_ACTIONS as readonly string[]).includes(s);
 
 export interface ActionInfo {
@@ -33,6 +33,7 @@ export const ACTIONS: Record<DropAction, ActionInfo> = {
   baking: { label: "Start baking", from: ["closed"], to: "baking", effect: "Customers see their orders as baking.", confirm: false },
   shipped: { label: "Mark shipped", from: ["baking"], to: "shipped", effect: "The whole drop has left the kitchen. Orders get their tracking one by one (fulfilment).", confirm: false },
   complete: { label: "Mark complete", from: ["shipped", "complete"], to: "complete", effect: "Every shipped order shows as delivered, and the drop leaves the homepage.", confirm: false },
+  cancel: { label: "Cancel drop", from: ["draft", "scheduled", "open", "closed"], to: "cancelled", effect: "Takes it off the shop for good and cancels every order on it, refunding each in full. This can't be undone.", confirm: true },
 };
 
 /**
@@ -107,5 +108,7 @@ export function transition(drop: DropTimeline & { number: number }, action: Drop
       return { ok: true, patch: { state: "shipped" } };
     case "complete":
       return { ok: true, patch: { state: "complete" } };
+    case "cancel":
+      return { ok: true, patch: { state: "cancelled" } };
   }
 }

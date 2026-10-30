@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { OrderMoneyActions } from "@/components/admin/OrderMoneyActions";
 import { OrderNoteForm } from "@/components/admin/OrderNoteForm";
 import { OrderStatePill } from "@/components/admin/OrderStatePill";
 import { requireAdmin } from "@/lib/admin";
@@ -94,6 +95,13 @@ export default async function OrderPage({ params }: { params: Promise<{ number: 
               {o.payment.intent && (<><dt>Stripe</dt><dd className={s.mono}>{o.payment.intent}</dd></>)}
             </dl>
           </section>
+
+          {o.payment.paidAt && (
+            <section aria-labelledby="o-money" className={`panel ${s.formSection}`}>
+              <h2 id="o-money" className={s.sectionTitle}>Cancel or refund</h2>
+              <OrderMoneyActions number={o.number} canCancel={o.canCancel} refundable={o.refundable} refunded={o.refunded} dropOpen={o.drop.state === "open"} email={o.customer.email} />
+            </section>
+          )}
         </div>
 
         <aside aria-labelledby="o-timeline" className={`panel ${s.formSection} ${s.detailSide}`}>

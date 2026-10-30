@@ -1,13 +1,14 @@
 import "server-only";
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { getDb } from "@/db";
-import { addresses, customers, dropBoxes, drops, inventoryHolds, orders, refunds } from "@/db/schema";
+import { addresses, customers, drops, orders } from "@/db/schema";
 import { addressLine } from "./address";
 import { arrivalDate, effectiveState, type Box, type Locale } from "./data";
 import { validateDelivery, type DeliveryInput } from "./checkout-rules";
 import { sendEmail } from "./email";
-import { orderCancelledEmail, orderConfirmationEmail, type OrderEmailData } from "./email-templates";
+import { orderConfirmationEmail, type OrderEmailData } from "./email-templates";
 import { fmtDate, fmtDateTime } from "./format";
+import { cancelOrderCore, sendCancellationEmail } from "./order-money";
 import { canCancel, canChangeSlot, orderStatus, type OrderStatus } from "./order-status";
 import { isDeliverySlot, type DeliverySlot } from "./delivery-slots";
 import { loadDrops } from "./drops";
@@ -100,7 +101,8 @@ export async function loadOrder(customerId: string, number: string, locale: Loca
   const open = allDrops.find((d) => effectiveState(d, now) === "open") ?? null;
   const onSale = open ? new Set(open.boxes.map((b) => b.id)) : null;
   const reorder = open && onSale && summary.lines.every((l) => onSale.has(l.slug)) ? { dropId: open.id, items: Object.fromEntries(summary.lines.map((l) => [l.slug, l.qty])), boxes: open.boxes } : null;
-  const refund = o.refunds[0] ? { amount: o.refunds[0].amount, issued: !!o.refunds[0].issuedAt } : null;
+  // Every refund together: a cancellation's, and any the shop made by hand (damage, non-delivery).
+  const refund = o.refunds.length ? { amount: o.refunds.reduce((n, r) => n + r.amount, 0), issued: o.refunds.every((r) => r.issuedAt) } : null;
   return {
     ...summary,
     dropSlug: o.drop.slug,
@@ -126,38 +128,20 @@ export async function loadOrder(customerId: string, number: string, locale: Loca
 
 export type CancelResult = { ok: true; refunded: boolean } | { ok: false; error: "not_found" | "closed" | "not_cancellable" };
 
-/** Self-serve cancellation: full refund owed, stock returned, email sent. Only while the drop is open. */
+/** Self-serve cancellation: the rest of the payment refunded (owed until Stripe), stock returned, email sent. Only while the drop is open. */
 export async function cancelOrder(customerId: string, number: string): Promise<CancelResult> {
-  const db = getDb();
-  const result = await db.transaction(async (tx) => {
+  const result = await getDb().transaction(async (tx) => {
     const [o] = await tx.select().from(orders).where(and(eq(orders.customerId, customerId), eq(orders.number, number))).for("update");
     if (!o) return { ok: false as const, error: "not_found" as const };
     const [drop] = await tx.select().from(drops).where(eq(drops.id, o.dropId)).for("update");
     const dropState = liveState(drop);
     if (!canCancel(o.state, dropState)) return { ok: false as const, error: dropState === "open" ? ("not_cancellable" as const) : ("closed" as const) };
-    const now = new Date();
-    const wasPaid = o.state === "paid";
-    // Stock goes back: sold units for a paid order, held units for one still awaiting payment.
-    if (wasPaid) {
-      const items = await tx.query.orderItems.findMany({ where: (t, { eq }) => eq(t.orderId, o.id) });
-      for (const it of items) {
-        await tx.execute(sql`select id from ${dropBoxes} where id = ${it.dropBoxId} for update`);
-        await tx.update(dropBoxes).set({ soldQty: sql`greatest(0, ${dropBoxes.soldQty} - ${it.qty})` }).where(eq(dropBoxes.id, it.dropBoxId));
-      }
-      // The refund itself is issued through Stripe (payment PR); until then it is recorded as owed.
-      await tx.insert(refunds).values({ orderId: o.id, amount: o.total, reason: "customer_cancelled" });
-    } else {
-      await tx.delete(inventoryHolds).where(eq(inventoryHolds.orderId, o.id));
-    }
-    await tx.update(orders).set({ state: "cancelled", cancelledAt: now, updatedAt: now }).where(eq(orders.id, o.id));
-    return { ok: true as const, refunded: wasPaid, orderId: o.id, total: o.total, locale: o.locale };
+    const { refund } = await cancelOrderCore(tx, o, { source: "customer" });
+    return { ok: true as const, refund, orderId: o.id };
   });
   if (!result.ok) return result;
-  const customer = await db.query.customers.findFirst({ where: eq(customers.id, customerId), columns: { email: true } });
-  if (customer) {
-    await sendEmail({ ...orderCancelledEmail({ locale: result.locale, number, total: result.total, refunded: result.refunded }), to: customer.email, type: "order_cancelled", idempotencyKey: `order-cancelled/${result.orderId}`, customerId, orderId: result.orderId });
-  }
-  return { ok: true, refunded: result.refunded };
+  await sendCancellationEmail(result.orderId, { refund: result.refund, byShop: false });
+  return { ok: true, refunded: result.refund !== null };
 }
 
 // ---------------------------------------------------------------- delivery time slot (D21)

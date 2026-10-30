@@ -2,7 +2,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DropLifecycle } from "./DropLifecycle";
 
-const actions = vi.hoisted(() => ({ transitionDropAction: vi.fn(), saveDropAction: vi.fn(), duplicateDropAction: vi.fn() }));
+const actions = vi.hoisted(() => ({ transitionDropAction: vi.fn(), cancelDropAction: vi.fn(), saveDropAction: vi.fn(), duplicateDropAction: vi.fn() }));
 vi.mock("@/app/admin/(app)/drops/actions", () => actions);
 const router = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => router }));
@@ -12,12 +12,12 @@ const mount = (state: Parameters<typeof DropLifecycle>[0]["state"], stored = sta
 const button = (name: string) => screen.getByRole("button", { name });
 
 describe("DropLifecycle", () => {
-  beforeEach(() => { actions.transitionDropAction.mockReset(); router.refresh.mockReset(); });
+  beforeEach(() => { actions.transitionDropAction.mockReset(); actions.cancelDropAction.mockReset(); router.refresh.mockReset(); });
   afterEach(cleanup);
 
   it("offers the moves the state allows, each explained", () => {
     mount("draft");
-    expect(screen.getAllByRole("button").map((b) => b.textContent)).toEqual(["Schedule", "Open now"]);
+    expect(screen.getAllByRole("button").map((b) => b.textContent)).toEqual(["Schedule", "Open now", "Cancel drop"]);
     expect(screen.getByText(/Schedule: The shop shows it as coming up/)).toBeTruthy();
     cleanup();
     mount("complete");
@@ -69,6 +69,43 @@ describe("DropLifecycle", () => {
     expect(screen.getByRole("group")).toBeTruthy(); // the question stays, so the owner can cancel or try again
   });
 
+  it("Cancel drop says what it will cancel and refund, and has to be typed out", async () => {
+    actions.cancelDropAction.mockResolvedValue({ ok: true, cancelled: 3, refund: 4500, emailed: 2, emailFailed: 1 });
+    render(<DropLifecycle slug="drop-05" number={5} state="open" storedState="open" reopenDefault="2026-11-11T21:00" cancelImpact={{ orders: 3, refund: 4500 }} />);
+    fireEvent.click(button("Cancel drop"));
+    expect(screen.getByRole("group", { name: /Cancel drop: Drop 05\?/ }).textContent).toMatch(/refunding each in full\. This can't be undone\. That's 3 orders and ¥4,500 of refunds, recorded as owed \(Stripe isn't connected yet, so no money moves\)\. Each customer is emailed/);
+    const yes = button("Yes, cancel drop") as HTMLButtonElement;
+    expect(yes.disabled).toBe(true);
+    fireEvent.change(screen.getByLabelText("Type “cancel” to confirm"), { target: { value: "cancl" } });
+    expect(yes.disabled).toBe(true);
+    fireEvent.change(screen.getByLabelText("Type “cancel” to confirm"), { target: { value: " Cancel " } });
+    expect(yes.disabled).toBe(false);
+    fireEvent.click(yes);
+    await waitFor(() => expect(screen.getByRole("status").textContent).toBe("Drop 05 is cancelled: 3 orders cancelled, ¥4,500 of refunds recorded as owed, 2 customers emailed; 1 email failed (see each order's timeline)."));
+    expect(actions.cancelDropAction).toHaveBeenCalledWith("drop-05", 3);
+    expect(actions.transitionDropAction).not.toHaveBeenCalled();
+    expect(router.refresh).toHaveBeenCalled();
+  });
+
+  it("Cancel drop on a drop with no orders says so, and backing out leaves it", async () => {
+    actions.cancelDropAction.mockResolvedValue({ ok: false, error: "The drop has 1 order to cancel now, not the 0 shown. Check them, then try again." });
+    mount("draft");
+    fireEvent.click(button("Cancel drop"));
+    expect(screen.getByRole("group").textContent).toMatch(/It has no orders\./);
+    fireEvent.click(button("Keep the drop"));
+    expect(screen.queryByRole("group")).toBeNull();
+    fireEvent.click(button("Cancel drop"));
+    fireEvent.change(screen.getByLabelText("Type “cancel” to confirm"), { target: { value: "cancel" } });
+    fireEvent.click(button("Keep the drop"));
+    fireEvent.click(button("Cancel drop"));
+    expect((screen.getByLabelText("Type “cancel” to confirm") as HTMLInputElement).value).toBe(""); // starts empty each time
+    fireEvent.change(screen.getByLabelText("Type “cancel” to confirm"), { target: { value: "cancel" } });
+    fireEvent.click(button("Yes, cancel drop"));
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toMatch(/^The drop has 1 order to cancel now/));
+    expect(actions.cancelDropAction).toHaveBeenCalledWith("drop-05", 0);
+    expect(router.refresh).not.toHaveBeenCalled();
+  });
+
   it("keeps Mark complete for a drop the clock finished but that isn't stored complete", () => {
     mount("complete", "shipped");
     expect(screen.getAllByRole("button").map((b) => b.textContent)).toEqual(["Mark complete"]);
@@ -87,7 +124,7 @@ describe("DropLifecycle held back", () => {
 });
 
 describe("DropLifecycle guards the confirmation too", () => {
-  beforeEach(() => { actions.transitionDropAction.mockReset(); router.refresh.mockReset(); });
+  beforeEach(() => { actions.transitionDropAction.mockReset(); actions.cancelDropAction.mockReset(); router.refresh.mockReset(); });
   afterEach(cleanup);
   it("won't run a confirmed action once the form has become dirty, and says so", () => {
     const view = (blocked?: string) => <DropLifecycle slug="drop-05" number={5} state="scheduled" storedState="scheduled" reopenDefault="2026-11-11T21:00" blocked={blocked} />;

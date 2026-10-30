@@ -5,6 +5,8 @@ import { boxes, dropBoxes, drops, inventoryHolds, orderItems, orders } from "@/d
 import { arrivalDate, effectiveState, type DropState } from "./data";
 import { dropSlug, editable, nextMonth, sameEditability, type DropContext, type DropValue, type Errors } from "./drop-rules";
 import { clashMessage, transition, windowClash, type DropAction, type OtherDrop } from "./drop-transitions";
+import { refundable } from "./order-admin-rules";
+import { cancelOrderCore, sendCancellationEmail } from "./order-money";
 import { arrivalOffsetDays } from "./settings";
 
 /**
@@ -19,6 +21,8 @@ import { arrivalOffsetDays } from "./settings";
 type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 /** Orders that count as sold: paid and onwards, not pending, expired or cancelled. */
 const SOLD_STATES = ["paid", "packed", "shipped", "complete"] as const;
+/** Orders that cancelling their drop cancels: awaiting payment, paid, or packed. */
+const OPEN_ORDER_STATES = ["pending_payment", "paid", "packed"] as const;
 
 const isUniqueViolation = (e: unknown) => (e as { code?: string })?.code === "23505" || (e as { cause?: { code?: string } })?.cause?.code === "23505";
 
@@ -284,6 +288,7 @@ export type Transitioned = { ok: true; state: DropState } | { ok: false; error: 
  * order, then its drop), and delivers exactly the orders it locked, so the two can't deadlock.
  */
 export async function transitionDrop(slug: string, action: DropAction, input: { closeAt?: Date | null } = {}, now = new Date()): Promise<Transitioned> {
+  if (action === "cancel") return { ok: false, error: "Cancelling a drop cancels its orders too. Use Cancel drop." };
   const offset = await arrivalOffsetDays();
   return getDb().transaction(async (tx) => {
     await lockLifecycle(tx);
@@ -301,6 +306,71 @@ export async function transitionDrop(slug: string, action: DropAction, input: { 
     if (action === "complete" && shipped.length) await tx.update(orders).set({ state: "complete", updatedAt: now }).where(inArray(orders.id, shipped.map((o) => o.id)));
     return { ok: true, state: r.patch.state };
   });
+}
+
+export interface CancelImpact {
+  /** Orders Cancel drop would cancel. */
+  orders: number;
+  /** What it would refund: the rest of every paid order's payment. */
+  refund: number;
+}
+
+/** What Cancel drop would do right now, for its confirmation. */
+export async function cancelImpact(slug: string): Promise<CancelImpact> {
+  const rows = await getDb()
+    // The outer column is named with its table: in raw sql Drizzle can write ${orders.id} as a bare "id" (orders-admin.ts).
+    .select({ total: orders.total, paidAt: orders.paidAt, refunded: sql<number>`coalesce((select sum(r.amount) from refunds r where r.order_id = "orders"."id"), 0)::int` })
+    .from(orders)
+    .innerJoin(drops, eq(drops.id, orders.dropId))
+    .where(and(eq(drops.slug, slug), inArray(orders.state, [...OPEN_ORDER_STATES])));
+  return { orders: rows.length, refund: rows.reduce((n, r) => n + refundable(r), 0) };
+}
+
+export type CancelDropResult = { ok: true; cancelled: number; refund: number; emailed: number; emailFailed: number } | { ok: false; error: string };
+
+/** Emails after Cancel drop go one at a time, this far apart, to stay under Resend's rate limit (a few a second). */
+const CANCEL_EMAIL_GAP_MS = 600;
+
+/**
+ * Cancel drop (PRD 4.2, 5.2a): the drop leaves the shop for good, every order on it is cancelled through
+ * cancelOrderCore (the rest of each payment refunded, owed until Stripe), and then each customer is emailed.
+ * `expectOrders` is the number of orders the confirmation showed. If it has changed (a checkout finished meanwhile),
+ * nothing happens and the admin looks again. A drop with shipped orders can't be cancelled; those get refunds.
+ */
+export async function cancelDrop(slug: string, adminId: string, expectOrders: number, opts: { now?: Date; gapMs?: number } = {}): Promise<CancelDropResult> {
+  const now = opts.now ?? new Date();
+  const offset = await arrivalOffsetDays();
+  const r = await getDb().transaction(async (tx) => {
+    await lockLifecycle(tx);
+    const [found] = await tx.select({ id: drops.id }).from(drops).where(eq(drops.slug, slug));
+    if (!found) return { ok: false as const, error: "That drop no longer exists." };
+    // Orders before the drop, the order a customer's cancel locks them in (as Mark complete does). The second read
+    // picks up an order placed between the two: once the drop is locked, no checkout can place another. Locking
+    // that brand-new order after the drop could only collide with its customer cancelling it in the same instant,
+    // and then Postgres refuses one of the two whole; nothing is left half done.
+    const open = () => tx.select().from(orders).where(and(eq(orders.dropId, found.id), inArray(orders.state, [...OPEN_ORDER_STATES]))).orderBy(asc(orders.createdAt)).for("update");
+    await open();
+    const [d] = await tx.select().from(drops).where(eq(drops.id, found.id)).for("update");
+    if (!d) return { ok: false as const, error: "That drop no longer exists." };
+    const list = await open();
+    const t = transition({ ...d, arriveAt: arrivalDate(d.shipAt, offset) }, "cancel", { now, others: [] });
+    if (!t.ok) return t;
+    const [{ n: shipped }] = await tx.select({ n: count() }).from(orders).where(and(eq(orders.dropId, d.id), inArray(orders.state, ["shipped", "complete"])));
+    if (shipped) return { ok: false as const, error: `${shipped === 1 ? "One of its orders has" : `${shipped} of its orders have`} shipped, so the drop can't be cancelled. Refund orders one by one instead.` };
+    if (list.length !== expectOrders) return { ok: false as const, error: `The drop has ${list.length} order${list.length === 1 ? "" : "s"} to cancel now, not the ${expectOrders} shown. Check them, then try again.` };
+    await tx.update(drops).set({ state: "cancelled", updatedAt: now }).where(eq(drops.id, d.id));
+    const cancelled: { id: string; refund: number | null }[] = [];
+    for (const o of list) cancelled.push({ id: o.id, ...(await cancelOrderCore(tx, o, { source: "drop", actorId: adminId }, now)) });
+    return { ok: true as const, cancelled };
+  });
+  if (!r.ok) return r;
+  const gap = opts.gapMs ?? CANCEL_EMAIL_GAP_MS;
+  let emailed = 0;
+  for (const [i, c] of r.cancelled.entries()) {
+    if (i && gap) await new Promise((done) => setTimeout(done, gap));
+    if (await sendCancellationEmail(c.id, { refund: c.refund, byShop: true })) emailed++;
+  }
+  return { ok: true, cancelled: r.cancelled.length, refund: r.cancelled.reduce((n, c) => n + (c.refund ?? 0), 0), emailed, emailFailed: r.cancelled.length - emailed };
 }
 
 /**

@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireAdmin } from "@/lib/admin";
 import type { DropState } from "@/lib/data";
-import { dropContext, duplicateDrop, saveDrop, transitionDrop } from "@/lib/drops-admin";
+import { cancelDrop, dropContext, duplicateDrop, saveDrop, transitionDrop, type CancelDropResult } from "@/lib/drops-admin";
 import { fromJstLocal, isDropState, validateDrop, type Errors } from "@/lib/drop-rules";
 import { isDropAction } from "@/lib/drop-transitions";
 
@@ -39,6 +39,18 @@ export async function transitionDropAction(slug: string, action: unknown, input:
   const closeAt = typeof input.closeAt === "string" && input.closeAt.trim() ? fromJstLocal(input.closeAt) : null;
   if (action === "reopen" && !closeAt) return { ok: false, error: "Pick a new closing time." };
   const r = await transitionDrop(slug, action, { closeAt });
+  if (r.ok) revalidatePath("/", "layout");
+  return r;
+}
+
+/**
+ * Cancel drop (PRD 4.2): cancels and refunds every order on it and emails each customer, which can take a while
+ * with many orders (the emails are spaced out). `expectOrders` is the order count the confirmation showed.
+ */
+export async function cancelDropAction(slug: string, expectOrders: unknown): Promise<CancelDropResult> {
+  const admin = await requireAdmin();
+  if (!Number.isSafeInteger(expectOrders)) return { ok: false, error: "Reload the page and try again." };
+  const r = await cancelDrop(slug, admin.id, expectOrders as number);
   if (r.ok) revalidatePath("/", "layout");
   return r;
 }
