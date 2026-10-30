@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { canPack, countOf, packRefusal, packStateRefusal, productionPlan, type PlanItem } from "./fulfilment-rules";
+import { fmtDateTime } from "./format";
+import { canPack, countOf, packRefusal, packStateRefusal, productionPlan, sheetStanding, type PlanItem } from "./fulfilment-rules";
 
 const item = (slug: string, productionUnit: string, unitsPerProductionUnit = 1, bakeBuffer = 0): PlanItem => ({ slug, nameEn: slug, nameJa: null, productionUnit, unitsPerProductionUnit, bakeBuffer });
 const chip = item("choc-chip", "cookie");
@@ -82,5 +83,31 @@ describe("packing rules (PRD 4.6)", () => {
     expect(packStateRefusal("cancelled")).toBe("It was cancelled.");
     expect(packStateRefusal("shipped")).toBe("It has shipped already.");
     expect(packStateRefusal("pending_payment")).toBe("It hasn't been paid.");
+  });
+});
+
+describe("sheetStanding", () => {
+  const closeAt = new Date("2026-11-02T12:00:00Z");
+  const until = new Date("2026-11-02T12:09:00Z");
+  const none = { checkouts: 0, boxes: 0, until: null };
+
+  it("is final once the drop has closed and no checkout can still be paid", () => {
+    expect(sheetStanding({ state: "closed", closeAt }, none)).toEqual({ final: true, text: `Final: the drop closed ${fmtDateTime(closeAt)}.` });
+    expect(sheetStanding({ state: "baking", closeAt }, none).final).toBe(true);
+  });
+
+  it("isn't final while a checkout begun before the close can still be paid, and says how many and until when", () => {
+    expect(sheetStanding({ state: "closed", closeAt }, { checkouts: 1, boxes: 2, until })).toEqual({
+      final: false,
+      text: `Not final yet: the drop closed ${fmtDateTime(closeAt)}, but 1 checkout holds 2 more boxes that can still be paid until ${fmtDateTime(until)}. Only paid orders are counted; refresh after that for the final numbers.`,
+    });
+    expect(sheetStanding({ state: "closed", closeAt }, { checkouts: 2, boxes: 1, until }).text).toContain("2 checkouts hold 1 more box that");
+  });
+
+  it("is a projection while open, mentioning boxes in checkouts, and has nothing to bake before it opens or once cancelled", () => {
+    expect(sheetStanding({ state: "open", closeAt }, none)).toEqual({ final: false, text: `A projection: the drop is open until ${fmtDateTime(closeAt)}, so these numbers grow with each order.` });
+    expect(sheetStanding({ state: "open", closeAt }, { checkouts: 1, boxes: 1, until }).text).toMatch(/Right now 1 checkout holds 1 more box, not counted until paid.$/);
+    expect(sheetStanding({ state: "scheduled", closeAt }, none).text).toBe("The drop hasn't opened, so there's nothing to bake yet.");
+    expect(sheetStanding({ state: "cancelled", closeAt }, none).text).toBe("The drop is cancelled; there's nothing to bake.");
   });
 });

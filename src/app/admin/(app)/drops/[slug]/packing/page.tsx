@@ -5,7 +5,7 @@ import { DropStatePill } from "@/components/admin/DropStatePill";
 import { PackToggle } from "@/components/admin/PackToggle";
 import { PrintButton } from "@/components/admin/PrintButton";
 import { requireAdmin } from "@/lib/admin";
-import { fmtDate } from "@/lib/format";
+import { fmtDate, fmtDateTime } from "@/lib/format";
 import { packList } from "@/lib/fulfilment";
 import { getStrings } from "@/lib/i18n";
 import s from "../../../../admin.module.css";
@@ -40,6 +40,11 @@ export default async function PackListPage({ params }: { params: Promise<{ slug:
         </div>
       </div>
       {list.refusal && <p className={`${s.banner} ${s.noPrint}`}>{list.refusal}</p>}
+      {list.packable && list.open.checkouts > 0 && list.open.until && (
+        <p className={`${s.banner} ${s.bannerWarn}`} role="status">
+          {list.open.checkouts === 1 ? "A checkout begun before the drop closed" : `${list.open.checkouts} checkouts begun before the drop closed`} can still be paid until {fmtDateTime(list.open.until)}. Their orders join this list when they are; refresh after that.
+        </p>
+      )}
       {rows.length === 0 ? (
         <div className={`panel ${s.empty}`}>No paid orders on this drop yet.</div>
       ) : (

@@ -9,6 +9,7 @@ import { placeOrder, startCheckout } from "@/lib/checkout";
 import { toJstLocal } from "@/lib/drop-rules";
 import { transitionDrop } from "@/lib/drops-admin";
 import { packList, productionSheet, setPacked } from "@/lib/fulfilment";
+import { sheetStanding } from "@/lib/fulfilment-rules";
 import { orderDetail } from "@/lib/orders-admin";
 import { captureEmail, clearTestData, closeTestDb, resetDatabase, reseed, testDb, TEST_DATABASE_URL } from "@/test/db";
 
@@ -101,6 +102,36 @@ describe.skipIf(!TEST_DATABASE_URL)("fulfilment", { timeout: 60_000 }, () => {
     });
     // Grouped by what the kitchen counts in.
     expect(sheet.plan.items.map((r) => r.item.productionUnit)).toEqual(["cake", "cookie", "cookie", "cookie", "cookie", "mini loaf", "mini loaf"]);
+  });
+
+  it("isn't final after the close while a checkout begun before it can still be paid, and counts it once paid", async () => {
+    // A customer reserves a box while the drop is open, and the drop closes before they pay.
+    const r = await startCheckout({ dropId: DROP, items: { "cookie-box": 1 }, flags: { state: "open" } }, null);
+    if (!r.ok || !r.checkoutId) throw new Error("expected holds");
+    await closeDrop();
+    const before = (await productionSheet(DROP))!;
+    expect(before.plan.totalBoxes).toBe(0);
+    expect(before.open).toEqual({ checkouts: 1, boxes: 1, until: expect.any(Date) });
+    expect(before.open.until!.getTime()).toBeGreaterThan(Date.now());
+    expect(sheetStanding(before.drop, before.open)).toMatchObject({ final: false, text: expect.stringMatching(/^Not final yet: .* 1 checkout holds 1 more box that can still be paid until/) });
+    expect((await packList(DROP))!.open.checkouts).toBe(1);
+    // The hold lets them finish after the close (PRD 3.8); the sheet then counts the box and is final.
+    const p = await placeOrder({ dropId: DROP, checkoutId: r.checkoutId, revision: r.revision!, locale: "en", delivery: { name: "Test Person", phone: "090-0000-0000", postal: "153-0061", line1: "1-2-3", line2: "" }, gift: null, paymentMethod: "card", timeSlot: "none" }, r.checkoutId, buyer);
+    expect(p.ok).toBe(true);
+    const after = (await productionSheet(DROP))!;
+    expect(after.plan.totalBoxes).toBe(1);
+    expect(after.open).toEqual({ checkouts: 0, boxes: 0, until: null });
+    expect(sheetStanding(after.drop, after.open).final).toBe(true);
+  });
+
+  it("is final once an unpaid checkout's hold has run out", async () => {
+    const r = await startCheckout({ dropId: DROP, items: { "cookie-box": 2 }, flags: { state: "open" } }, null);
+    if (!r.ok || !r.checkoutId) throw new Error("expected holds");
+    await closeDrop();
+    await db.update(schema.inventoryHolds).set({ expiresAt: new Date(Date.now() - 1000) });
+    const sheet = (await productionSheet(DROP))!;
+    expect(sheet.open).toEqual({ checkouts: 0, boxes: 0, until: null });
+    expect(sheetStanding(sheet.drop, sheet.open).final).toBe(true);
   });
 
   it("uses the box's recipe as it is now, and names a sold box that has none", async () => {

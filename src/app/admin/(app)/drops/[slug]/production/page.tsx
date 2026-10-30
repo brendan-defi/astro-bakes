@@ -4,27 +4,12 @@ import { notFound } from "next/navigation";
 import { DropStatePill } from "@/components/admin/DropStatePill";
 import { PrintButton } from "@/components/admin/PrintButton";
 import { requireAdmin } from "@/lib/admin";
-import { fmtDate, fmtDateTime } from "@/lib/format";
-import { countOf } from "@/lib/fulfilment-rules";
-import { productionSheet, type SheetDrop } from "@/lib/fulfilment";
+import { fmtDate } from "@/lib/format";
+import { countOf, sheetStanding } from "@/lib/fulfilment-rules";
+import { productionSheet } from "@/lib/fulfilment";
 import s from "../../../../admin.module.css";
 
 export const metadata: Metadata = { title: "Production sheet" };
-
-/** Whether the numbers can still change, in a line above them. */
-function standing(d: SheetDrop): string {
-  switch (d.state) {
-    case "draft":
-    case "scheduled":
-      return "The drop hasn't opened, so there's nothing to bake yet.";
-    case "open":
-      return `A projection: the drop is open until ${fmtDateTime(d.closeAt)}, so these numbers grow with each order.`;
-    case "cancelled":
-      return "The drop is cancelled; there's nothing to bake.";
-    default:
-      return `Final: the drop closed ${fmtDateTime(d.closeAt)}.`;
-  }
-}
 
 /** The production sheet (PRD 4.5): what to bake for a drop, the boxes to assemble and the cards to write. */
 export default async function ProductionSheetPage({ params }: { params: Promise<{ slug: string }> }) {
@@ -33,6 +18,7 @@ export default async function ProductionSheetPage({ params }: { params: Promise<
   const sheet = await productionSheet(slug);
   if (!sheet) notFound();
   const { drop: d, plan } = sheet;
+  const standing = sheetStanding(d, sheet.open);
   return (
     <>
       <div className={s.pageHead}>
@@ -47,7 +33,7 @@ export default async function ProductionSheetPage({ params }: { params: Promise<
           <PrintButton />
         </div>
       </div>
-      <p className={s.banner}>{standing(d)}</p>
+      <p className={`${s.banner} ${standing.final || d.state === "open" ? "" : s.bannerWarn}`} role={standing.final ? undefined : "status"}>{standing.text}</p>
       <dl className={`${s.facts} ${s.sheetFacts}`}>
         <dt>Bake day</dt><dd>{d.bakeAt ? fmtDate(d.bakeAt) : "Not set"}</dd>
         <dt>Ships</dt><dd>{fmtDate(d.shipAt)}, arrives {fmtDate(d.arriveAt)}</dd>

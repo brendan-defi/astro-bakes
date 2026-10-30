@@ -1,4 +1,5 @@
 import type { DropState } from "./data";
+import { fmtDateTime } from "./format";
 import type { OrderState } from "./order-status";
 
 /**
@@ -94,6 +95,39 @@ function plural(w: string): string {
   if (/(s|x|z|ch|sh)$/i.test(w)) return `${w}es`;
   if (/[^f]f$/i.test(w)) return `${w.slice(0, -1)}ves`;
   return `${w}s`;
+}
+
+/** Checkouts on the drop that hold boxes and can still be paid (PRD 3.8: a hold may finish after the drop closes). */
+export interface OpenCheckouts {
+  checkouts: number;
+  boxes: number;
+  /** When the last of their holds runs out; null with none. */
+  until: Date | null;
+}
+
+const counted = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+
+/**
+ * Whether the drop's paid orders are all there is, in a line above the numbers. While it's open they grow with each
+ * order. Once it has closed they're final only when no checkout begun before the close can still be paid: those
+ * finish while their hold lasts, so until then the sheet says how many and until when, and doesn't count them.
+ */
+export function sheetStanding(d: { state: DropState; closeAt: Date }, open: OpenCheckouts): { final: boolean; text: string } {
+  const held = open.checkouts ? `${counted(open.checkouts, "checkout")} ${open.checkouts === 1 ? "holds" : "hold"} ${counted(open.boxes, "more box", "more boxes")}` : "";
+  switch (d.state) {
+    case "draft":
+    case "scheduled":
+      return { final: false, text: "The drop hasn't opened, so there's nothing to bake yet." };
+    case "open":
+      return { final: false, text: `A projection: the drop is open until ${fmtDateTime(d.closeAt)}, so these numbers grow with each order.${held ? ` Right now ${held}, not counted until paid.` : ""}` };
+    case "cancelled":
+      return { final: false, text: "The drop is cancelled; there's nothing to bake." };
+    default:
+      if (open.checkouts && open.until) {
+        return { final: false, text: `Not final yet: the drop closed ${fmtDateTime(d.closeAt)}, but ${held} that can still be paid until ${fmtDateTime(open.until)}. Only paid orders are counted; refresh after that for the final numbers.` };
+      }
+      return { final: true, text: `Final: the drop closed ${fmtDateTime(d.closeAt)}.` };
+  }
 }
 
 // ---------------------------------------------------------------- packing (PRD 4.6)
