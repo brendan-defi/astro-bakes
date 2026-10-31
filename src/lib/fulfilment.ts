@@ -1,6 +1,6 @@
 import "server-only";
 import { and, asc, count, eq, gt, inArray, sql, sum } from "drizzle-orm";
-import { getDb } from "@/db";
+import { getDb, type Db } from "@/db";
 import { boxItems, dropBoxes, drops, inventoryHolds, orderItems, orders } from "@/db/schema";
 import { arrivalDate, effectiveState, type DropState } from "./data";
 import type { DeliverySlot } from "./delivery-slots";
@@ -16,6 +16,24 @@ import { arrivalOffsetDays } from "./settings";
 /** Orders the kitchen bakes for and the packing table packs: paid, and not cancelled. */
 const SOLD_STATES = ["paid", "packed", "shipped", "complete"] as const;
 
+type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
+
+/**
+ * Read a page's data from one snapshot of the database (REPEATABLE READ, read only). The sheet and the list read the
+ * paid orders and the live holds separately, and paying moves a checkout from one to the other in a single commit
+ * (markPaid deletes its holds). Read at different moments, a checkout paid in between would be in neither, and the
+ * sheet would call itself final without it; read from one snapshot, it's in exactly one of them.
+ */
+function inSnapshot<T>(read: (tx: Tx) => Promise<T>): Promise<T> {
+  return getDb().transaction(read, { isolationLevel: "repeatable read", accessMode: "read only" });
+}
+
+/** Tests pause the reads here, after the paid orders and before the holds, to commit a checkout in the middle. */
+let betweenReads: (() => Promise<void>) | null = null;
+export function setBetweenReadsForTest(hook: (() => Promise<void>) | null) {
+  betweenReads = hook;
+}
+
 export interface SheetDrop {
   slug: string;
   number: number;
@@ -28,8 +46,8 @@ export interface SheetDrop {
   arriveAt: Date;
 }
 
-async function sheetDrop(slug: string, now: Date) {
-  const [d, offset] = await Promise.all([getDb().query.drops.findFirst({ where: eq(drops.slug, slug) }), arrivalOffsetDays()]);
+async function sheetDrop(tx: Tx, slug: string, offset: number, now: Date) {
+  const d = await tx.query.drops.findFirst({ where: eq(drops.slug, slug) });
   if (!d) return null;
   const arriveAt = arrivalDate(d.shipAt, offset);
   const head: SheetDrop = { slug: d.slug, number: d.number, nameEn: d.nameEn, state: effectiveState({ ...d, arriveAt }, now), closeAt: d.closeAt, bakeAt: d.bakeAt, shipAt: d.shipAt, arriveAt };
@@ -41,8 +59,8 @@ async function sheetDrop(slug: string, now: Date) {
  * holds (markPaid), so every live hold is a checkout still in progress; one checkout's holds share a cart (or, once
  * placed, an order).
  */
-async function openCheckouts(dropId: string, now: Date): Promise<OpenCheckouts> {
-  const [r] = await getDb()
+async function openCheckouts(tx: Tx, dropId: string, now: Date): Promise<OpenCheckouts> {
+  const [r] = await tx
     .select({
       checkouts: sql<number>`count(distinct coalesce(${inventoryHolds.cartId}, ${inventoryHolds.orderId}))`.mapWith(Number),
       boxes: sql<number>`coalesce(sum(${inventoryHolds.qty}), 0)`.mapWith(Number),
@@ -71,20 +89,26 @@ export interface ProductionSheet {
  * recipe as it is now (Boxes & items), since that's what the kitchen will make.
  */
 export async function productionSheet(slug: string, now = new Date()): Promise<ProductionSheet | null> {
-  const found = await sheetDrop(slug, now);
-  if (!found) return null;
-  const db = getDb();
-  const sold = and(eq(orders.dropId, found.id), inArray(orders.state, SOLD_STATES));
-  const [dropBoxRows, soldRows, [counts], open] = await Promise.all([
-    db.query.dropBoxes.findMany({
+  const offset = await arrivalOffsetDays();
+  // One snapshot (inSnapshot), so a checkout paid while this runs is either counted or still held, never neither.
+  // One connection runs the reads in turn.
+  const read = await inSnapshot(async (tx) => {
+    const found = await sheetDrop(tx, slug, offset, now);
+    if (!found) return null;
+    const sold = and(eq(orders.dropId, found.id), inArray(orders.state, SOLD_STATES));
+    const dropBoxRows = await tx.query.dropBoxes.findMany({
       where: eq(dropBoxes.dropId, found.id),
       orderBy: [asc(dropBoxes.sort)],
       with: { box: { columns: { nameEn: true }, with: { boxItems: { orderBy: [asc(boxItems.itemId)], with: { item: true } } } } },
-    }),
-    db.select({ dropBoxId: orderItems.dropBoxId, n: sum(orderItems.qty).mapWith(Number) }).from(orderItems).innerJoin(orders, eq(orders.id, orderItems.orderId)).where(sold).groupBy(orderItems.dropBoxId),
-    db.select({ orders: count(), giftCards: sql<number>`count(*) filter (where btrim(coalesce(${orders.giftMessage}, '')) <> '')`.mapWith(Number) }).from(orders).where(sold),
-    openCheckouts(found.id, now),
-  ]);
+    });
+    const soldRows = await tx.select({ dropBoxId: orderItems.dropBoxId, n: sum(orderItems.qty).mapWith(Number) }).from(orderItems).innerJoin(orders, eq(orders.id, orderItems.orderId)).where(sold).groupBy(orderItems.dropBoxId);
+    const [counts] = await tx.select({ orders: count(), giftCards: sql<number>`count(*) filter (where btrim(coalesce(${orders.giftMessage}, '')) <> '')`.mapWith(Number) }).from(orders).where(sold);
+    await betweenReads?.();
+    const open = await openCheckouts(tx, found.id, now);
+    return { found, dropBoxRows, soldRows, counts, open };
+  });
+  if (!read) return null;
+  const { found, dropBoxRows, soldRows, counts, open } = read;
   const soldBy = new Map(soldRows.map((r) => [r.dropBoxId, r.n]));
   const plan = productionPlan(
     dropBoxRows.map((x) => ({
@@ -120,14 +144,22 @@ export interface PackList {
 
 /** The pack list (PRD 4.6): one row per paid order, by order number, with what goes in the box and on the card. */
 export async function packList(slug: string, now = new Date()): Promise<PackList | null> {
-  const found = await sheetDrop(slug, now);
-  if (!found) return null;
-  const [rows, open] = await Promise.all([getDb().query.orders.findMany({
-    where: and(eq(orders.dropId, found.id), inArray(orders.state, SOLD_STATES)),
-    orderBy: [asc(orders.number)],
-    columns: { number: true, state: true, packedAt: true, shipToName: true, city: true, deliveryTimeSlot: true, giftMessage: true },
-    with: { items: { columns: { nameEn: true, qty: true }, orderBy: [asc(orderItems.nameEn)] } },
-  }), openCheckouts(found.id, now)]);
+  const offset = await arrivalOffsetDays();
+  // One snapshot, as the sheet: a checkout paid meanwhile is either a row or still held, never neither.
+  const read = await inSnapshot(async (tx) => {
+    const found = await sheetDrop(tx, slug, offset, now);
+    if (!found) return null;
+    const rows = await tx.query.orders.findMany({
+      where: and(eq(orders.dropId, found.id), inArray(orders.state, SOLD_STATES)),
+      orderBy: [asc(orders.number)],
+      columns: { number: true, state: true, packedAt: true, shipToName: true, city: true, deliveryTimeSlot: true, giftMessage: true },
+      with: { items: { columns: { nameEn: true, qty: true }, orderBy: [asc(orderItems.nameEn)] } },
+    });
+    await betweenReads?.();
+    return { found, rows, open: await openCheckouts(tx, found.id, now) };
+  });
+  if (!read) return null;
+  const { found, rows, open } = read;
   const packable = canPack(found.head.state);
   return {
     drop: found.head,

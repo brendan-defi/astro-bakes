@@ -8,7 +8,7 @@ import { cancelOrder } from "@/lib/account";
 import { placeOrder, startCheckout } from "@/lib/checkout";
 import { toJstLocal } from "@/lib/drop-rules";
 import { transitionDrop } from "@/lib/drops-admin";
-import { packList, productionSheet, setPacked } from "@/lib/fulfilment";
+import { packList, productionSheet, setBetweenReadsForTest, setPacked } from "@/lib/fulfilment";
 import { sheetStanding } from "@/lib/fulfilment-rules";
 import { orderDetail } from "@/lib/orders-admin";
 import { captureEmail, clearTestData, closeTestDb, resetDatabase, reseed, testDb, TEST_DATABASE_URL } from "@/test/db";
@@ -122,6 +122,52 @@ describe.skipIf(!TEST_DATABASE_URL)("fulfilment", { timeout: 60_000 }, () => {
     expect(after.plan.totalBoxes).toBe(1);
     expect(after.open).toEqual({ checkouts: 0, boxes: 0, until: null });
     expect(sheetStanding(after.drop, after.open).final).toBe(true);
+  });
+
+  /** A cookie box reserved while open, the drop then closed, and a way to pay for it through the real checkout. */
+  async function heldThenClosed() {
+    const r = await startCheckout({ dropId: DROP, items: { "cookie-box": 1 }, flags: { state: "open" } }, null);
+    if (!r.ok || !r.checkoutId) throw new Error("expected holds");
+    await closeDrop();
+    const delivery = { name: "Test Person", phone: "090-0000-0000", postal: "153-0061", line1: "1-2-3", line2: "" };
+    return () => placeOrder({ dropId: DROP, checkoutId: r.checkoutId!, revision: r.revision!, locale: "en", delivery, gift: null, paymentMethod: "card", timeSlot: "none" }, r.checkoutId!, buyer);
+  }
+  /** Pay for it once, while a page load is between its paid-orders read and its holds read. */
+  const payBetweenReads = (pay: () => ReturnType<Awaited<ReturnType<typeof heldThenClosed>>>) =>
+    setBetweenReadsForTest(async () => {
+      setBetweenReadsForTest(null);
+      expect((await pay()).ok).toBe(true);
+    });
+
+  it("reads the sheet from one snapshot: a checkout paid between its reads is never left out of a Final sheet", async () => {
+    payBetweenReads(await heldThenClosed());
+    try {
+      const sheet = (await productionSheet(DROP))!;
+      // As of the snapshot the box was still held: not counted, and the sheet still says so.
+      expect(sheet.plan.totalBoxes).toBe(0);
+      expect(sheet.open).toMatchObject({ checkouts: 1, boxes: 1 });
+      expect(sheetStanding(sheet.drop, sheet.open).final).toBe(false);
+    } finally {
+      setBetweenReadsForTest(null);
+    }
+    // The order was paid meanwhile: the next read counts it, and is final.
+    const next = (await productionSheet(DROP))!;
+    expect(next.plan.totalBoxes).toBe(1);
+    expect(sheetStanding(next.drop, next.open).final).toBe(true);
+  });
+
+  it("reads the pack list from one snapshot: a checkout paid between its reads still shows as pending", async () => {
+    payBetweenReads(await heldThenClosed());
+    try {
+      const list = (await packList(DROP))!;
+      expect(list.rows).toEqual([]);
+      expect(list.open).toMatchObject({ checkouts: 1, boxes: 1 });
+    } finally {
+      setBetweenReadsForTest(null);
+    }
+    const next = (await packList(DROP))!;
+    expect(next.rows).toHaveLength(1);
+    expect(next.open.checkouts).toBe(0);
   });
 
   it("is final once an unpaid checkout's hold has run out", async () => {
