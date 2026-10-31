@@ -213,3 +213,10 @@
   .packDone td { background: none; }
   .packGift { background: none; outline: 2px solid #000; outline-offset: -2px; }
 }
+
+/* Order delivery actions: ship with tracking, edit delivery details */
+.trackingInput { max-width: 260px; font-variant-numeric: tabular-nums; letter-spacing: 0.04em; }
+.trackingLine { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; margin: 0; font-size: 15px; }
+.trackingLine .mono { font-size: 16px; font-weight: 700; }
+.deliveryEdit { margin-top: 14px; display: flex; flex-direction: column; gap: 10px; }
+.deliveryEdit > button { align-self: flex-start; }

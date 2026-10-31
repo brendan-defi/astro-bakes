@@ -64,7 +64,8 @@ describe("SettingsForm", () => {
     expect(screen.getByText("Seven digits, like 153-0061.")).toBeTruthy();
     const contact = screen.getByLabelText("Contact email *");
     expect(contact.getAttribute("aria-invalid")).toBe("true");
-    expect(document.activeElement).toBe(contact);
+    // Focus moves in an effect after the errors render, so under load it can land a moment later.
+    await waitFor(() => expect(document.activeElement).toBe(contact));
     expect(status()).toMatch(/need fixing/);
     fireEvent.change(contact, { target: { value: "hello@astrobakes.xyz" } });
     expect(screen.queryByText("Required.")).toBeNull();

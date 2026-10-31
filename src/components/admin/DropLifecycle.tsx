@@ -20,6 +20,8 @@ export interface DropLifecycleProps {
   cancelImpact?: { orders: number; refund: number; version: string };
   /** Customers of this cancelled drop still owed their cancellation email. */
   emailsOwed?: number;
+  /** Its shipped orders not yet delivered; on a completed drop, Mark complete is offered again for them. */
+  undelivered?: number;
   /** Why the buttons are held back right now (the form beside them has unsaved changes). */
   blocked?: string;
   /** Told while an action is under way, from its confirmation opening to the request settling (DropEditor locks the form meanwhile). */
@@ -29,9 +31,11 @@ export interface DropLifecycleProps {
 const CONFIRM_WORD = "cancel";
 const yen = (n: number) => `¥${n.toLocaleString("en-US")}`;
 
-export function DropLifecycle({ slug, number, state, storedState, reopenDefault, cancelImpact = { orders: 0, refund: 0, version: "" }, emailsOwed = 0, blocked, onActiveChange }: DropLifecycleProps) {
+export function DropLifecycle({ slug, number, state, storedState, reopenDefault, cancelImpact = { orders: 0, refund: 0, version: "" }, emailsOwed = 0, undelivered = 0, blocked, onActiveChange }: DropLifecycleProps) {
   const router = useRouter();
-  const actions = actionsFor(state, storedState);
+  const actions = actionsFor(state, storedState, undelivered);
+  // A completed drop offers Mark complete again only for orders shipped after it was marked: say so.
+  const late = storedState === "complete" && undelivered > 0 ? `${undelivered === 1 ? "One order" : `${undelivered} orders`} shipped after the drop was marked complete; once ${undelivered === 1 ? "it has" : "they have"} arrived, Mark complete shows ${undelivered === 1 ? "it" : "them"} as delivered too.` : "";
   const [pending, setPending] = useState<DropAction | null>(null);
   const [closeAt, setCloseAt] = useState(reopenDefault);
   const [typed, setTyped] = useState("");
@@ -132,7 +136,7 @@ export function DropLifecycle({ slug, number, state, storedState, reopenDefault,
           {actions.map((a) => (
             <button key={a} type="button" className={`btn btn-secondary ${s.btnSm}`} disabled={busy || !!blocked} title={ACTIONS[a].effect} onClick={() => start(a)}>{ACTIONS[a].label}</button>
           ))}
-          {actions.length > 0 && <span className={s.help}>{blocked ?? actions.map((a) => `${ACTIONS[a].label}: ${ACTIONS[a].effect}`).join(" ")}</span>}
+          {actions.length > 0 && <span className={s.help}>{blocked ?? (late || actions.map((a) => `${ACTIONS[a].label}: ${ACTIONS[a].effect}`).join(" "))}</span>}
         </div>
       )}
       {emailsOwed > 0 && !pending && (

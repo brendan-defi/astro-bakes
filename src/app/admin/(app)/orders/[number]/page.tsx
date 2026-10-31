@@ -1,13 +1,17 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { OrderDeliveryEdit } from "@/components/admin/OrderDeliveryEdit";
+import { OrderEmails } from "@/components/admin/OrderEmails";
 import { OrderMoneyActions } from "@/components/admin/OrderMoneyActions";
 import { OrderNoteForm } from "@/components/admin/OrderNoteForm";
+import { OrderShipping } from "@/components/admin/OrderShipping";
 import { OrderStatePill } from "@/components/admin/OrderStatePill";
 import { requireAdmin } from "@/lib/admin";
 import { getStrings } from "@/lib/i18n";
 import { fmtDate, fmtDateTime } from "@/lib/format";
 import { orderDetail } from "@/lib/orders-admin";
+import { formatTracking, trackingUrl } from "@/lib/tracking";
 import s from "../../../admin.module.css";
 
 export const metadata: Metadata = { title: "Order" };
@@ -16,7 +20,10 @@ const yen = (n: number) => `¥${n.toLocaleString("en-US")}`;
 const PAYMENT = { card: "Card", paypay: "PayPay" } as const;
 const en = getStrings("en");
 
-/** One order (PRD 4.4): everything the customer sees, plus the timeline and the shop's internal notes. */
+/**
+ * One order (PRD 4.4): everything the customer sees, plus the timeline, the shop's internal notes, and the actions:
+ * edit the delivery details, ship it, cancel or refund, send its emails again.
+ */
 export default async function OrderPage({ params }: { params: Promise<{ number: string }> }) {
   await requireAdmin();
   const { number } = await params;
@@ -70,11 +77,23 @@ export default async function OrderPage({ params }: { params: Promise<{ number: 
               <dt>Recipient</dt><dd>{o.shipTo.name}</dd>
               <dt>Phone</dt><dd>{o.shipTo.phone}</dd>
               <dt>Address</dt><dd>{o.shipTo.address}</dd>
-              <dt>Ships</dt><dd>{fmtDate(o.drop.shipAt)}, arrives {fmtDate(o.drop.arriveAt)}</dd>
+              {o.dates.late ? (
+                <><dt>Shipped</dt><dd>{fmtDate(o.dates.shipAt)}, arrives {fmtDate(o.dates.arriveAt)}<span className={s.sub}>Late: the drop was to ship {fmtDate(o.drop.shipAt)}</span></dd></>
+              ) : (
+                <><dt>Ships</dt><dd>{fmtDate(o.dates.shipAt)}, arrives {fmtDate(o.dates.arriveAt)}</dd></>
+              )}
               <dt>Time slot</dt><dd>{en.deliverySlots[o.slot]}</dd>
-              {o.trackingNumber && (<><dt>Tracking</dt><dd>{o.trackingNumber}</dd></>)}
+              {o.trackingNumber && (<><dt>Tracking</dt><dd><a href={trackingUrl(o.trackingNumber, "en")} target="_blank" rel="noreferrer">{formatTracking(o.trackingNumber)}</a></dd></>)}
             </dl>
+            {o.delivery.editable && <OrderDeliveryEdit number={o.number} initial={o.delivery.value} version={o.delivery.version} />}
           </section>
+
+          {o.payment.paidAt && o.storedState !== "cancelled" && (
+            <section aria-labelledby="o-shipping" className={`panel ${s.formSection}`}>
+              <h2 id="o-shipping" className={s.sectionTitle}>Shipping</h2>
+              <OrderShipping number={o.number} canShip={o.shipping.canShip} blocked={o.shipping.blocked} shipped={o.shipping.shipped} delivered={o.storedState === "complete"} tracking={o.trackingNumber} email={o.customer.email} />
+            </section>
+          )}
 
           <section aria-labelledby="o-customer" className={`panel ${s.formSection}`}>
             <h2 id="o-customer" className={s.sectionTitle}>Customer</h2>
@@ -95,6 +114,13 @@ export default async function OrderPage({ params }: { params: Promise<{ number: 
               {o.payment.intent && (<><dt>Stripe</dt><dd className={s.mono}>{o.payment.intent}</dd></>)}
             </dl>
           </section>
+
+          {o.payment.paidAt && (
+            <section aria-labelledby="o-emails" className={`panel ${s.formSection}`}>
+              <h2 id="o-emails" className={s.sectionTitle}>Emails</h2>
+              <OrderEmails number={o.number} email={o.customer.email} confirmation={o.resend.confirmation} shipped={o.resend.shipped} />
+            </section>
+          )}
 
           {o.payment.paidAt && (
             <section aria-labelledby="o-money" className={`panel ${s.formSection}`}>

@@ -3,7 +3,7 @@ import { and, desc, eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { addresses, customers, drops, orders } from "@/db/schema";
 import { addressLine } from "./address";
-import { arrivalDate, effectiveState, type Box, type Locale } from "./data";
+import { arrivalDate, effectiveState, orderShipDates, type Box, type Locale } from "./data";
 import { validateDelivery, type DeliveryInput } from "./checkout-rules";
 import { sendEmail } from "./email";
 import { orderConfirmationEmail, type OrderEmailData } from "./email-templates";
@@ -103,6 +103,8 @@ export async function loadOrder(customerId: string, number: string, locale: Loca
   const reorder = open && onSale && summary.lines.every((l) => onSale.has(l.slug)) ? { dropId: open.id, items: Object.fromEntries(summary.lines.map((l) => [l.slug, l.qty])), boxes: open.boxes } : null;
   // Every refund together: a cancellation's, and any the shop made by hand (damage, non-delivery).
   const refund = o.refunds.length ? { amount: o.refunds.reduce((n, r) => n + r.amount, 0), issued: o.refunds.every((r) => r.issuedAt) } : null;
+  // The drop's plan, or the real dates once a late shipment has gone (the shipping email gives the same).
+  const dates = orderShipDates(o.drop.shipAt, o.shippedAt, offset);
   return {
     ...summary,
     dropSlug: o.drop.slug,
@@ -116,8 +118,8 @@ export async function loadOrder(customerId: string, number: string, locale: Loca
     canChangeSlot: canChangeSlot(o.state, liveState(o.drop, now)),
     paymentMethod: o.paymentMethodType,
     trackingNumber: o.trackingNumber,
-    shipAt: o.drop.shipAt,
-    arriveAt: arrivalDate(o.drop.shipAt, offset),
+    shipAt: dates.shipAt,
+    arriveAt: dates.arriveAt,
     closeAt: o.drop.closeAt,
     refund,
     reorder,
@@ -166,12 +168,18 @@ export async function changeTimeSlot(customerId: string, number: string, slot: u
 
 // ---------------------------------------------------------------- confirmation email (PRD 3.6)
 
-/** Sent once an order is paid; called after the placing transaction commits (and from the Stripe webhook later). */
-export async function sendOrderConfirmation(orderId: string): Promise<void> {
+/**
+ * Sent once an order is paid; called after the placing transaction commits (and from the Stripe webhook later). The
+ * admin can send it again (`resend`), with the order's details as they are now: that one gets a key of its own, since
+ * Resend would quietly drop a repeat of the first key within a day. False if it couldn't be sent.
+ */
+export async function sendOrderConfirmation(orderId: string, opts: { resend?: boolean } = {}): Promise<boolean> {
   const o = await getDb().query.orders.findFirst({ where: eq(orders.id, orderId), with: { ...withItems, customer: { columns: { email: true } } } });
-  if (!o) return;
+  if (!o) return false;
   const locale = o.locale;
   const offset = await arrivalOffsetDays();
+  // Sent again after a late shipment, it gives the dates the order really has.
+  const dates = orderShipDates(o.drop.shipAt, o.shippedAt, offset);
   const data: OrderEmailData = {
     number: o.number,
     lines: o.items.map((i) => ({ name: (locale === "ja" && i.nameJa) || i.nameEn, qty: i.qty, lineTotal: i.qty * i.unitPrice })),
@@ -180,13 +188,15 @@ export async function sendOrderConfirmation(orderId: string): Promise<void> {
     total: o.total,
     shipToName: o.shipToName,
     addressLine: addressLine(o),
-    shipDate: fmtDate(o.drop.shipAt, locale),
-    arriveDate: fmtDate(arrivalDate(o.drop.shipAt, offset), locale),
+    shipDate: fmtDate(dates.shipAt, locale),
+    arriveDate: fmtDate(dates.arriveAt, locale),
     closeDateTime: fmtDateTime(o.drop.closeAt, locale),
     giftMessage: o.giftMessage,
     timeSlot: o.deliveryTimeSlot,
   };
-  await sendEmail({ ...orderConfirmationEmail({ locale, order: data }), to: o.customer.email, type: "order_confirmation", idempotencyKey: `order-confirmation/${o.id}`, customerId: o.customerId, orderId: o.id });
+  const idempotencyKey = opts.resend ? `order-confirmation/${o.id}/resend-${Date.now()}` : `order-confirmation/${o.id}`;
+  const r = await sendEmail({ ...orderConfirmationEmail({ locale, order: data }), to: o.customer.email, type: "order_confirmation", idempotencyKey, customerId: o.customerId, orderId: o.id });
+  return r.ok;
 }
 
 // ---------------------------------------------------------------- profile (PRD 2.3, 2.4, 2.6)

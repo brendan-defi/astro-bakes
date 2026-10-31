@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  adminCanCancel, buildTimeline, cancelRefusal, csvCell, displayState, filterQuery, likeAnywhere, parseOrderFilters, parseYen, refundable, textCell, toCsv, validateNote, validateOptionalNote,
-  validateRefund, type TimelineSource,
+  adminCanCancel, buildTimeline, canEditDelivery, canShip, cancelRefusal, csvCell, deliveryRefusal, displayState, filterQuery, hasShipped, likeAnywhere, parseOrderFilters,
+  parseYen, refundable, shipRefusal, textCell, toCsv, validateNote, validateOptionalNote, validateRefund, type TimelineSource,
 } from "./order-admin-rules";
 
 describe("displayState", () => {
@@ -63,7 +63,7 @@ describe("buildTimeline", () => {
   });
 
   it("shows shipping with its tracking number, and an issued refund twice (recorded, then issued)", () => {
-    const tl = buildTimeline({ ...base, shippedAt: t("2026-11-21T00:00:00Z"), trackingNumber: "1234-5678-9012", refunds: [{ id: "r1", amount: 500, reason: "damage", createdAt: t("2026-11-23T00:00:00Z"), issuedAt: t("2026-11-23T01:00:00Z") }] });
+    const tl = buildTimeline({ ...base, shippedAt: t("2026-11-21T00:00:00Z"), trackingNumber: "123456789012", refunds: [{ id: "r1", amount: 500, reason: "damage", createdAt: t("2026-11-23T00:00:00Z"), issuedAt: t("2026-11-23T01:00:00Z") }] });
     expect(tl.find((e) => e.title === "Shipped")?.detail).toBe("Tracking 1234-5678-9012");
     expect(tl.filter((e) => e.kind === "money").map((e) => e.title)).toEqual(["Refund of ¥500 recorded", "Refund of ¥500 issued"]);
   });
@@ -87,6 +87,27 @@ describe("buildTimeline", () => {
     expect(tl[3]).toMatchObject({ detail: "By the shop. Customer asked by phone.", by: "Owner" });
     expect(tl[4]).toMatchObject({ detail: "Cancelled by the shop. Owed until payments are connected" });
     expect(tl[4].by).toBeUndefined();
+  });
+
+  it("signs the Shipped step with who shipped it, and shows other actions as steps with what changed", () => {
+    const at = (d: number) => t(`2026-11-2${d}T00:00:00Z`);
+    const tl = buildTimeline({
+      ...base,
+      state: "shipped",
+      shippedAt: at(1),
+      trackingNumber: "123456789099",
+      events: [
+        { kind: "delivery_changed", body: "Delivery details changed", data: { detail: "Time slot: none → 18_20" }, createdAt: at(0), by: "Owner" },
+        { kind: "shipped", body: "Shipped", data: { tracking: "123456789012" }, createdAt: at(1), by: "Owner" },
+        { kind: "tracking_changed", body: "Tracking number corrected", data: { detail: "1234-5678-9012 → 1234-5678-9099" }, createdAt: at(2), by: "Owner" },
+        { kind: "email_resent", body: "Shipping email resend requested", data: { email: "shipped" }, createdAt: at(3), by: "Owner" },
+      ],
+    });
+    expect(tl.map((e) => e.title)).toEqual(["Order placed", "Paid", "Delivery details changed", "Shipped", "Tracking number corrected", "Shipping email resend requested"]);
+    expect(tl[2]).toMatchObject({ kind: "step", detail: "Time slot: none → 18_20", by: "Owner" });
+    expect(tl[3]).toMatchObject({ detail: "Tracking 1234-5678-9099", by: "Owner" });
+    expect(tl[4]).toMatchObject({ detail: "1234-5678-9012 → 1234-5678-9099", by: "Owner" });
+    expect(tl[5].detail).toBeUndefined();
   });
 
   it("says a customer's own cancellation and a cancelled drop apart", () => {
@@ -174,5 +195,21 @@ describe("CSV", () => {
     const csv = toCsv([["Order", "Recipient"], ["AB-005-001", "山田花子"]]);
     expect(csv.charCodeAt(0)).toBe(0xfeff);
     expect(csv.slice(1)).toBe("Order,Recipient\r\nAB-005-001,山田花子\r\n");
+  });
+});
+
+describe("shipping and delivery rules", () => {
+  it("ships and edits a paid or packed order only, and says why not otherwise", () => {
+    for (const st of ["paid", "packed"] as const) expect(canShip(st) && canEditDelivery(st)).toBe(true);
+    for (const st of ["pending_payment", "shipped", "complete", "expired", "cancelled"] as const) expect(canShip(st) || canEditDelivery(st)).toBe(false);
+    expect(shipRefusal("shipped")).toBe("It has shipped already. Correct the tracking number instead.");
+    expect(shipRefusal("cancelled")).toBe("It was cancelled.");
+    expect(shipRefusal("pending_payment")).toBe("It hasn't been paid.");
+    expect(deliveryRefusal("complete")).toBe("It has shipped, so its delivery details can't change.");
+    expect(deliveryRefusal("expired")).toBe("It hasn't been paid.");
+  });
+  it("corrects tracking only once an order has shipped", () => {
+    expect(hasShipped("shipped") && hasShipped("complete")).toBe(true);
+    expect(hasShipped("packed")).toBe(false);
   });
 });

@@ -1,4 +1,5 @@
 import type { OrderState } from "./order-status";
+import { formatTracking } from "./tracking";
 
 /**
  * Rules for the admin's order pages (PRD 4.4). Client-safe: labels, filters,
@@ -150,6 +151,51 @@ export function validateRefund(raw: { amount?: unknown; reason?: unknown; note?:
   return { ok: true, value: { amount, reason, note: note.body } };
 }
 
+// ---------------------------------------------------------------- shipping and delivery (PRD 4.4, 4.6)
+
+/** Orders the shop can mark shipped: paid, packed or not. (The drop must have closed too: canPack in fulfilment-rules.) */
+export const canShip = (state: OrderState) => state === "paid" || state === "packed";
+
+/** Why an order in this state can't be marked shipped. */
+export function shipRefusal(state: OrderState): string {
+  if (state === "shipped" || state === "complete") return "It has shipped already. Correct the tracking number instead.";
+  if (state === "cancelled") return "It was cancelled.";
+  return "It hasn't been paid.";
+}
+
+/** Orders whose tracking number can be corrected: the ones that have shipped. */
+export const hasShipped = (state: OrderState) => state === "shipped" || state === "complete";
+
+/** The recipient, address and time slot can change until the order ships (PRD 4.4). */
+export const canEditDelivery = canShip;
+
+/** Why an order's delivery details can't be edited. */
+export function deliveryRefusal(state: OrderState): string {
+  if (hasShipped(state)) return "It has shipped, so its delivery details can't change.";
+  if (state === "cancelled") return "It was cancelled.";
+  return "It hasn't been paid.";
+}
+
+/** The delivery form's fields, as the admin types them. */
+export interface DeliveryEdit {
+  name: string;
+  phone: string;
+  postal: string;
+  line1: string;
+  line2: string;
+  slot: string;
+}
+export type DeliveryErrors = Partial<Record<keyof DeliveryEdit, string>>;
+
+/** validateDelivery's error codes (checkout-rules.ts), in the admin's words. */
+export const DELIVERY_ERROR: Record<string, { field: keyof DeliveryEdit; text: string }> = {
+  name: { field: "name", text: "Enter the recipient's name." },
+  phone: { field: "phone", text: "Enter a Japanese phone number, like 090-1234-5678." },
+  line1: { field: "line1", text: "Enter the street address: block, building and number." },
+  postal: { field: "postal", text: "Enter a 7-digit postal code that exists, like 153-0061." },
+  area: { field: "postal", text: "That postal code is outside the 23 wards, where we don't deliver." },
+};
+
 // ---------------------------------------------------------------- timeline
 
 export interface TimelineEntry {
@@ -175,8 +221,9 @@ export interface TimelineSource {
   refunds: { id: string; amount: number; reason: string; createdAt: Date; issuedAt: Date | null }[];
   emails: { type: string; to: string; sentAt: Date; error: string | null }[];
   /**
-   * order_events. A "cancelled" event says who cancelled and why, and a "refund" event who refunded and why
-   * (`data.refundId`); they're told on the Cancelled step and the refund's own entry rather than twice.
+   * order_events. A "cancelled" event says who cancelled and why, a "refund" event who refunded and why
+   * (`data.refundId`), and a "shipped" event who shipped it; they're told on the Cancelled step, the refund's own
+   * entry and the Shipped step rather than twice. Other actions are steps, with what changed in `data.detail`.
    */
   events: { kind: string; body: string; data: unknown; createdAt: Date; by: string | null }[];
 }
@@ -192,6 +239,8 @@ const CANCELLED_BY: Record<string, string> = {
   admin: "By the shop",
   drop: "The whole drop was cancelled",
 };
+/** Kinds of order_events told on another entry rather than as steps of their own. */
+const MERGED = new Set(["cancelled", "refund", "shipped"]);
 const field = (data: unknown, key: string): string | undefined => {
   const v = data && typeof data === "object" ? (data as Record<string, unknown>)[key] : undefined;
   return typeof v === "string" ? v : undefined;
@@ -201,11 +250,12 @@ const joined = (...parts: (string | undefined)[]) => parts.filter(Boolean).join(
 /** Everything that happened to an order, oldest first, from its timestamps, refunds, emails and admin events. */
 export function buildTimeline(o: TimelineSource): TimelineEntry[] {
   const cancelled = o.events.find((e) => e.kind === "cancelled");
+  const shipped = o.events.find((e) => e.kind === "shipped");
   const refundEvents = new Map(o.events.filter((e) => e.kind === "refund").map((e) => [field(e.data, "refundId"), e]));
   const out: TimelineEntry[] = [{ at: o.createdAt, kind: "step", title: "Order placed", detail: o.systemNote ?? undefined }];
   if (o.paidAt) out.push({ at: o.paidAt, kind: "step", title: "Paid" });
   if (o.packedAt) out.push({ at: o.packedAt, kind: "step", title: "Packed" });
-  if (o.shippedAt) out.push({ at: o.shippedAt, kind: "step", title: "Shipped", detail: o.trackingNumber ? `Tracking ${o.trackingNumber}` : undefined });
+  if (o.shippedAt) out.push({ at: o.shippedAt, kind: "step", title: "Shipped", detail: o.trackingNumber ? `Tracking ${formatTracking(o.trackingNumber)}` : undefined, by: shipped?.by ?? undefined });
   if (o.cancelledAt) {
     const source = field(cancelled?.data, "source");
     out.push({ at: o.cancelledAt, kind: "step", title: "Cancelled", detail: joined(source && CANCELLED_BY[source], cancelled?.body), by: cancelled?.by ?? undefined });
@@ -219,8 +269,9 @@ export function buildTimeline(o: TimelineSource): TimelineEntry[] {
     out.push({ at: e.sentAt, kind: "email", title: EMAIL_LABEL[e.type] ?? `Email: ${e.type}`, detail: e.error ? `Failed to ${e.to}: ${e.error}` : `To ${e.to}` });
   }
   for (const e of o.events) {
-    if (e === cancelled || e.kind === "refund") continue;
-    out.push({ at: e.createdAt, kind: e.kind === "note" ? "note" : "step", title: e.kind === "note" ? "Note" : e.body, detail: e.kind === "note" ? e.body : undefined, by: e.by ?? undefined });
+    if (MERGED.has(e.kind)) continue;
+    // A note is its text; an action is its one-line summary, with what changed in data.detail.
+    out.push({ at: e.createdAt, kind: e.kind === "note" ? "note" : "step", title: e.kind === "note" ? "Note" : e.body, detail: e.kind === "note" ? e.body : field(e.data, "detail"), by: e.by ?? undefined });
   }
   // Stable: things recorded at the same moment keep the order above (placed before its email).
   return out.map((e, i) => ({ e, i })).sort((a, b) => a.e.at.getTime() - b.e.at.getTime() || a.i - b.i).map(({ e }) => e);

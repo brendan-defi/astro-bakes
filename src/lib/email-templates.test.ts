@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { orderCancelledEmail, orderConfirmationEmail, welcomeEmail } from "./email-templates";
+import { orderCancelledEmail, orderConfirmationEmail, orderShippedEmail, welcomeEmail } from "./email-templates";
 import { customOrderRequestEmail, signInEmail } from "./email-templates";
 
 describe("signInEmail", () => {
@@ -128,5 +128,45 @@ describe("orderCancelledEmail", () => {
     const ja = orderCancelledEmail({ ...base, locale: "ja", refund: { kind: "none" }, byShop: true });
     expect(ja.text).toBe("申し訳ございません。ご注文 AB-005-001 をキャンセルさせていただきました。\nお支払いは発生していません。\nご不明な点は、このメールにご返信ください。");
     expect(ja.html).toContain("ご注文 <strong>AB-005-001</strong> をキャンセルさせていただきました。");
+  });
+});
+
+describe("orderShippedEmail", () => {
+  const order = { number: "AB-005-001", tracking: "1234-5678-9012", trackingUrl: "https://trackings.post.japanpost.jp/services/srv/search/direct?reqCodeNo1=123456789012&searchKind=S002&locale=en", arriveDate: "Fri, Nov 6", timeSlot: "14_16" as const };
+
+  it("gives the tracking number, Japan Post's link and the arrival, in English", () => {
+    const e = orderShippedEmail({ locale: "en", order });
+    expect(e.subject).toBe("Your Astro Bakes box is on its way (AB-005-001)");
+    expect(e.text).toBe(`Order AB-005-001 has left the kitchen and is on its way with Japan Post.\n\nTracking number: 1234-5678-9012\nTrack it: ${order.trackingUrl}\n\nIt should arrive Fri, Nov 6, 14:00–16:00.\n\nView your order: https://astrobakes.xyz/en/account/orders/AB-005-001`);
+    expect(e.html).toContain(`href="${order.trackingUrl.replace(/&/g, "&amp;")}"`);
+    expect(e.html).toContain(">Track it with Japan Post</a>");
+    expect(e.html).toContain('<html lang="en">');
+  });
+
+  it("in Japanese", () => {
+    const e = orderShippedEmail({ locale: "ja", order: { ...order, arriveDate: "11月6日(金)" } });
+    expect(e.subject).toBe("ご注文の品を発送しました（AB-005-001）");
+    expect(e.text).toContain("ご注文 AB-005-001 を日本郵便で発送しました。");
+    expect(e.text).toContain("お問い合わせ番号: 1234-5678-9012");
+    expect(e.text).toContain("お届け予定: 11月6日(金)（14時〜16時）");
+    expect(e.html).toContain(">配送状況を確認する</a>");
+  });
+
+  it("leaves out a time when the customer has no preference", () => {
+    expect(orderShippedEmail({ locale: "en", order: { ...order, timeSlot: "none" } }).text).toContain("It should arrive Fri, Nov 6.\n");
+    expect(orderShippedEmail({ locale: "ja", order: { ...order, timeSlot: "none", arriveDate: "11月6日(金)" } }).text).toContain("お届け予定: 11月6日(金)\n");
+  });
+
+  it("apologises for a corrected number", () => {
+    const en = orderShippedEmail({ locale: "en", order: { ...order, corrected: true } });
+    expect(en.subject).toBe("Corrected tracking number for order AB-005-001");
+    expect(en.text).toMatch(/^Sorry: the tracking number we sent for order AB-005-001 was wrong. Here's the right one./);
+    const ja = orderShippedEmail({ locale: "ja", order: { ...order, corrected: true } });
+    expect(ja.subject).toBe("【訂正】お問い合わせ番号のお知らせ（AB-005-001）");
+    expect(ja.text).toMatch(/^ご注文 AB-005-001 のお問い合わせ番号に誤りがありました。/);
+  });
+
+  it("escapes what it puts in the HTML", () => {
+    expect(orderShippedEmail({ locale: "en", order: { ...order, number: "<b>" } }).html).not.toContain("<b>");
   });
 });

@@ -9,6 +9,7 @@ import { fmtDate, fmtDateTime, yen } from "@/lib/format";
 import { loadSettings } from "@/lib/drops";
 import { getStrings, isLocale, jaLang } from "@/lib/i18n";
 import { privatePage, stringsFor } from "@/lib/metadata";
+import { formatTracking, trackingUrl } from "@/lib/tracking";
 import { Logo } from "@/components/Logo";
 import { ArrowLeftIcon, TruckIcon } from "@/components/icons";
 import { CancelOrderButton, ReorderButton } from "@/components/account/OrderButtons";
@@ -69,7 +70,7 @@ export default async function OrderPage({ params }: { params: Promise<{ locale: 
                 {order.giftMessage && <><dt>{t.giftCard}</dt><dd>{order.giftMessage}</dd></>}
                 {live && !order.canChangeSlot && <><dt>{t.slotTitle}</dt><dd>{t.deliverySlots[order.timeSlot]}</dd></>}
                 <dt>{t.payWith}</dt><dd>{order.paymentMethod === "paypay" ? t.paypay : t.card}</dd>
-                {order.trackingNumber && <><dt>{t.tracking}</dt><dd>{order.trackingNumber}</dd></>}
+                {order.trackingNumber && <><dt>{t.tracking}</dt><dd><a href={trackingUrl(order.trackingNumber, locale)} target="_blank" rel="noreferrer">{formatTracking(order.trackingNumber)}</a></dd></>}
                 {order.refund && <><dt>{t.refund}</dt><dd>{yen(order.refund.amount)} · {order.refund.issued ? t.refundIssued : t.refundPending}</dd></>}
               </dl>
               {live && <div className={s.shipLine}><TruckIcon size={20} />{t.shipsByPostSlot(fmtDate(order.shipAt, locale), fmtDate(order.arriveAt, locale), t.deliverySlots[order.timeSlot])}</div>}
