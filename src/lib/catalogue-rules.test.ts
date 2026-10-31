@@ -39,7 +39,18 @@ describe("slugify", () => {
 
 describe("validateItem", () => {
   it("accepts a complete item, trimmed and with full-width digits", () => {
-    expect(validateItem(item({ nameEn: "  Cake, slice ", unitsPerProductionUnit: "１２" }), { creating: true })).toEqual({ ok: true, value: { slug: "cake-slice", nameEn: "Cake, slice", nameJa: "ケーキ（スライス）", productionUnit: "cake", unitsPerProductionUnit: 12 } });
+    expect(validateItem(item({ nameEn: "  Cake, slice ", unitsPerProductionUnit: "１２" }), { creating: true })).toEqual({ ok: true, value: { slug: "cake-slice", nameEn: "Cake, slice", nameJa: "ケーキ（スライス）", productionUnit: "cake", unitsPerProductionUnit: 12, bakeBuffer: 0 } });
+  });
+
+  it("takes a whole number of spare units to bake, none when left out or blank (PRD 4.5)", () => {
+    const buffer = (v: unknown) => validateItem(item({ bakeBuffer: v }), { creating: true });
+    expect(buffer("1")).toMatchObject({ ok: true, value: { bakeBuffer: 1 } });
+    expect(buffer("２")).toMatchObject({ ok: true, value: { bakeBuffer: 2 } });
+    expect(buffer("")).toMatchObject({ ok: true, value: { bakeBuffer: 0 } });
+    expect(buffer(undefined)).toMatchObject({ ok: true, value: { bakeBuffer: 0 } });
+    expect(errors(buffer("0.5")).bakeBuffer).toBe("A whole number from 0 to 20.");
+    expect(errors(buffer("-1")).bakeBuffer).toBe("A whole number from 0 to 20.");
+    expect(errors(buffer("21")).bakeBuffer).toBe("A whole number from 0 to 20.");
   });
 
   it("requires both names, a unit and a whole count; a slug only when creating", () => {

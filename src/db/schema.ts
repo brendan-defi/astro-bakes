@@ -6,7 +6,6 @@ import {
   index,
   integer,
   jsonb,
-  numeric,
   pgEnum,
   pgTable,
   primaryKey,
@@ -276,8 +275,8 @@ export const items = pgTable("items", {
   productionUnit: text().notNull(),
   /** Sold units per production unit, e.g. 12 slices per cake. */
   unitsPerProductionUnit: integer().notNull().default(1),
-  /** Extra fraction to bake for breakage, e.g. 0.10. */
-  bakeBuffer: numeric({ precision: 4, scale: 2 }).notNull().default("0"),
+  /** Spare production units baked on top of what's needed, e.g. 1 more cake so every slice is a clean one (PRD 4.5). */
+  bakeBuffer: integer().notNull().default(0),
   ...timestamps,
 });
 

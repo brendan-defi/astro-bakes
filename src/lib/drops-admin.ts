@@ -303,6 +303,12 @@ export async function transitionDrop(slug: string, action: DropAction, input: { 
     const others = await otherWindows(tx, d.id, offset, now);
     const r = transition({ ...d, arriveAt: arrivalDate(d.shipAt, offset) }, action, { now, others, closeAt: input.closeAt });
     if (!r.ok) return r;
+    if (action === "reopen") {
+      // A reopened drop lets customers cancel again, but not an order that's been packed or sent. Packing shares this
+      // drop's row lock (fulfilment.ts), so with the drop locked this count can't change before the commit.
+      const [{ n }] = await tx.select({ n: count() }).from(orders).where(and(eq(orders.dropId, d.id), inArray(orders.state, ["packed", "shipped", "complete"])));
+      if (n) return { ok: false, error: `${n === 1 ? "One of its orders is" : `${n} of its orders are`} already packed or shipped, so it can't reopen. A packed order can be unticked on the pack list.` };
+    }
     await tx.update(drops).set({ ...r.patch, updatedAt: now }).where(eq(drops.id, d.id));
     if (action === "complete" && shipped.length) await tx.update(orders).set({ state: "complete", updatedAt: now }).where(inArray(orders.id, shipped.map((o) => o.id)));
     return { ok: true, state: r.patch.state };

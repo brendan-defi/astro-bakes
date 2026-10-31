@@ -7,7 +7,7 @@ vi.mock("@/app/admin/(app)/items/actions", () => actions);
 const router = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => router }));
 
-const ITEM = { slug: "cake-slice", nameEn: "Cake, slice", nameJa: "ケーキ（スライス）", productionUnit: "cake", unitsPerProductionUnit: 12 };
+const ITEM = { slug: "cake-slice", nameEn: "Cake, slice", nameJa: "ケーキ（スライス）", productionUnit: "cake", unitsPerProductionUnit: 12, bakeBuffer: 0 };
 const status = () => screen.getByRole("status").textContent;
 
 beforeEach(() => { actions.saveItemAction.mockReset(); router.push.mockReset(); });
@@ -21,9 +21,12 @@ describe("ItemForm", () => {
     fireEvent.change(screen.getByLabelText("Name (Japanese) *"), { target: { value: "ブラウニー" } });
     fireEvent.change(screen.getByLabelText("Baked as *"), { target: { value: "tray" } });
     fireEvent.change(screen.getByLabelText("Per baked unit *"), { target: { value: "16" } });
+    // The spare is counted in what's baked, so the field says so as the unit is typed.
+    expect(screen.getByLabelText("Spare to bake").parentElement!.textContent).toBe("tray");
+    fireEvent.change(screen.getByLabelText("Spare to bake"), { target: { value: "1" } });
     fireEvent.click(screen.getByRole("button", { name: "Create item" }));
     await waitFor(() => expect(router.push).toHaveBeenCalledWith("/admin/items/brownie?created=1"));
-    expect(actions.saveItemAction).toHaveBeenCalledWith({ slug: "brownie", nameEn: "Brownie", nameJa: "ブラウニー", productionUnit: "tray", unitsPerProductionUnit: "16" }, null);
+    expect(actions.saveItemAction).toHaveBeenCalledWith({ slug: "brownie", nameEn: "Brownie", nameJa: "ブラウニー", productionUnit: "tray", unitsPerProductionUnit: "16", bakeBuffer: "1" }, null);
   });
 
   it("edits an item without offering to change its slug, and says when the server turns a field down", async () => {
@@ -35,7 +38,8 @@ describe("ItemForm", () => {
     fireEvent.change(screen.getByLabelText("Per baked unit *"), { target: { value: "0" } });
     fireEvent.click(screen.getByRole("button", { name: "Save item" }));
     expect(await screen.findByText("A whole number from 1 to 100.")).toBeTruthy();
-    expect(document.activeElement).toBe(screen.getByLabelText("Per baked unit *"));
+    // Focus moves in an effect after the error renders, so under load it can land a moment later.
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByLabelText("Per baked unit *")));
     actions.saveItemAction.mockResolvedValueOnce({ ok: true, slug: "cake-slice", value: { ...ITEM, unitsPerProductionUnit: 8 } });
     fireEvent.change(screen.getByLabelText("Per baked unit *"), { target: { value: "8" } });
     fireEvent.click(screen.getByRole("button", { name: "Save item" }));

@@ -32,7 +32,10 @@ export default async function ItemsPage() {
                   <Link href={`/admin/items/${i.slug}`} className={s.rowLink}>{i.nameEn}</Link>
                   <span className={s.sub}>{i.nameJa ?? "No Japanese name"}</span>
                 </td>
-                <td>{i.unitsPerProductionUnit === 1 ? `1 per ${i.productionUnit}` : `${i.unitsPerProductionUnit} per ${i.productionUnit}`}</td>
+                <td>
+                  {i.unitsPerProductionUnit} per {i.productionUnit}
+                  {i.bakeBuffer > 0 && <span className={s.sub}>+{i.bakeBuffer} spare</span>}
+                </td>
                 <td className={s.num}>{i.boxes === 0 ? "No boxes" : `${i.boxes} box${i.boxes === 1 ? "" : "es"}`}</td>
               </tr>
             ))}
