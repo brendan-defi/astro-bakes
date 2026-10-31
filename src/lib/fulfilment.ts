@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, count, eq, gt, inArray, sql, sum } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, sql } from "drizzle-orm";
 import { getDb, type Db } from "@/db";
 import { boxItems, dropBoxes, drops, inventoryHolds, orderItems, orders } from "@/db/schema";
 import { arrivalDate, effectiveState, type DropState } from "./data";
@@ -18,17 +18,32 @@ const SOLD_STATES = ["paid", "packed", "shipped", "complete"] as const;
 
 type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 
+type DropRow = typeof drops.$inferSelect;
+
 /**
- * Read a page's data from one snapshot of the database (REPEATABLE READ, read only). The sheet and the list read the
- * paid orders and the live holds separately, and paying moves a checkout from one to the other in a single commit
- * (markPaid deletes its holds). Read at different moments, a checkout paid in between would be in neither, and the
- * sheet would call itself final without it; read from one snapshot, it's in exactly one of them.
+ * Read a page's data so that no checkout can go missing from it: a hold may still be paid after the drop closes
+ * (PRD 3.8), and the sheet mustn't say Final without it.
+ *
+ * 1. Share the drop's row lock first. A checkout is accepted holding that lock from checking its hold until it
+ *    commits (placeOrder), and holds are made under it (startCheckout). So this waits for any checkout part-way
+ *    through, and keeps new ones out until the reads are done. `now`, which decides which holds are live, is taken
+ *    after that: a hold that has run out by then can't belong to an accepted checkout still to commit, and a checkout
+ *    accepted afterwards has a hold that outlasts `now`, so it's counted as open.
+ * 2. Read the live holds before the paid orders. Paying moves a checkout from one to the other in a single commit
+ *    (markPaid, which Stripe's webhook will run without the drop's lock). In this order a payment landing between the
+ *    reads is seen twice, still held and paid, never neither, so the page stays provisional rather than final
+ *    without it.
+ *
+ * (A REPEATABLE READ snapshot can't do the first: it's taken when the first statement starts, before the lock wait.)
  */
-function inSnapshot<T>(read: (tx: Tx) => Promise<T>): Promise<T> {
-  return getDb().transaction(read, { isolationLevel: "repeatable read", accessMode: "read only" });
+function readSettled<T>(slug: string, read: (tx: Tx, d: DropRow, now: Date) => Promise<T>): Promise<T | null> {
+  return getDb().transaction(async (tx) => {
+    const [d] = await tx.select().from(drops).where(eq(drops.slug, slug)).for("share");
+    return d ? read(tx, d, new Date()) : null;
+  });
 }
 
-/** Tests pause the reads here, after the paid orders and before the holds, to commit a checkout in the middle. */
+/** Tests pause the reads here, after the holds and before the paid orders, to pay for a checkout in the middle. */
 let betweenReads: (() => Promise<void>) | null = null;
 export function setBetweenReadsForTest(hook: (() => Promise<void>) | null) {
   betweenReads = hook;
@@ -46,12 +61,9 @@ export interface SheetDrop {
   arriveAt: Date;
 }
 
-async function sheetDrop(tx: Tx, slug: string, offset: number, now: Date) {
-  const d = await tx.query.drops.findFirst({ where: eq(drops.slug, slug) });
-  if (!d) return null;
+function sheetDrop(d: DropRow, offset: number, now: Date): SheetDrop {
   const arriveAt = arrivalDate(d.shipAt, offset);
-  const head: SheetDrop = { slug: d.slug, number: d.number, nameEn: d.nameEn, state: effectiveState({ ...d, arriveAt }, now), closeAt: d.closeAt, bakeAt: d.bakeAt, shipAt: d.shipAt, arriveAt };
-  return { id: d.id, head };
+  return { slug: d.slug, number: d.number, nameEn: d.nameEn, state: effectiveState({ ...d, arriveAt }, now), closeAt: d.closeAt, bakeAt: d.bakeAt, shipAt: d.shipAt, arriveAt };
 }
 
 /**
@@ -85,31 +97,31 @@ export interface ProductionSheet {
 /**
  * The production sheet (PRD 4.5): what to bake for the drop's paid orders, the boxes to assemble and the cards to
  * write. While the drop is open it's a projection that grows with each order, and after it closes it isn't final
- * until the checkouts begun before the close have been paid or run out (`open`; sheetStanding). It uses each box's
- * recipe as it is now (Boxes & items), since that's what the kitchen will make.
+ * until the checkouts begun before the close have been paid or run out (`open`; sheetStanding, readSettled). It uses
+ * each box's recipe as it is now (Boxes & items), since that's what the kitchen will make.
  */
-export async function productionSheet(slug: string, now = new Date()): Promise<ProductionSheet | null> {
+export async function productionSheet(slug: string): Promise<ProductionSheet | null> {
   const offset = await arrivalOffsetDays();
-  // One snapshot (inSnapshot), so a checkout paid while this runs is either counted or still held, never neither.
-  // One connection runs the reads in turn.
-  const read = await inSnapshot(async (tx) => {
-    const found = await sheetDrop(tx, slug, offset, now);
-    if (!found) return null;
-    const sold = and(eq(orders.dropId, found.id), inArray(orders.state, SOLD_STATES));
+  const read = await readSettled(slug, async (tx, d, now) => {
+    const open = await openCheckouts(tx, d.id, now);
+    await betweenReads?.();
+    // The paid orders in one statement, so the box counts, the order count and the cards all agree.
+    const paid = await tx.query.orders.findMany({
+      where: and(eq(orders.dropId, d.id), inArray(orders.state, SOLD_STATES)),
+      columns: { giftMessage: true },
+      with: { items: { columns: { dropBoxId: true, qty: true } } },
+    });
     const dropBoxRows = await tx.query.dropBoxes.findMany({
-      where: eq(dropBoxes.dropId, found.id),
+      where: eq(dropBoxes.dropId, d.id),
       orderBy: [asc(dropBoxes.sort)],
       with: { box: { columns: { nameEn: true }, with: { boxItems: { orderBy: [asc(boxItems.itemId)], with: { item: true } } } } },
     });
-    const soldRows = await tx.select({ dropBoxId: orderItems.dropBoxId, n: sum(orderItems.qty).mapWith(Number) }).from(orderItems).innerJoin(orders, eq(orders.id, orderItems.orderId)).where(sold).groupBy(orderItems.dropBoxId);
-    const [counts] = await tx.select({ orders: count(), giftCards: sql<number>`count(*) filter (where btrim(coalesce(${orders.giftMessage}, '')) <> '')`.mapWith(Number) }).from(orders).where(sold);
-    await betweenReads?.();
-    const open = await openCheckouts(tx, found.id, now);
-    return { found, dropBoxRows, soldRows, counts, open };
+    return { head: sheetDrop(d, offset, now), open, paid, dropBoxRows };
   });
   if (!read) return null;
-  const { found, dropBoxRows, soldRows, counts, open } = read;
-  const soldBy = new Map(soldRows.map((r) => [r.dropBoxId, r.n]));
+  const { head, open, paid, dropBoxRows } = read;
+  const soldBy = new Map<string, number>();
+  for (const it of paid.flatMap((o) => o.items)) soldBy.set(it.dropBoxId, (soldBy.get(it.dropBoxId) ?? 0) + it.qty);
   const plan = productionPlan(
     dropBoxRows.map((x) => ({
       nameEn: x.box.nameEn,
@@ -117,7 +129,7 @@ export async function productionSheet(slug: string, now = new Date()): Promise<P
       recipe: x.box.boxItems.map((bi) => ({ qty: bi.qty, item: { slug: bi.item.slug, nameEn: bi.item.nameEn, nameJa: bi.item.nameJa, productionUnit: bi.item.productionUnit, unitsPerProductionUnit: bi.item.unitsPerProductionUnit, bakeBuffer: bi.item.bakeBuffer } })),
     })),
   );
-  return { drop: found.head, plan, open, orders: counts.orders, giftCards: counts.giftCards };
+  return { drop: head, plan, open, orders: paid.length, giftCards: paid.filter((o) => o.giftMessage?.trim()).length };
 }
 
 export interface PackRow {
@@ -143,28 +155,27 @@ export interface PackList {
 }
 
 /** The pack list (PRD 4.6): one row per paid order, by order number, with what goes in the box and on the card. */
-export async function packList(slug: string, now = new Date()): Promise<PackList | null> {
+export async function packList(slug: string): Promise<PackList | null> {
   const offset = await arrivalOffsetDays();
-  // One snapshot, as the sheet: a checkout paid meanwhile is either a row or still held, never neither.
-  const read = await inSnapshot(async (tx) => {
-    const found = await sheetDrop(tx, slug, offset, now);
-    if (!found) return null;
+  // As the sheet (readSettled): holds first, then the orders, so a checkout paid meanwhile is still shown as pending.
+  const read = await readSettled(slug, async (tx, d, now) => {
+    const open = await openCheckouts(tx, d.id, now);
+    await betweenReads?.();
     const rows = await tx.query.orders.findMany({
-      where: and(eq(orders.dropId, found.id), inArray(orders.state, SOLD_STATES)),
+      where: and(eq(orders.dropId, d.id), inArray(orders.state, SOLD_STATES)),
       orderBy: [asc(orders.number)],
       columns: { number: true, state: true, packedAt: true, shipToName: true, city: true, deliveryTimeSlot: true, giftMessage: true },
       with: { items: { columns: { nameEn: true, qty: true }, orderBy: [asc(orderItems.nameEn)] } },
     });
-    await betweenReads?.();
-    return { found, rows, open: await openCheckouts(tx, found.id, now) };
+    return { head: sheetDrop(d, offset, now), open, rows };
   });
   if (!read) return null;
-  const { found, rows, open } = read;
-  const packable = canPack(found.head.state);
+  const { head, open, rows } = read;
+  const packable = canPack(head.state);
   return {
-    drop: found.head,
+    drop: head,
     packable,
-    refusal: packable ? null : packRefusal(found.head.state),
+    refusal: packable ? null : packRefusal(head.state),
     open,
     rows: rows.map((o) => ({
       number: o.number,

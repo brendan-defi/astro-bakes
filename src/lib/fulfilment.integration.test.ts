@@ -5,7 +5,7 @@ import * as schema from "@/db/schema";
 import { setPackedAction } from "@/app/admin/(app)/drops/[slug]/packing/actions";
 import { transitionDropAction } from "@/app/admin/(app)/drops/actions";
 import { cancelOrder } from "@/lib/account";
-import { placeOrder, startCheckout } from "@/lib/checkout";
+import { markPaid, placeOrder, startCheckout } from "@/lib/checkout";
 import { toJstLocal } from "@/lib/drop-rules";
 import { transitionDrop } from "@/lib/drops-admin";
 import { packList, productionSheet, setBetweenReadsForTest, setPacked } from "@/lib/fulfilment";
@@ -132,42 +132,72 @@ describe.skipIf(!TEST_DATABASE_URL)("fulfilment", { timeout: 60_000 }, () => {
     const delivery = { name: "Test Person", phone: "090-0000-0000", postal: "153-0061", line1: "1-2-3", line2: "" };
     return () => placeOrder({ dropId: DROP, checkoutId: r.checkoutId!, revision: r.revision!, locale: "en", delivery, gift: null, paymentMethod: "card", timeSlot: "none" }, r.checkoutId!, buyer);
   }
-  /** Pay for it once, while a page load is between its paid-orders read and its holds read. */
-  const payBetweenReads = (pay: () => ReturnType<Awaited<ReturnType<typeof heldThenClosed>>>) =>
-    setBetweenReadsForTest(async () => {
-      setBetweenReadsForTest(null);
-      expect((await pay()).ok).toBe(true);
-    });
 
-  it("reads the sheet from one snapshot: a checkout paid between its reads is never left out of a Final sheet", async () => {
-    payBetweenReads(await heldThenClosed());
+  it("waits for a checkout accepted before its hold ran out but still committing, and counts it rather than saying Final", async () => {
+    const pay = await heldThenClosed();
+    // Something holds the buyer's row, so the checkout stalls after checking its (still live) hold, holding the drop's lock.
+    const client = await pool!.connect();
+    try {
+      await client.query("begin");
+      await client.query("select id from customers where id = $1 for update", [buyer]);
+      const paying = pay();
+      await waitingOnLocks(1);
+      // Its hold runs out while it waits; the page loads now.
+      await db.update(schema.inventoryHolds).set({ expiresAt: new Date(Date.now() - 1000) });
+      const sheet = productionSheet(DROP);
+      const list = packList(DROP);
+      await waitingOnLocks(3); // the checkout on the buyer's row; the sheet and the list on the drop
+      await client.query("commit");
+      expect((await paying).ok).toBe(true);
+      // Both waited for it: the order is counted, so Final is true.
+      const s = (await sheet)!;
+      expect(s.plan.totalBoxes).toBe(1);
+      expect(s.open.checkouts).toBe(0);
+      expect(sheetStanding(s.drop, s.open).final).toBe(true);
+      expect((await list)!.rows).toHaveLength(1);
+    } finally {
+      // Ends the transaction if the test failed before its commit, so its locks can't hold up the next test.
+      await client.query("rollback").catch(() => {});
+      client.release();
+    }
+  });
+
+  it("sees a payment landing between its reads twice, never neither (Stripe's webhook pays without the drop's lock)", async () => {
+    // An order awaiting payment, holding its box, as it will between checkout and Stripe's webhook.
+    const n = await order(buyer, { "cookie-box": 1 });
+    const [o] = await db.update(schema.orders).set({ state: "pending_payment", paidAt: null }).where(eq(schema.orders.number, n)).returning({ id: schema.orders.id });
+    await db.execute(sql`update drop_boxes d set sold_qty = d.sold_qty - i.qty from order_items i where i.order_id = ${o.id} and i.drop_box_id = d.id`);
+    await db.execute(sql`insert into inventory_holds (drop_box_id, order_id, qty, expires_at) select drop_box_id, order_id, qty, now() + interval '5 minutes' from order_items where order_id = ${o.id}`);
+    await closeDrop();
+    const payBetween = () => setBetweenReadsForTest(async () => {
+      setBetweenReadsForTest(null);
+      await db.transaction((tx) => markPaid(tx, o.id));
+    });
+    payBetween();
     try {
       const sheet = (await productionSheet(DROP))!;
-      // As of the snapshot the box was still held: not counted, and the sheet still says so.
-      expect(sheet.plan.totalBoxes).toBe(0);
+      // Held when the holds were read, paid when the orders were: counted, and still provisional.
+      expect(sheet.plan.totalBoxes).toBe(1);
       expect(sheet.open).toMatchObject({ checkouts: 1, boxes: 1 });
       expect(sheetStanding(sheet.drop, sheet.open).final).toBe(false);
     } finally {
       setBetweenReadsForTest(null);
     }
-    // The order was paid meanwhile: the next read counts it, and is final.
     const next = (await productionSheet(DROP))!;
     expect(next.plan.totalBoxes).toBe(1);
     expect(sheetStanding(next.drop, next.open).final).toBe(true);
-  });
-
-  it("reads the pack list from one snapshot: a checkout paid between its reads still shows as pending", async () => {
-    payBetweenReads(await heldThenClosed());
+    // The pack list reads in the same order.
+    await db.update(schema.orders).set({ state: "pending_payment", paidAt: null }).where(eq(schema.orders.id, o.id));
+    await db.execute(sql`update drop_boxes d set sold_qty = d.sold_qty - i.qty from order_items i where i.order_id = ${o.id} and i.drop_box_id = d.id`);
+    await db.execute(sql`insert into inventory_holds (drop_box_id, order_id, qty, expires_at) select drop_box_id, order_id, qty, now() + interval '5 minutes' from order_items where order_id = ${o.id}`);
+    payBetween();
     try {
       const list = (await packList(DROP))!;
-      expect(list.rows).toEqual([]);
-      expect(list.open).toMatchObject({ checkouts: 1, boxes: 1 });
+      expect(list.rows).toHaveLength(1);
+      expect(list.open.checkouts).toBe(1);
     } finally {
       setBetweenReadsForTest(null);
     }
-    const next = (await packList(DROP))!;
-    expect(next.rows).toHaveLength(1);
-    expect(next.open.checkouts).toBe(0);
   });
 
   it("is final once an unpaid checkout's hold has run out", async () => {
