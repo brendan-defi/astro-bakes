@@ -75,7 +75,8 @@ describe("BoxForm", () => {
     fireEvent.click(save());
     expect(await screen.findByText("A whole number from 50 to 100,000.")).toBeTruthy();
     expect(screen.getByText(/already in the box/)).toBeTruthy();
-    expect(document.activeElement).toBe(screen.getByLabelText("Price (税込) *"));
+    // Focus moves in an effect after the errors render, so under load it can land a moment later.
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByLabelText("Price (税込) *")));
     expect(status()).toMatch(/need fixing/);
     const item2 = screen.getByLabelText("Item 2");
     expect(item2.getAttribute("aria-invalid")).toBe("true");
