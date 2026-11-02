@@ -6,7 +6,7 @@ import { PackToggle } from "@/components/admin/PackToggle";
 import { PrintButton } from "@/components/admin/PrintButton";
 import { requireAdmin } from "@/lib/admin";
 import { fmtDate, fmtDateTime } from "@/lib/format";
-import { packList } from "@/lib/fulfilment";
+import { japanPostLabels, packList } from "@/lib/fulfilment";
 import { getStrings } from "@/lib/i18n";
 import s from "../../../../admin.module.css";
 
@@ -14,12 +14,16 @@ export const metadata: Metadata = { title: "Pack list" };
 
 const en = getStrings("en");
 
-/** The pack list (PRD 4.6): every paid order on a drop, by number, with a box to tick as each is packed. Printable. */
+/**
+ * The pack list (PRD 4.6): every paid order on a drop, by number, with a box to tick as each is packed. Printable.
+ * Above it, the Japan Post label file for the orders still to ship, with anything to fix before uploading it.
+ */
 export default async function PackListPage({ params }: { params: Promise<{ slug: string }> }) {
   await requireAdmin();
   const { slug } = await params;
-  const list = await packList(slug);
-  if (!list) notFound();
+  const [list, labels] = await Promise.all([packList(slug), japanPostLabels(slug)]);
+  if (!list || !labels) notFound();
+  const flagged = labels.file.rows.filter((r) => r.problems.length);
   const { drop: d, rows } = list;
   const packed = rows.filter((r) => r.state === "packed").length;
   const sent = rows.filter((r) => r.state === "shipped" || r.state === "complete").length;
@@ -44,6 +48,34 @@ export default async function PackListPage({ params }: { params: Promise<{ slug:
         <p className={`${s.banner} ${s.bannerWarn}`} role="status">
           {list.open.checkouts === 1 ? "A checkout begun before the drop closed" : `${list.open.checkouts} checkouts begun before the drop closed`} can still be paid until {fmtDateTime(list.open.until)}. Their orders join this list when they are; refresh after that.
         </p>
+      )}
+      {labels.file.rows.length > 0 && (
+        <section aria-labelledby="jp-labels" className={`panel ${s.formSection} ${s.noPrint} ${s.labelsPanel}`}>
+          <h2 id="jp-labels" className={s.sectionTitle}>Japan Post labels</h2>
+          <p className={s.sectionIntro}>
+            A file for Webゆうパックプリント with the {labels.file.rows.length === 1 ? "order" : `${labels.file.rows.length} orders`} still to ship: upload it there to print the labels. Each label carries the order number in 記事.
+          </p>
+          {labels.warning && <p className={`${s.banner} ${s.bannerWarn}`}>{labels.warning}</p>}
+          {labels.file.fileProblems.length > 0 ? (
+            <div role="alert" className={s.labelsBlocked}>
+              <p><strong>The file can&apos;t be made yet:</strong></p>
+              <ul>{labels.file.fileProblems.map((p) => <li key={p}>{p}</li>)}</ul>
+              <Link href="/admin/settings">Open Settings</Link>
+            </div>
+          ) : (
+            <p><a href={`/admin/drops/${d.slug}/japan-post`} className={`btn btn-primary ${s.btnSm}`} download>Download the label file (CSV)</a></p>
+          )}
+          {flagged.length > 0 && (
+            <div className={s.labelsFlagged}>
+              <p><strong>{flagged.length === 1 ? "One order needs" : `${flagged.length} orders need`} a look in the tool before printing:</strong></p>
+              <ul>
+                {flagged.map((r) => (
+                  <li key={r.number}><Link href={`/admin/orders/${r.number}`}>{r.number}</Link>: {r.problems.join(" ")}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </section>
       )}
       {rows.length === 0 ? (
         <div className={`panel ${s.empty}`}>No paid orders on this drop yet.</div>

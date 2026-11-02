@@ -88,9 +88,11 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
       { key: "jp_sender_line1", kind: "text", label: "Sender address", default: "", max: 25, private: true, placeholder: "例: 上目黒1-2-3" },
       { key: "jp_sender_line2", kind: "text", label: "Sender building / room", default: "", max: 25, private: true },
       { key: "jp_sender_phone", kind: "phone", label: "Sender phone", default: "", private: true },
-      { key: "jp_item_name", kind: "text", label: "Item description (品名)", default: "焼き菓子", max: 25, required: true, private: true },
+      { key: "jp_item_name", kind: "text", label: "Item description (品名)", default: "焼き菓子", max: 20, required: true, private: true },
       { key: "jp_chilled", kind: "bool", label: "Send chilled (クール)", default: false, private: true, help: "Off sends at room temperature (常温)." },
       { key: "jp_fragile", kind: "bool", label: "Mark as fragile (こわれもの)", default: true, private: true },
+      { key: "jp_perishable", kind: "bool", label: "Mark as perishable (なまもの)", default: true, private: true, help: "Baked goods to eat within days: Japan Post handles them as なまもの." },
+      { key: "jp_collect", kind: "bool", label: "Japan Post collects the parcels (集荷)", default: true, private: true, help: "Off if you take them to the post office yourself (持込). Goes on the label file." },
     ],
   },
 ];

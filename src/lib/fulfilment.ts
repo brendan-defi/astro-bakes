@@ -6,7 +6,8 @@ import { arrivalDate, effectiveState, type DropState } from "./data";
 import type { DeliverySlot } from "./delivery-slots";
 import { canPack, packRefusal, packStateRefusal, productionPlan, type OpenCheckouts, type ProductionPlan } from "./fulfilment-rules";
 import type { OrderState } from "./order-status";
-import { arrivalOffsetDays } from "./settings";
+import { buildJapanPostExport, type JapanPostExport } from "./japan-post";
+import { arrivalOffsetDays, japanPostSettings } from "./settings";
 
 /**
  * The kitchen's and the packing table's pages (PRD 4.5, 4.6): the production
@@ -214,3 +215,39 @@ export async function setPacked(number: string, packed: boolean, now = new Date(
     return { ok: true as const, packedAt };
   });
 }
+
+// ---------------------------------------------------------------- Japan Post labels (PRD 4.6)
+
+/** Orders that get a label: paid, packed or not, and not shipped yet. */
+const TO_LABEL = ["paid", "packed"] as const;
+
+export interface LabelFile {
+  drop: SheetDrop;
+  /** Why the file may be out of date or refused, said before downloading it (null when it's fine). */
+  warning: string | null;
+  file: JapanPostExport;
+}
+
+/**
+ * The Japan Post label file for a drop (Webゆうパックプリント, japan-post.ts): one row per order still to ship, by order
+ * number, with the sender from Settings, 差出予定日 the drop's ship date and 配達希望日 its arrival date.
+ */
+export async function japanPostLabels(slug: string, now = new Date()): Promise<LabelFile | null> {
+  const db = getDb();
+  const [d, offset, settings] = await Promise.all([db.query.drops.findFirst({ where: eq(drops.slug, slug) }), arrivalOffsetDays(), japanPostSettings()]);
+  if (!d) return null;
+  const head = sheetDrop(d, offset, now);
+  const rows = await db.query.orders.findMany({
+    where: and(eq(orders.dropId, d.id), inArray(orders.state, TO_LABEL)),
+    orderBy: [asc(orders.number)],
+    columns: { number: true, shipToName: true, phone: true, postalCode: true, prefecture: true, city: true, town: true, line1: true, line2: true, deliveryTimeSlot: true },
+  });
+  const file = buildJapanPostExport(rows.map((o) => ({ ...o, slot: o.deliveryTimeSlot })), { shipAt: head.shipAt, arriveAt: head.arriveAt, ...settings });
+  const warning =
+    head.state === "open" ? "The drop is still open: orders and delivery times can change until it closes, so download the file after that."
+    : jstDay(now) > jstDay(head.shipAt) ? "The ship date has passed. Japan Post may refuse a 差出予定日 in the past; ship the remaining orders with a fresh date in the tool."
+    : null;
+  return { drop: head, warning, file };
+}
+
+const jstDay = (d: Date) => Math.floor((d.getTime() + 9 * 3_600_000) / 86_400_000);

@@ -2,6 +2,7 @@ import "server-only";
 import { inArray } from "drizzle-orm";
 import { getDb } from "@/db";
 import { settings } from "@/db/schema";
+import type { JapanPostOptions, JapanPostSender } from "./japan-post";
 import { SETTING_FIELDS, settingValue, type SettingValue } from "./settings-fields";
 
 /**
@@ -46,6 +47,16 @@ export async function ownerNotifications(): Promise<{ to: string; newOrders: boo
 /** The store's contact email: shown to customers, and where their replies to our emails go. */
 export async function contactEmail(): Promise<string> {
   return (await read(["contact_email"])).contact_email as string;
+}
+
+/** The label file's sender and parcel details (Settings → Shipping; private, never on a public page). */
+export async function japanPostSettings(): Promise<{ sender: JapanPostSender; options: JapanPostOptions }> {
+  const v = await read(["jp_sender_name", "jp_sender_postal", "jp_sender_prefecture", "jp_sender_city", "jp_sender_line1", "jp_sender_line2", "jp_sender_phone", "jp_item_name", "jp_chilled", "jp_fragile", "jp_perishable", "jp_collect"]);
+  const t = (k: keyof typeof v) => String(v[k] ?? "");
+  return {
+    sender: { name: t("jp_sender_name"), postal: t("jp_sender_postal"), prefecture: t("jp_sender_prefecture"), city: t("jp_sender_city"), line1: t("jp_sender_line1"), line2: t("jp_sender_line2"), phone: t("jp_sender_phone") },
+    options: { itemName: t("jp_item_name"), chilled: v.jp_chilled === true, fragile: v.jp_fragile === true, perishable: v.jp_perishable === true, collect: v.jp_collect === true },
+  };
 }
 
 /** Days from a drop's ship date to its expected arrival (D21; next day unless the owner says otherwise). */

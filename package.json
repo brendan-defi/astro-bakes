@@ -20,6 +20,7 @@
   "dependencies": {
     "@vercel/functions": "^3.10.1",
     "drizzle-orm": "^0.45.4",
+    "iconv-lite": "0.7.3",
     "next": "^16.4.2",
     "pg": "^8.23.1",
     "react": "^19.3.0",
