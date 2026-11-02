@@ -6,7 +6,7 @@ import { PackToggle } from "@/components/admin/PackToggle";
 import { PrintButton } from "@/components/admin/PrintButton";
 import { requireAdmin } from "@/lib/admin";
 import { fmtDate, fmtDateTime } from "@/lib/format";
-import { japanPostLabels, packList } from "@/lib/fulfilment";
+import { packPage } from "@/lib/fulfilment";
 import { getStrings } from "@/lib/i18n";
 import s from "../../../../admin.module.css";
 
@@ -21,9 +21,12 @@ const en = getStrings("en");
 export default async function PackListPage({ params }: { params: Promise<{ slug: string }> }) {
   await requireAdmin();
   const { slug } = await params;
-  const [list, labels] = await Promise.all([packList(slug), japanPostLabels(slug)]);
-  if (!list || !labels) notFound();
-  const flagged = labels.file.rows.filter((r) => r.problems.length);
+  // One settled read for the list and the label file, so they always show the same orders (packPage).
+  const page = await packPage(slug);
+  if (!page) notFound();
+  const { list, labels } = page;
+  const blocked = labels.file.rows.filter((r) => r.errors.length);
+  const flagged = labels.file.rows.filter((r) => r.warnings.length);
   const { drop: d, rows } = list;
   const packed = rows.filter((r) => r.state === "packed").length;
   const sent = rows.filter((r) => r.state === "shipped" || r.state === "complete").length;
@@ -55,22 +58,30 @@ export default async function PackListPage({ params }: { params: Promise<{ slug:
           <p className={s.sectionIntro}>
             A file for Webゆうパックプリント with the {labels.file.rows.length === 1 ? "order" : `${labels.file.rows.length} orders`} still to ship: upload it there to print the labels. Each label carries the order number in 記事.
           </p>
-          {labels.warning && <p className={`${s.banner} ${s.bannerWarn}`}>{labels.warning}</p>}
+          {labels.warnings.map((w) => <p key={w} className={`${s.banner} ${s.bannerWarn}`}>{w}</p>)}
           {labels.file.fileProblems.length > 0 ? (
             <div role="alert" className={s.labelsBlocked}>
-              <p><strong>The file can&apos;t be made yet:</strong></p>
+              <p><strong>The file can&apos;t be made yet. Japan Post&apos;s tool would refuse it:</strong></p>
               <ul>{labels.file.fileProblems.map((p) => <li key={p}>{p}</li>)}</ul>
-              <Link href="/admin/settings">Open Settings</Link>
+              {blocked.length > 0 && (
+                <ul>
+                  {blocked.map((r) => (
+                    <li key={r.number}><Link href={`/admin/orders/${r.number}`}>{r.number}</Link>: {r.errors.join(" ")}</li>
+                  ))}
+                </ul>
+              )}
+              {labels.file.fileProblems.some((p) => p.includes("Settings")) && <Link href="/admin/settings">Open Settings</Link>}
             </div>
           ) : (
             <p><a href={`/admin/drops/${d.slug}/japan-post`} className={`btn btn-primary ${s.btnSm}`} download>Download the label file (CSV)</a></p>
           )}
-          {flagged.length > 0 && (
+          {(flagged.length > 0 || labels.file.fileWarnings.length > 0) && (
             <div className={s.labelsFlagged}>
-              <p><strong>{flagged.length === 1 ? "One order needs" : `${flagged.length} orders need`} a look in the tool before printing:</strong></p>
+              <p><strong>To check in the tool before printing:</strong></p>
               <ul>
+                {labels.file.fileWarnings.map((w) => <li key={w}>Every label: {w}</li>)}
                 {flagged.map((r) => (
-                  <li key={r.number}><Link href={`/admin/orders/${r.number}`}>{r.number}</Link>: {r.problems.join(" ")}</li>
+                  <li key={r.number}><Link href={`/admin/orders/${r.number}`}>{r.number}</Link>: {r.warnings.join(" ")}</li>
                 ))}
               </ul>
             </div>

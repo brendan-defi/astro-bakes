@@ -3,7 +3,7 @@ import iconv from "iconv-lite";
 import { describe, expect, it } from "vitest";
 import { DELIVERY_SLOTS } from "./delivery-slots";
 import {
-  buildJapanPostExport, cp932Check, japanPostCsv, japanPostPhone, japanPostRow, jstYmd, JP_COL, JP_COLUMNS, JP_MAX_ROWS, senderProblems, toZenkaku,
+  buildJapanPostExport, cp932Check, japanPostCsv, japanPostPhone, japanPostRow, jstYmd, JP_COL, JP_COLUMNS, JP_MAX_ROWS, sharedFields, toZenkaku,
   type JapanPostContext, type ShipmentOrder,
 } from "./japan-post";
 
@@ -21,9 +21,9 @@ const cell = (cells: string[], col: number) => cells[col - 1];
 
 describe("japanPostRow", () => {
   it("writes exactly 72 cells, filling the columns Japan Post's own sample file fills, and no others", () => {
-    const { cells, problems } = japanPostRow(order(), ctx);
+    const { cells, errors, warnings } = japanPostRow(order(), ctx);
     expect(cells).toHaveLength(JP_COLUMNS);
-    expect(problems).toEqual([]);
+    expect([errors, warnings]).toEqual([[], []]);
     const filled = cells.map((c, i) => (c ? i + 1 : 0)).filter(Boolean);
     // The sample's columns, less those we have no data for (10 カナ, 17–19 company and email, 24–25 sender 敬称/カナ,
     // 32–34, 36–37 品名番号/個数), and the sender's building line, empty here.
@@ -72,22 +72,37 @@ describe("japanPostRow", () => {
     expect(cell(cells, JP_COL.toLine2)).toBe("");
   });
 
-  it("flags what the owner must fix in the tool, without cutting anything short", () => {
+  it("calls a field over the label's limit an error (the tool would refuse it), without cutting anything short", () => {
     const long = "あ".repeat(26);
-    const { cells, problems } = japanPostRow(order({ shipToName: long, town: "う".repeat(20), line2: "い".repeat(26), phone: "12" }), ctx);
+    const { cells, errors, warnings } = japanPostRow(order({ shipToName: long, line1: "う".repeat(26), line2: "サンシャインマンション".repeat(3), phone: "12" }), ctx);
     expect(cell(cells, JP_COL.toName)).toBe(long);
-    expect(problems).toEqual([
+    expect(cell(cells, JP_COL.toLine2)).toBe("サンシャインマンション".repeat(3));
+    expect(errors).toEqual([
       "The recipient's name is 26 characters; the label takes 25.",
-      "The prefecture, city and town are 26 characters together; the label takes 25.",
-      "The building and room is 26 characters; the label takes 25.",
-      "The phone number “12” isn't one the label takes, so it's left off.",
+      "The street address is 26 characters; the label takes 25.",
+      "The building and room is 33 characters; the label takes 25.",
     ]);
+    // A phone the label won't take is left off: the tool needs one only for 代引.
+    expect(warnings).toEqual(["The phone number “12” isn't one the label takes, so it's left off."]);
   });
 
-  it("writes a character the file can't carry as 〓 and says so, and warns about ones that may print wrongly", () => {
-    const { cells, problems } = japanPostRow(order({ shipToName: "𠮷田😀", line1: "髙橋ビル①" }), ctx);
+  it("moves a long town to the street column when the prefecture, city and town don't fit 25, losing nothing", () => {
+    const town = "う".repeat(19); // 東京都 + 目黒区 + 19 = 25 fits exactly; one more doesn't
+    expect(cell(japanPostRow(order({ town }), ctx).cells, JP_COL.toCity)).toBe(`目黒区${town}`);
+    const longer = `${town}う`;
+    const moved = japanPostRow(order({ town: longer, line1: "1-2-3" }), ctx);
+    expect([cell(moved.cells, JP_COL.toCity), cell(moved.cells, JP_COL.toLine1)]).toEqual(["目黒区", `${longer}１－２－３`]);
+    expect(moved.errors).toEqual([]);
+    // When the street column can't take the town either, it's an error.
+    const neither = japanPostRow(order({ town: longer, line1: "え".repeat(10) }), ctx);
+    expect(neither.errors).toEqual(["The prefecture, city and town are 26 characters together; the label takes 25."]);
+  });
+
+  it("writes a recipient's character the file can't carry as 〓 and warns (the row still imports), as for ones that may print wrongly", () => {
+    const { cells, errors, warnings } = japanPostRow(order({ shipToName: "𠮷田😀", line1: "髙橋ビル①" }), ctx);
     expect(cell(cells, JP_COL.toName)).toBe("〓田〓");
-    expect(problems).toEqual(["The recipient's name has 𠮷 😀, which the label can't print (it shows as 〓).", "The street address has 髙 ①, which may print wrongly on the label."]);
+    expect(errors).toEqual([]);
+    expect(warnings).toEqual(["The recipient's name has 𠮷 😀, which the label can't print (it shows as 〓).", "The street address has 髙 ①, which may print wrongly on the label."]);
   });
 
   it("dates in Japan time, across a year end", () => {
@@ -119,10 +134,20 @@ describe("japanPostPhone and the sender", () => {
   });
   it("names each missing sender detail", () => {
     const empty = { name: "", postal: "", prefecture: "東京都", city: "", line1: "", line2: "", phone: "" };
-    expect(senderProblems(empty, { ...ctx.options, itemName: " " })).toEqual(["Sender name is empty.", "Sender postal code is empty.", "Sender city / ward is empty.", "Sender address is empty.", "Sender phone is empty.", "Item description (品名) is empty."]);
-    expect(senderProblems({ ...ctx.sender, phone: "12" }, ctx.options)).toEqual(["Sender phone isn't a Japanese phone number."]);
-    expect(senderProblems(ctx.sender, { ...ctx.options, itemName: "焼".repeat(21) })).toEqual(["Item description (品名) is 21 characters; the label takes 20."]);
-    expect(senderProblems(ctx.sender, ctx.options)).toEqual([]);
+    expect(sharedFields(empty, { ...ctx.options, itemName: " " }).errors).toEqual(["Sender name is empty.", "Sender postal code is empty.", "Sender city / ward is empty.", "Sender address is empty.", "Sender phone is empty.", "Item description (品名) is empty."]);
+    expect(sharedFields({ ...ctx.sender, phone: "12" }, ctx.options).errors).toEqual(["Sender phone isn't a Japanese phone number."]);
+    expect(sharedFields(ctx.sender, { ...ctx.options, itemName: "焼".repeat(21) }).errors).toEqual(["Item description (品名) is 21 characters; the label takes 20."]);
+    expect(sharedFields(ctx.sender, ctx.options)).toMatchObject({ errors: [], warnings: [] });
+  });
+
+  it("checks the sender and 品名 like a recipient's text, but a character the label can't print is an error: it'd be on every label", () => {
+    const item = sharedFields(ctx.sender, { ...ctx.options, itemName: "焼き菓子🍪" });
+    expect(item.errors).toEqual(["Item description (品名) has 🍪, which the label can't print."]);
+    const prefecture = sharedFields({ ...ctx.sender, prefecture: "Tokyo😀" }, ctx.options);
+    expect(prefecture.prefecture).toBe("Ｔｏｋｙｏ〓"); // full-width, as the label takes it
+    expect(prefecture.errors).toEqual(["Sender prefecture is 6 characters; the label takes 5.", "Sender prefecture has 😀, which the label can't print."]);
+    const risky = sharedFields({ ...ctx.sender, name: "髙橋" }, ctx.options);
+    expect(risky).toMatchObject({ errors: [], warnings: ["Sender name has 髙, which may print wrongly on the label."], name: "髙橋" });
   });
 });
 
@@ -140,11 +165,17 @@ describe("the file", () => {
     expect(lines.slice(0, -1).map((l) => l.split(",").length)).toEqual([72, 72]);
     expect(lines[1].split(",")[JP_COL.toName - 1]).toBe("髙橋　①");
     expect(lines[1].split(",")[JP_COL.slot - 1]).toBe("00");
-    expect(x.rows).toEqual([{ number: "AB-003-001", problems: [] }, { number: "AB-003-002", problems: ["The recipient's name has 髙 ①, which may print wrongly on the label."] }]);
+    expect(x.rows).toEqual([{ number: "AB-003-001", errors: [], warnings: [] }, { number: "AB-003-002", errors: [], warnings: ["The recipient's name has 髙 ①, which may print wrongly on the label."] }]);
+    expect(x.fileWarnings).toEqual([]);
   });
 
-  it("isn't offered while the sender is missing, with no orders, or with more than one file takes", () => {
-    expect(buildJapanPostExport([order()], { ...ctx, sender: { ...ctx.sender, name: "" } }).fileProblems).toEqual(["Sender name is empty. Fill it in under Settings → Shipping."]);
+  it("isn't offered while any row would be refused, the sender is missing or unprintable, with no orders, or too many", () => {
+    const tooLong = buildJapanPostExport([order(), order({ number: "AB-003-002", line2: "い".repeat(26) })], ctx);
+    expect(tooLong.fileProblems).toEqual(["One order has details the label can't take (listed below). Fix them on the order with Edit delivery details, then download."]);
+    expect(tooLong.rows[1].errors).toEqual(["The building and room is 26 characters; the label takes 25."]);
+    expect(buildJapanPostExport([order()], { ...ctx, sender: { ...ctx.sender, name: "" } }).fileProblems).toEqual(["Sender name is empty. Fix it under Settings → Shipping."]);
+    expect(buildJapanPostExport([order()], { ...ctx, options: { ...ctx.options, itemName: "焼き菓子🍪" } }).fileProblems).toEqual(["Item description (品名) has 🍪, which the label can't print. Fix it under Settings → Shipping."]);
+    expect(buildJapanPostExport([order()], { ...ctx, sender: { ...ctx.sender, name: "髙橋" } })).toMatchObject({ fileProblems: [], fileWarnings: ["Sender name has 髙, which may print wrongly on the label. (Settings → Shipping)"] });
     expect(buildJapanPostExport([], ctx).fileProblems).toEqual(["There are no orders to ship."]);
     const many = Array.from({ length: JP_MAX_ROWS + 1 }, (_, i) => order({ number: `AB-003-${String(i + 1).padStart(4, "0")}` }));
     expect(buildJapanPostExport(many, ctx).fileProblems).toEqual([`There are ${JP_MAX_ROWS + 1} orders; Webゆうパックプリント takes ${JP_MAX_ROWS} per file.`]);

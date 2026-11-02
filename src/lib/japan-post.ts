@@ -9,8 +9,9 @@ import { normalisePhone } from "./phone";
  * sample file, which also sets the option columns explicitly. Pure apart from the encoding, so it's unit tested;
  * fulfilment.ts gathers the orders and the route serves the file.
  *
- * Nothing is ever truncated or dropped quietly: a name too long for the label, a character the file can't carry, or
- * one the label printer may draw wrongly is reported with the order, for the owner to fix in the tool.
+ * Nothing is ever truncated or dropped quietly. What the tool would refuse (a field over its limit, a shared setting
+ * it can't print) stops the file until it's fixed on the order or in Settings; what it would take but may print wrongly
+ * (a character written as 〓, one from CP932's extension rows) is listed with the order, to check in the tool.
  */
 
 export const JP_COLUMNS = 72;
@@ -56,8 +57,8 @@ export const JP_COL = {
  */
 const ZERO_COLUMNS = [39, 40, 46, 47, 48, 49, 51, 68, 69, 70, 71, 72];
 
-/** The label's limits, in characters (full-width): names and address lines 25, prefecture and city together 25, 品名 20, phone 13. */
-export const JP_LIMIT = { name: 25, line: 25, prefectureCity: 25, item: 20, phone: 13 } as const;
+/** The label's limits, in characters (full-width): names and address lines 25, prefecture 5, prefecture and city together 25, 品名 20, phone 13. */
+export const JP_LIMIT = { name: 25, line: 25, prefecture: 5, prefectureCity: 25, item: 20, phone: 13 } as const;
 
 export interface JapanPostSender {
   name: string;
@@ -166,49 +167,122 @@ export function cp932Check(text: string): { clean: string; missing: string[]; ri
   return { clean, missing, risky };
 }
 
-// ---------------------------------------------------------------- rows
+// ---------------------------------------------------------------- checks
 
-/** A label's text field: made full-width, checked against its limit and against CP932. */
-function field(label: string, raw: string, limit: number, problems: string[]): string {
-  const z = toZenkaku(raw.trim());
-  const { clean, missing, risky } = cp932Check(z);
-  if ([...clean].length > limit) problems.push(`${label} is ${[...clean].length} characters; the label takes ${limit}.`);
-  if (missing.length) problems.push(`${label} has ${missing.join(" ")}, which the label can't print (it shows as 〓).`);
-  if (risky.length) problems.push(`${label} has ${risky.join(" ")}, which may print wrongly on the label.`);
+/**
+ * What a label's text needs, sorted by what it means for the upload. An error stops the file: Webゆうパックプリント
+ * refuses a field over its column's limit (its manual: 桁数より多い文字を入力するとエラー; fix the data and upload
+ * again), so it's fixed here first. A warning doesn't: the row imports, and the owner can correct it in the tool before
+ * printing.
+ */
+export interface Checked {
+  errors: string[];
+  warnings: string[];
+}
+const checked = (): Checked => ({ errors: [], warnings: [] });
+
+/**
+ * One field's text, the way the label takes it: made full-width, then checked against its limit and against CP932.
+ * A character CP932 can't carry is written as 〓. On a recipient's field that's a warning (the row imports, and the
+ * tool can take the real character); on a shared setting it's an error (`shared`), since it would be on every label.
+ * One that may print wrongly is always a warning.
+ */
+function text(label: string, raw: string, limit: number, out: Checked, shared = false): string {
+  const { clean, missing, risky } = cp932Check(toZenkaku(raw.trim()));
+  const n = [...clean].length;
+  if (n > limit) out.errors.push(`${label} is ${n} characters; the label takes ${limit}.`);
+  if (missing.length) (shared ? out.errors : out.warnings).push(`${label} has ${missing.join(" ")}, which the label can't print${shared ? "" : " (it shows as 〓)"}.`);
+  if (risky.length) out.warnings.push(`${label} has ${risky.join(" ")}, which may print wrongly on the label.`);
   return clean;
 }
 
-/** One order's row: exactly 72 cells, and anything about it the owner should fix in the tool. */
-export function japanPostRow(o: ShipmentOrder, ctx: JapanPostContext): { cells: string[]; problems: string[] } {
-  const problems: string[] = [];
+const length = (s: string) => [...s].length;
+
+/**
+ * The recipient's address across 都道府県 (12), 市区町村郡 (13) and 丁目番地号 (14). The prefecture and the 13th column must
+ * fit in 25 together; when the city and town don't, the town moves to the front of the 14th column instead, losing
+ * nothing. Only an address that fits neither way is an error.
+ */
+function address(o: ShipmentOrder, out: Checked): { city: string; line1: string } {
+  const city = toZenkaku(o.city.trim());
+  const town = toZenkaku((o.town ?? "").trim());
+  const street = toZenkaku(o.line1.trim());
+  const roomFor13 = JP_LIMIT.prefectureCity - length(o.prefecture);
+  const [col13, col14] = length(city + town) > roomFor13 && town && length(town + street) <= JP_LIMIT.line ? [city, town + street] : [city + town, street];
+  const cityOut = text("The city and town", col13, JP_LIMIT.line, out);
+  if (length(cityOut) <= JP_LIMIT.line && length(o.prefecture) + length(cityOut) > JP_LIMIT.prefectureCity) {
+    out.errors.push(`The prefecture, city and town are ${length(o.prefecture) + length(cityOut)} characters together; the label takes ${JP_LIMIT.prefectureCity}.`);
+  }
+  return { city: cityOut, line1: text("The street address", col14, JP_LIMIT.line, out) };
+}
+
+/** The sender and parcel text every row shares (Settings → Shipping), as the label takes it, with what to fix there. */
+export interface SharedFields extends Checked {
+  name: string;
+  postal: string;
+  prefecture: string;
+  city: string;
+  line1: string;
+  line2: string;
+  phone: string;
+  itemName: string;
+}
+
+/**
+ * The sender and 品名, through the same checks as a recipient's text, except that a character the label can't print is
+ * an error: it would be on every label. Each problem names its setting.
+ */
+export function sharedFields(s: JapanPostSender, o: JapanPostOptions): SharedFields {
+  const out = checked();
+  const need: [keyof JapanPostSender, string][] = [["name", "Sender name"], ["postal", "Sender postal code"], ["prefecture", "Sender prefecture"], ["city", "Sender city / ward"], ["line1", "Sender address"], ["phone", "Sender phone"]];
+  for (const [k, label] of need) if (!s[k].trim()) out.errors.push(`${label} is empty.`);
+  if (!o.itemName.trim()) out.errors.push("Item description (品名) is empty.");
+  const phone = s.phone.trim() ? japanPostPhone(s.phone) : "";
+  if (phone === null) out.errors.push("Sender phone isn't a Japanese phone number.");
+  const name = text("Sender name", s.name, JP_LIMIT.name, out, true);
+  const prefecture = text("Sender prefecture", s.prefecture, JP_LIMIT.prefecture, out, true);
+  const city = text("Sender city / ward", s.city, JP_LIMIT.line, out, true);
+  if (length(prefecture) + length(city) > JP_LIMIT.prefectureCity) out.errors.push(`Sender prefecture and city / ward are ${length(prefecture) + length(city)} characters together; the label takes ${JP_LIMIT.prefectureCity}.`);
+  const line1 = text("Sender address", s.line1, JP_LIMIT.line, out, true);
+  const line2 = s.line2.trim() ? text("Sender building / room", s.line2, JP_LIMIT.line, out, true) : "";
+  const itemName = o.itemName.trim() ? text("Item description (品名)", o.itemName, JP_LIMIT.item, out, true) : "";
+  return { ...out, name, postal: s.postal.replace("-", ""), prefecture, city, line1, line2, phone: phone ?? "", itemName };
+}
+
+// ---------------------------------------------------------------- rows
+
+/**
+ * One order's row: exactly 72 cells, with what stops it uploading (errors, to fix on the order first) and what to
+ * check in the tool before printing (warnings). The sender's own problems are the file's (sharedFields).
+ */
+export function japanPostRow(o: ShipmentOrder, ctx: JapanPostContext, shared = sharedFields(ctx.sender, ctx.options)): { cells: string[] } & Checked {
+  const out = checked();
   const cells: string[] = Array<string>(JP_COLUMNS).fill("");
   const set = (col: number, v: string) => { cells[col - 1] = v; };
-  // A trailing 様 would print twice: the label adds its own.
   for (const col of ZERO_COLUMNS) set(col, "0");
   set(JP_COL.kind, "1");
   set(JP_COL.payment, "0");
   set(JP_COL.labels, "1");
-  set(JP_COL.toName, field("The recipient's name", o.shipToName.trim().replace(/\s*様$/, ""), JP_LIMIT.name, problems));
+  // A trailing 様 would print twice: the label adds its own.
+  set(JP_COL.toName, text("The recipient's name", o.shipToName.trim().replace(/\s*様$/, ""), JP_LIMIT.name, out));
   set(JP_COL.toHonorific, "様");
   set(JP_COL.toPostal, o.postalCode);
   set(JP_COL.toPrefecture, o.prefecture);
-  const city = field("The city and town", `${o.city}${o.town ?? ""}`, JP_LIMIT.line, problems);
-  if ([...o.prefecture].length + [...city].length > JP_LIMIT.prefectureCity) problems.push(`The prefecture, city and town are ${[...o.prefecture].length + [...city].length} characters together; the label takes ${JP_LIMIT.prefectureCity}.`);
-  set(JP_COL.toCity, city);
-  set(JP_COL.toLine1, field("The street address", o.line1, JP_LIMIT.line, problems));
-  set(JP_COL.toLine2, o.line2 ? field("The building and room", o.line2, JP_LIMIT.line, problems) : "");
+  const addr = address(o, out);
+  set(JP_COL.toCity, addr.city);
+  set(JP_COL.toLine1, addr.line1);
+  set(JP_COL.toLine2, o.line2?.trim() ? text("The building and room", o.line2, JP_LIMIT.line, out) : "");
   const phone = japanPostPhone(o.phone);
-  if (!phone) problems.push(`The phone number “${o.phone}” isn't one the label takes, so it's left off.`);
+  if (!phone) out.warnings.push(`The phone number “${o.phone}” isn't one the label takes, so it's left off.`);
   set(JP_COL.toPhone, phone ?? "");
-  const s = ctx.sender;
-  set(JP_COL.fromName, toZenkaku(s.name));
-  set(JP_COL.fromPostal, s.postal.replace("-", ""));
-  set(JP_COL.fromPrefecture, s.prefecture);
-  set(JP_COL.fromCity, toZenkaku(s.city));
-  set(JP_COL.fromLine1, toZenkaku(s.line1));
-  set(JP_COL.fromLine2, toZenkaku(s.line2));
-  set(JP_COL.fromPhone, japanPostPhone(s.phone) ?? "");
-  set(JP_COL.itemName, toZenkaku(ctx.options.itemName));
+  set(JP_COL.fromName, shared.name);
+  set(JP_COL.fromPostal, shared.postal);
+  set(JP_COL.fromPrefecture, shared.prefecture);
+  set(JP_COL.fromCity, shared.city);
+  set(JP_COL.fromLine1, shared.line1);
+  set(JP_COL.fromLine2, shared.line2);
+  set(JP_COL.fromPhone, shared.phone);
+  set(JP_COL.itemName, shared.itemName);
   set(JP_COL.chilled, ctx.options.chilled ? "1" : "0");
   set(JP_COL.fragile, ctx.options.fragile ? "1" : "0");
   set(JP_COL.perishable, ctx.options.perishable ? "1" : "0");
@@ -219,23 +293,7 @@ export function japanPostRow(o: ShipmentOrder, ctx: JapanPostContext): { cells: 
   set(JP_COL.note, toZenkaku(o.number));
   set(JP_COL.handover, ctx.options.collect ? "0" : "1");
   set(JP_COL.discount, "0");
-  return { cells, problems };
-}
-
-/** What's missing or wrong in the sender details (Settings → Shipping), each problem naming the setting. */
-export function senderProblems(s: JapanPostSender, o: JapanPostOptions): string[] {
-  const out: string[] = [];
-  const need: [keyof JapanPostSender, string][] = [["name", "Sender name"], ["postal", "Sender postal code"], ["prefecture", "Sender prefecture"], ["city", "Sender city / ward"], ["line1", "Sender address"], ["phone", "Sender phone"]];
-  for (const [k, label] of need) if (!s[k].trim()) out.push(`${label} is empty.`);
-  if (s.phone.trim() && !japanPostPhone(s.phone)) out.push("Sender phone isn't a Japanese phone number.");
-  if (!o.itemName.trim()) out.push("Item description (品名) is empty.");
-  else if ([...toZenkaku(o.itemName)].length > JP_LIMIT.item) out.push(`Item description (品名) is ${[...toZenkaku(o.itemName)].length} characters; the label takes ${JP_LIMIT.item}.`);
-  if ([...s.prefecture].length + [...toZenkaku(s.city)].length > JP_LIMIT.prefectureCity) out.push(`Sender prefecture and city / ward are more than ${JP_LIMIT.prefectureCity} characters together.`);
-  for (const [k, label] of [["name", "Sender name"], ["city", "Sender city / ward"], ["line1", "Sender address"], ["line2", "Sender building / room"]] as const) {
-    const { missing } = cp932Check(toZenkaku(s[k]));
-    if (missing.length) out.push(`${label} has ${missing.join(" ")}, which the label can't print.`);
-  }
-  return out;
+  return { cells, ...out };
 }
 
 // ---------------------------------------------------------------- the file
@@ -250,17 +308,31 @@ export function japanPostCsv(rows: string[][]): string {
 export interface JapanPostExport {
   /** The file, in CP932. */
   bytes: Uint8Array;
-  rows: { number: string; problems: string[] }[];
-  /** Problems with the file as a whole; while there are any it isn't offered. */
+  /** Each order's errors (fix on the order before the file is offered) and warnings (check in the tool). */
+  rows: ({ number: string } & Checked)[];
+  /** What stops the file being offered: the sender's errors, orders with errors, none or too many orders. */
   fileProblems: string[];
+  /** The sender's warnings, for every label. */
+  fileWarnings: string[];
 }
 
-/** The whole label file for a drop's orders, with each order's problems and the file's. */
+/**
+ * The whole label file for a drop's orders. It's offered only when every row can upload: a row with an error would be
+ * refused by the tool, and fixing it there isn't possible, so it's fixed on the order (or in Settings) first.
+ */
 export function buildJapanPostExport(orders: ShipmentOrder[], ctx: JapanPostContext): JapanPostExport {
-  const fileProblems = senderProblems(ctx.sender, ctx.options).map((p) => `${p} Fill it in under Settings → Shipping.`);
+  const shared = sharedFields(ctx.sender, ctx.options);
+  const built = orders.map((o) => ({ number: o.number, ...japanPostRow(o, ctx, shared) }));
+  const fileProblems = shared.errors.map((p) => `${p} Fix it under Settings → Shipping.`);
+  const blocked = built.filter((r) => r.errors.length).length;
+  if (blocked) fileProblems.push(`${blocked === 1 ? "One order has" : `${blocked} orders have`} details the label can't take (listed below). Fix them on the order with Edit delivery details, then download.`);
   if (!orders.length) fileProblems.push("There are no orders to ship.");
   if (orders.length > JP_MAX_ROWS) fileProblems.push(`There are ${orders.length} orders; Webゆうパックプリント takes ${JP_MAX_ROWS} per file.`);
-  const built = orders.map((o) => ({ number: o.number, ...japanPostRow(o, ctx) }));
-  const text = japanPostCsv(built.map((r) => r.cells));
-  return { bytes: new Uint8Array(iconv.encode(text, "cp932")), rows: built.map(({ number, problems }) => ({ number, problems })), fileProblems };
+  const csv = japanPostCsv(built.map((r) => r.cells));
+  return {
+    bytes: new Uint8Array(iconv.encode(csv, "cp932")),
+    rows: built.map(({ number, errors, warnings }) => ({ number, errors, warnings })),
+    fileProblems,
+    fileWarnings: shared.warnings.map((p) => `${p} (Settings → Shipping)`),
+  };
 }

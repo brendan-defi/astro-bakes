@@ -6,6 +6,7 @@ import { arrivalDate, effectiveState, type DropState } from "./data";
 import type { DeliverySlot } from "./delivery-slots";
 import { canPack, packRefusal, packStateRefusal, productionPlan, type OpenCheckouts, type ProductionPlan } from "./fulfilment-rules";
 import type { OrderState } from "./order-status";
+import { fmtDateTime } from "./format";
 import { buildJapanPostExport, type JapanPostExport } from "./japan-post";
 import { arrivalOffsetDays, japanPostSettings } from "./settings";
 
@@ -155,25 +156,28 @@ export interface PackList {
   rows: PackRow[];
 }
 
-/** The pack list (PRD 4.6): one row per paid order, by order number, with what goes in the box and on the card. */
-export async function packList(slug: string): Promise<PackList | null> {
-  const offset = await arrivalOffsetDays();
-  // As the sheet (readSettled): holds first, then the orders, so a checkout paid meanwhile is still shown as pending.
+/**
+ * The pack list (PRD 4.6) and the Japan Post label file, from one settled read (readSettled: holds first, then the
+ * orders), so the page and the file can never disagree about which orders there are, and a checkout paid meanwhile is
+ * still shown as pending. The label file holds the orders still to ship (TO_LABEL) of the same read.
+ */
+export async function packPage(slug: string): Promise<{ list: PackList; labels: LabelFile } | null> {
+  const [offset, settings] = await Promise.all([arrivalOffsetDays(), japanPostSettings()]);
   const read = await readSettled(slug, async (tx, d, now) => {
     const open = await openCheckouts(tx, d.id, now);
     await betweenReads?.();
     const rows = await tx.query.orders.findMany({
       where: and(eq(orders.dropId, d.id), inArray(orders.state, SOLD_STATES)),
       orderBy: [asc(orders.number)],
-      columns: { number: true, state: true, packedAt: true, shipToName: true, city: true, deliveryTimeSlot: true, giftMessage: true },
+      columns: { number: true, state: true, packedAt: true, shipToName: true, phone: true, postalCode: true, prefecture: true, city: true, town: true, line1: true, line2: true, deliveryTimeSlot: true, giftMessage: true },
       with: { items: { columns: { nameEn: true, qty: true }, orderBy: [asc(orderItems.nameEn)] } },
     });
-    return { head: sheetDrop(d, offset, now), open, rows };
+    return { head: sheetDrop(d, offset, now), open, rows, now };
   });
   if (!read) return null;
-  const { head, open, rows } = read;
+  const { head, open, rows, now } = read;
   const packable = canPack(head.state);
-  return {
+  const list: PackList = {
     drop: head,
     packable,
     refusal: packable ? null : packRefusal(head.state),
@@ -189,6 +193,14 @@ export async function packList(slug: string): Promise<PackList | null> {
       giftMessage: o.giftMessage?.trim() || null,
     })),
   };
+  const toLabel = rows.filter((o) => (TO_LABEL as readonly string[]).includes(o.state)).map((o) => ({ ...o, slot: o.deliveryTimeSlot }));
+  const file = buildJapanPostExport(toLabel, { shipAt: head.shipAt, arriveAt: head.arriveAt, ...settings });
+  return { list, labels: { drop: head, warnings: labelWarnings(head, open, now), file } };
+}
+
+/** The pack list on its own (packPage). */
+export async function packList(slug: string): Promise<PackList | null> {
+  return (await packPage(slug))?.list ?? null;
 }
 
 export type PackResult = { ok: true; packedAt: Date | null } | { ok: false; error: string };
@@ -223,31 +235,29 @@ const TO_LABEL = ["paid", "packed"] as const;
 
 export interface LabelFile {
   drop: SheetDrop;
-  /** Why the file may be out of date or refused, said before downloading it (null when it's fine). */
-  warning: string | null;
+  /** Why the file may be incomplete or refused by the tool, said before downloading it. */
+  warnings: string[];
   file: JapanPostExport;
 }
 
 /**
  * The Japan Post label file for a drop (Webゆうパックプリント, japan-post.ts): one row per order still to ship, by order
- * number, with the sender from Settings, 差出予定日 the drop's ship date and 配達希望日 its arrival date.
+ * number, with the sender from Settings, 差出予定日 the drop's ship date and 配達希望日 its arrival date. Read with the
+ * pack list (packPage), so the download has exactly the orders the page showed.
  */
-export async function japanPostLabels(slug: string, now = new Date()): Promise<LabelFile | null> {
-  const db = getDb();
-  const [d, offset, settings] = await Promise.all([db.query.drops.findFirst({ where: eq(drops.slug, slug) }), arrivalOffsetDays(), japanPostSettings()]);
-  if (!d) return null;
-  const head = sheetDrop(d, offset, now);
-  const rows = await db.query.orders.findMany({
-    where: and(eq(orders.dropId, d.id), inArray(orders.state, TO_LABEL)),
-    orderBy: [asc(orders.number)],
-    columns: { number: true, shipToName: true, phone: true, postalCode: true, prefecture: true, city: true, town: true, line1: true, line2: true, deliveryTimeSlot: true },
-  });
-  const file = buildJapanPostExport(rows.map((o) => ({ ...o, slot: o.deliveryTimeSlot })), { shipAt: head.shipAt, arriveAt: head.arriveAt, ...settings });
-  const warning =
-    head.state === "open" ? "The drop is still open: orders and delivery times can change until it closes, so download the file after that."
-    : jstDay(now) > jstDay(head.shipAt) ? "The ship date has passed. Japan Post may refuse a 差出予定日 in the past; ship the remaining orders with a fresh date in the tool."
-    : null;
-  return { drop: head, warning, file };
+export async function japanPostLabels(slug: string): Promise<LabelFile | null> {
+  return (await packPage(slug))?.labels ?? null;
+}
+
+/** What to know before downloading: the file can still change, or miss orders, or carry a date the tool refuses. */
+function labelWarnings(head: SheetDrop, open: OpenCheckouts, now: Date): string[] {
+  const out: string[] = [];
+  if (head.state === "open") out.push("The drop is still open: orders and delivery times can change until it closes, so download the file after that.");
+  else if (open.checkouts && open.until) {
+    out.push(`${open.checkouts === 1 ? "A checkout begun before the drop closed" : `${open.checkouts} checkouts begun before the drop closed`} can still be paid until ${fmtDateTime(open.until)}, and ${open.checkouts === 1 ? "its order isn't" : "their orders aren't"} in the file yet: download after that.`);
+  }
+  if (jstDay(now) > jstDay(head.shipAt)) out.push("The ship date has passed. Japan Post refuses a 差出予定日 in the past; ship the remaining orders with a fresh date in the tool.");
+  return out;
 }
 
 const jstDay = (d: Date) => Math.floor((d.getTime() + 9 * 3_600_000) / 86_400_000);

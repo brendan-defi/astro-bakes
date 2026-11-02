@@ -7,7 +7,7 @@ import { GET } from "@/app/admin/(app)/drops/[slug]/japan-post/route";
 import { cancelOrder } from "@/lib/account";
 import { placeOrder, startCheckout } from "@/lib/checkout";
 import { transitionDrop } from "@/lib/drops-admin";
-import { japanPostLabels } from "@/lib/fulfilment";
+import { japanPostLabels, packPage } from "@/lib/fulfilment";
 import { JP_COL } from "@/lib/japan-post";
 import { captureEmail, clearTestData, closeTestDb, resetDatabase, reseed, testDb, TEST_DATABASE_URL } from "@/test/db";
 
@@ -25,12 +25,25 @@ async function customer(email: string) {
   const [c] = await db.insert(schema.customers).values({ email, name: "Test Person", emailVerifiedAt: new Date() }).returning({ id: schema.customers.id });
   return c.id;
 }
-async function order(customerId: string, name: string, slot: "none" | "18_20" = "none") {
+/** A checkout holding one cookie box, and a way to pay for it (placeOrder) for this customer, name and building. */
+async function reserve(customerId: string, name: string, slot: "none" | "18_20" = "none", line2 = "") {
   const r = await startCheckout({ dropId: DROP, items: { "cookie-box": 1 }, flags: { state: "open" } }, null);
   if (!r.ok || !r.checkoutId) throw new Error("expected holds");
-  const p = await placeOrder({ dropId: DROP, checkoutId: r.checkoutId, revision: r.revision!, locale: "ja", delivery: { name, phone: "090-1234-5678", postal: "153-0061", line1: "1-2-3", line2: "" }, gift: null, paymentMethod: "card", timeSlot: slot }, r.checkoutId, customerId);
+  return () => placeOrder({ dropId: DROP, checkoutId: r.checkoutId!, revision: r.revision!, locale: "ja", delivery: { name, phone: "090-1234-5678", postal: "153-0061", line1: "1-2-3", line2 }, gift: null, paymentMethod: "card", timeSlot: slot }, r.checkoutId!, customerId);
+}
+async function order(customerId: string, name: string, slot: "none" | "18_20" = "none", line2 = "") {
+  const p = await (await reserve(customerId, name, slot, line2))();
   if (!p.ok) throw new Error("expected an order: " + p.error);
   return p.order.number;
+}
+/** Wait until this many sessions are blocked on a lock (a row lock someone else holds). */
+async function waitingOnLocks(n: number) {
+  for (let i = 0; i < 200; i++) {
+    const [{ waiting }] = (await db.execute(sql`select count(*)::int as waiting from pg_stat_activity where datname = current_database() and wait_event_type = 'Lock'`)).rows as { waiting: number }[];
+    if (waiting >= n) return;
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  throw new Error(`expected ${n} sessions waiting on a lock`);
 }
 const get = (slug: string) => GET(new Request(`http://localhost/admin/drops/${slug}/japan-post`), { params: Promise.resolve({ slug }) });
 const setSender = (values: Record<string, string>) => Promise.all(Object.entries(values).map(([key, value]) => db.insert(schema.settings).values({ key, value }).onConflictDoUpdate({ target: schema.settings.key, set: { value } })));
@@ -67,9 +80,9 @@ describe.skipIf(!TEST_DATABASE_URL)("Japan Post label file", { timeout: 60_000 }
     await db.update(schema.orders).set({ state: "packed", packedAt: new Date() }).where(eq(schema.orders.number, b));
 
     const labels = (await japanPostLabels(DROP))!;
-    expect(labels.warning).toBeNull();
+    expect(labels.warnings).toEqual([]);
     expect(labels.file.fileProblems).toEqual([]);
-    expect(labels.file.rows).toEqual([{ number: a, problems: [] }, { number: b, problems: ["The recipient's name has 髙, which may print wrongly on the label."] }]);
+    expect(labels.file.rows).toEqual([{ number: a, errors: [], warnings: [] }, { number: b, errors: [], warnings: ["The recipient's name has 髙, which may print wrongly on the label."] }]);
 
     const res = await get(DROP);
     expect(res.status).toBe(200);
@@ -96,13 +109,82 @@ describe.skipIf(!TEST_DATABASE_URL)("Japan Post label file", { timeout: 60_000 }
     await transitionDrop(DROP, "close");
     const res = await get(DROP);
     expect(res.status).toBe(409);
-    expect(await res.text()).toBe(["Sender name is empty.", "Sender postal code is empty.", "Sender city / ward is empty.", "Sender address is empty.", "Sender phone is empty."].map((p) => `${p} Fill it in under Settings → Shipping.`).join("\n"));
+    expect(await res.text()).toBe(["Sender name is empty.", "Sender postal code is empty.", "Sender city / ward is empty.", "Sender address is empty.", "Sender phone is empty."].map((p) => `${p} Fix it under Settings → Shipping.`).join("\n"));
+  });
+
+  it("refuses the file while an order has a field the tool would reject, naming it, until it's fixed on the order", async () => {
+    await setSender(SENDER);
+    const ok = await order(buyer, "山田花子");
+    const long = await order(buyer, "佐藤花子", "none", "サンシャインマンション".repeat(3)); // checkout takes it; the label doesn't
+    await transitionDrop(DROP, "close");
+    const labels = (await japanPostLabels(DROP))!;
+    expect(labels.file.fileProblems).toEqual(["One order has details the label can't take (listed below). Fix them on the order with Edit delivery details, then download."]);
+    expect(labels.file.rows).toEqual([{ number: ok, errors: [], warnings: [] }, { number: long, errors: ["The building and room is 33 characters; the label takes 25."], warnings: [] }]);
+    const refused = await get(DROP);
+    expect(refused.status).toBe(409);
+    expect(await refused.text()).toContain("One order has details the label can't take");
+    // Shortened on the order (Edit delivery details), the file is offered.
+    await db.update(schema.orders).set({ line2: "サンシャインマンション" }).where(eq(schema.orders.number, long));
+    expect((await get(DROP)).status).toBe(200);
+  });
+
+  it("refuses the file while a sender setting has a character the label can't print, since it'd be on every label", async () => {
+    await setSender({ ...SENDER, jp_item_name: "焼き菓子🍪" });
+    await order(buyer, "山田花子");
+    await transitionDrop(DROP, "close");
+    const res = await get(DROP);
+    expect(res.status).toBe(409);
+    expect(await res.text()).toBe("Item description (品名) has 🍪, which the label can't print. Fix it under Settings → Shipping.");
+  });
+
+  it("shows the label file and the pack list from one read: a checkout accepted before the load and committing during it is in both", async () => {
+    await setSender(SENDER);
+    const first = await order(buyer, "山田花子");
+    const pay = await reserve(buyer, "𠮷田花子");
+    await transitionDrop(DROP, "close");
+    // The checkout passes its hold check and stalls on the buyer's row, holding the drop's lock.
+    const client = await pool!.connect();
+    try {
+      await client.query("begin");
+      await client.query("select id from customers where id = $1 for update", [buyer]);
+      const paying = pay();
+      await waitingOnLocks(1);
+      const page = packPage(DROP);
+      const download = get(DROP);
+      await waitingOnLocks(3); // the checkout on the buyer's row; the page and the download on the drop
+      await client.query("commit");
+      const placed = await paying;
+      expect(placed.ok).toBe(true);
+      const second = placed.ok ? placed.order.number : "";
+      const { list, labels } = (await page)!;
+      expect(list.rows.map((r) => r.number)).toEqual([first, second]);
+      expect(labels.file.rows.map((r) => r.number)).toEqual([first, second]);
+      expect(labels.file.rows[1].warnings).toEqual(["The recipient's name has 𠮷, which the label can't print (it shows as 〓)."]);
+      expect(list.open.checkouts).toBe(0);
+      const rows = iconv.decode(Buffer.from(await (await download).arrayBuffer()), "cp932").split("\r\n").filter(Boolean);
+      expect(rows).toHaveLength(2);
+      expect(rows[1].split(",")[JP_COL.toName - 1]).toBe("〓田花子");
+    } finally {
+      // Ends the transaction if the test failed before its commit, so its locks can't hold up the next test.
+      await client.query("rollback").catch(() => {});
+      client.release();
+    }
+  });
+
+  it("warns that orders aren't in the file yet while a checkout begun before the close can still be paid", async () => {
+    await setSender(SENDER);
+    await order(buyer, "山田花子");
+    await reserve(buyer, "佐藤花子");
+    await transitionDrop(DROP, "close");
+    const labels = (await japanPostLabels(DROP))!;
+    expect(labels.file.rows).toHaveLength(1);
+    expect(labels.warnings).toEqual([expect.stringMatching(/^A checkout begun before the drop closed can still be paid until .*, and its order isn't in the file yet: download after that\.$/)]);
   });
 
   it("warns while the drop is open, refuses with no orders, and 404s an unknown or malformed drop", async () => {
     await setSender(SENDER);
     await order(buyer, "山田花子");
-    expect((await japanPostLabels(DROP))!.warning).toMatch(/still open/);
+    expect((await japanPostLabels(DROP))!.warnings).toEqual([expect.stringMatching(/still open/)]);
     await db.delete(schema.orderItems);
     await db.delete(schema.orders);
     expect((await get(DROP)).status).toBe(409);
